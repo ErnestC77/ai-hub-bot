@@ -1,4 +1,5 @@
 from app.db.models.ai_request import AIRequest
+from app.db.models.banner import Banner
 from app.db.models.credit_transaction import CreditTransaction
 from app.db.models.model_config import ModelConfig
 from app.db.models.payment import Payment
@@ -10,6 +11,7 @@ from app.db.models.user import User
 
 __all__ = [
     "AIRequest",
+    "Banner",
     "CreditTransaction",
     "ModelConfig",
     "Payment",

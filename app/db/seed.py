@@ -3,7 +3,7 @@ import asyncio
 from sqlalchemy import select
 
 from app.db.enums import ModelCategory, ModelProvider
-from app.db.models import ModelConfig, Tariff
+from app.db.models import Banner, ModelConfig, Tariff
 from app.db.session import get_session
 
 TARIFFS = [
@@ -58,6 +58,40 @@ MODEL_CONFIGS = [
 ]
 
 
+BANNERS = [
+    dict(
+        title="ChatGPT, Claude и Gemini в одном чате",
+        subtitle="Переключайтесь между моделями одним тапом",
+        badge_text="Новое",
+        cta_text="Попробовать",
+        image_url="https://picsum.photos/seed/ai-hub-banner-1/800/450",
+        action_type="prompt",
+        action_value="Расскажи, что ты умеешь и чем можешь помочь",
+        sort_order=0,
+    ),
+    dict(
+        title="Генерация изображений",
+        subtitle="Опишите идею словами — получите картинку",
+        badge_text="Popular",
+        cta_text="Создать картинку",
+        image_url="https://picsum.photos/seed/ai-hub-banner-2/800/450",
+        action_type="prompt",
+        action_value="Сгенерируй изображение: ",
+        sort_order=1,
+    ),
+    dict(
+        title="Кредиты поверх тарифа",
+        subtitle="Докупайте запросы, когда лимит закончился",
+        badge_text=None,
+        cta_text="Подробнее",
+        image_url="https://picsum.photos/seed/ai-hub-banner-3/800/450",
+        action_type="prompt",
+        action_value="Как работают кредиты в этом боте?",
+        sort_order=2,
+    ),
+]
+
+
 async def seed() -> None:
     async with get_session() as session:
         existing_codes = {row[0] for row in (await session.execute(select(Tariff.code))).all()}
@@ -69,6 +103,11 @@ async def seed() -> None:
         for data in MODEL_CONFIGS:
             if data["model_code"] not in existing_models:
                 session.add(ModelConfig(**data))
+
+        existing_banner_titles = {row[0] for row in (await session.execute(select(Banner.title))).all()}
+        for data in BANNERS:
+            if data["title"] not in existing_banner_titles:
+                session.add(Banner(**data))
 
         await session.commit()
 

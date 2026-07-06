@@ -2,18 +2,18 @@ import { useEffect, useState } from "react";
 import { Button, Placeholder, Spinner, Textarea } from "@telegram-apps/telegram-ui";
 import { useNavigate } from "react-router-dom";
 
-import { api, type ToolOut } from "../api/client";
-import TrendCard from "../components/TrendCard";
+import { api, type BannerOut } from "../api/client";
+import HeroCarousel from "../components/HeroCarousel";
 import { useMe } from "../context/MeContext";
 
 export default function Home() {
   const { me, loading } = useMe();
   const navigate = useNavigate();
-  const [tools, setTools] = useState<ToolOut[] | null>(null);
+  const [banners, setBanners] = useState<BannerOut[] | null>(null);
   const [prompt, setPrompt] = useState("");
 
   useEffect(() => {
-    api.tools().then(setTools).catch(() => setTools([]));
+    api.banners().then(setBanners).catch(() => setBanners([]));
   }, []);
 
   if (loading) {
@@ -36,33 +36,7 @@ export default function Home() {
 
   return (
     <div style={{ paddingBottom: 24 }}>
-      <div style={{ padding: "20px 16px 4px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <h2 className="heading-font" style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>
-            ✨ Trending now
-          </h2>
-          <span
-            className="press-scale"
-            style={{ fontSize: 13, color: "var(--foreground-muted)" }}
-            onClick={() => navigate("/trends")}
-          >
-            View all →
-          </span>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 12, overflowX: "auto", padding: "8px 16px 16px" }}>
-        {(tools ?? []).slice(0, 6).map((tool) => (
-          <TrendCard
-            key={tool.slug}
-            slug={tool.slug}
-            title={tool.title}
-            width={130}
-            height={160}
-            onClick={() => navigate("/chat", { state: { prefillPrompt: tool.prompt_prefix } })}
-          />
-        ))}
-      </div>
+      <HeroCarousel banners={banners ?? []} />
 
       <div
         className="glass-card"

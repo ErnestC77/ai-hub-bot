@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -5,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_admin, get_db
 from app.db.enums import CreditTxType, PaymentProvider, PaymentStatus
-from app.db.models import ModelConfig, Payment, Tariff, User
+from app.db.models import Banner, ModelConfig, Payment, Tariff, User
 from app.services.admin_service import cancel_subscription, grant_manual_subscription
 from app.services.credit_service import get_balance as get_credit_balance
 from app.services.credit_service import grant_credits
@@ -319,3 +321,90 @@ async def update_tariff(
     await session.commit()
 
     return _to_tariff_admin_out(tariff)
+
+
+# --- banners ---------------------------------------------------------------
+
+class BannerAdminOut(BaseModel):
+    id: int
+    title: str
+    subtitle: str | None
+    badge_text: str | None
+    cta_text: str
+    image_url: str
+    action_type: str
+    action_value: str
+    sort_order: int
+    is_active: bool
+
+
+def _to_banner_admin_out(b: Banner) -> BannerAdminOut:
+    return BannerAdminOut(
+        id=b.id, title=b.title, subtitle=b.subtitle, badge_text=b.badge_text, cta_text=b.cta_text,
+        image_url=b.image_url, action_type=b.action_type, action_value=b.action_value,
+        sort_order=b.sort_order, is_active=b.is_active,
+    )
+
+
+@router.get("/banners", response_model=list[BannerAdminOut])
+async def list_banners_admin(session: AsyncSession = Depends(get_db)) -> list[BannerAdminOut]:
+    banners = (await session.execute(select(Banner).order_by(Banner.sort_order, Banner.id))).scalars().all()
+    return [_to_banner_admin_out(b) for b in banners]
+
+
+class BannerCreateRequest(BaseModel):
+    title: str
+    subtitle: str | None = None
+    badge_text: str | None = None
+    cta_text: str = "Открыть"
+    image_url: str
+    action_type: Literal["prompt", "link"] = "prompt"
+    action_value: str
+    sort_order: int = 0
+    is_active: bool = True
+
+
+@router.post("/banners", response_model=BannerAdminOut)
+async def create_banner(body: BannerCreateRequest, session: AsyncSession = Depends(get_db)) -> BannerAdminOut:
+    banner = Banner(**body.model_dump())
+    session.add(banner)
+    await session.commit()
+    return _to_banner_admin_out(banner)
+
+
+class BannerUpdateRequest(BaseModel):
+    title: str | None = None
+    subtitle: str | None = None
+    badge_text: str | None = None
+    cta_text: str | None = None
+    image_url: str | None = None
+    action_type: Literal["prompt", "link"] | None = None
+    action_value: str | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+async def _get_banner_or_404(session: AsyncSession, banner_id: int) -> Banner:
+    banner = await session.get(Banner, banner_id)
+    if banner is None:
+        raise HTTPException(status_code=404, detail="Баннер не найден")
+    return banner
+
+
+@router.patch("/banners/{banner_id}", response_model=BannerAdminOut)
+async def update_banner(
+    banner_id: int, body: BannerUpdateRequest, session: AsyncSession = Depends(get_db)
+) -> BannerAdminOut:
+    banner = await _get_banner_or_404(session, banner_id)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(banner, field, value)
+    await session.commit()
+    return _to_banner_admin_out(banner)
+
+
+@router.delete("/banners/{banner_id}")
+async def delete_banner(banner_id: int, session: AsyncSession = Depends(get_db)) -> dict:
+    banner = await _get_banner_or_404(session, banner_id)
+    await session.delete(banner)
+    await session.commit()
+    return {"ok": True}

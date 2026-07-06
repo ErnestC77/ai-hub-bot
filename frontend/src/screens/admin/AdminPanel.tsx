@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Placeholder, SegmentedControl } from "@telegram-apps/telegram-ui";
 
 import { useMe } from "../../context/MeContext";
+import AdminBanners from "./AdminBanners";
 import AdminModels from "./AdminModels";
 import AdminPayments from "./AdminPayments";
 import AdminStats from "./AdminStats";
@@ -14,6 +15,7 @@ const TABS = [
   { key: "payments", label: "Платежи" },
   { key: "models", label: "Модели" },
   { key: "tariffs", label: "Тарифы" },
+  { key: "banners", label: "Карусель" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -44,6 +46,7 @@ export default function AdminPanel() {
       {tab === "payments" && <AdminPayments />}
       {tab === "models" && <AdminModels />}
       {tab === "tariffs" && <AdminTariffs />}
+      {tab === "banners" && <AdminBanners />}
     </div>
   );
 }

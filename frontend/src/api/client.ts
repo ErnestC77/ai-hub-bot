@@ -105,6 +105,17 @@ export interface PaymentStatusOut {
   status: "created" | "pending" | "succeeded" | "canceled" | "refunded" | "failed";
 }
 
+export interface BannerOut {
+  id: number;
+  title: string;
+  subtitle: string | null;
+  badge_text: string | null;
+  cta_text: string;
+  image_url: string;
+  action_type: "prompt" | "link";
+  action_value: string;
+}
+
 export interface CreditPackageOut {
   code: string;
   name: string;
@@ -122,6 +133,7 @@ export const api = {
       body: JSON.stringify({ model_code: modelCode, prompt }),
     }),
   tools: () => request<ToolOut[]>("/api/tools"),
+  banners: () => request<BannerOut[]>("/api/banners"),
   referral: () => request<ReferralOut>("/api/referral/me"),
   tariffs: () => request<TariffOut[]>("/api/tariffs"),
   createStarsPayment: (tariffCode: string) =>
@@ -205,6 +217,21 @@ export interface AdminTariffOut {
   is_active: boolean;
 }
 
+export interface AdminBannerOut {
+  id: number;
+  title: string;
+  subtitle: string | null;
+  badge_text: string | null;
+  cta_text: string;
+  image_url: string;
+  action_type: "prompt" | "link";
+  action_value: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export type BannerWriteFields = Omit<AdminBannerOut, "id">;
+
 export const adminApi = {
   stats: () => request<AdminStatsOut>("/api/admin/stats"),
   users: (query?: string) =>
@@ -241,4 +268,10 @@ export const adminApi = {
   tariffsAdmin: () => request<AdminTariffOut[]>("/api/admin/tariffs"),
   updateTariff: (code: string, patch: Partial<AdminTariffOut>) =>
     request<AdminTariffOut>(`/api/admin/tariffs/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  banners: () => request<AdminBannerOut[]>("/api/admin/banners"),
+  createBanner: (body: BannerWriteFields) =>
+    request<AdminBannerOut>("/api/admin/banners", { method: "POST", body: JSON.stringify(body) }),
+  updateBanner: (id: number, patch: Partial<BannerWriteFields>) =>
+    request<AdminBannerOut>(`/api/admin/banners/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteBanner: (id: number) => request<{ ok: boolean }>(`/api/admin/banners/${id}`, { method: "DELETE" }),
 };
