@@ -35,7 +35,7 @@ function Fab() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 50,
+        zIndex: 2,
       }}
     >
       ✨
@@ -71,7 +71,7 @@ function Shell() {
           left: 0,
           right: 0,
           bottom: 0,
-          zIndex: 40,
+          zIndex: 2,
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           background: "rgba(10,10,12,0.72)",
