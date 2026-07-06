@@ -1,0 +1,58 @@
+services:
+  backend:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build: .
+    command: python -m app.worker
+    env_file:
+      - .env
+    depends_on:
+      backend:
+        # entrypoint.sh гоняет "alembic upgrade head" при старте каждого контейнера;
+        # ждём, пока backend не накатит миграции первым, чтобы оба процесса не
+        # пытались одновременно создать таблицы на чистой БД.
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ai_bot
+      POSTGRES_USER: ai_bot
+      POSTGRES_PASSWORD: strong_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
