@@ -8,6 +8,7 @@ from app.services.access_service import RequestInProgressError, check_access
 from app.services.ai.base import AIError, AIResult
 from app.services.ai.registry import IMAGE_PROVIDERS, TEXT_PROVIDERS
 from app.services.cost_service import fill_request_cost
+from app.services.credit_service import spend_credits
 from app.services.limit_service import spend
 
 AI_LOCK_TTL_SECONDS = 120
@@ -60,7 +61,12 @@ class AIRouter:
                 raise
 
             await fill_request_cost(session, request, model, result)
-            await spend(session, ctx.usage_limit, model.category)
+            if ctx.use_credits:
+                await spend_credits(
+                    session, user, model.credit_cost, reason=f"AI request: {model.model_code}"
+                )
+            else:
+                await spend(session, ctx.usage_limit, model.category)
 
             request.status = RequestStatus.success
             request.answer = result.answer

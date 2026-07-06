@@ -4,9 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_admin, get_db
-from app.db.enums import PaymentProvider, PaymentStatus
+from app.db.enums import CreditTxType, PaymentProvider, PaymentStatus
 from app.db.models import ModelConfig, Payment, Tariff, User
 from app.services.admin_service import cancel_subscription, grant_manual_subscription
+from app.services.credit_service import get_balance as get_credit_balance
+from app.services.credit_service import grant_credits
 from app.services.payments.refund_service import refund
 from app.services.stats_service import get_daily_stats, get_monthly_stats
 from app.services.subscription_service import get_active_subscription, get_tariff_by_code
@@ -54,6 +56,7 @@ class UserOut(BaseModel):
     is_blocked: bool
     tariff_code: str | None
     subscription_expires_at: str | None
+    credits_balance: int
 
 
 async def _to_user_out(session: AsyncSession, user: User) -> UserOut:
@@ -70,6 +73,7 @@ async def _to_user_out(session: AsyncSession, user: User) -> UserOut:
         is_blocked=user.is_blocked,
         tariff_code=tariff.code if tariff else None,
         subscription_expires_at=subscription.expires_at.isoformat() if subscription else None,
+        credits_balance=await get_credit_balance(session, user),
     )
 
 
@@ -120,6 +124,21 @@ async def grant_subscription(
         raise HTTPException(status_code=404, detail="Тариф не найден")
 
     await grant_manual_subscription(session, user, tariff)
+    return await _to_user_out(session, user)
+
+
+class GrantCreditsRequest(BaseModel):
+    amount: int
+
+
+@router.post("/users/{telegram_id}/grant-credits", response_model=UserOut)
+async def grant_credits_to_user(
+    telegram_id: int, body: GrantCreditsRequest, session: AsyncSession = Depends(get_db)
+) -> UserOut:
+    user = await _get_user_or_404(session, telegram_id)
+    await grant_credits(
+        session, user.id, body.amount, reason="manual admin grant", tx_type=CreditTxType.manual_adjustment
+    )
     return await _to_user_out(session, user)
 
 
@@ -207,29 +226,32 @@ class ModelConfigOut(BaseModel):
     provider: str
     display_name: str
     category: str
+    credit_cost: int
     is_active: bool
     is_premium: bool
+
+
+def _to_model_config_out(m: ModelConfig) -> ModelConfigOut:
+    return ModelConfigOut(
+        model_code=m.model_code, provider=m.provider.value, display_name=m.display_name,
+        category=m.category.value, credit_cost=m.credit_cost, is_active=m.is_active, is_premium=m.is_premium,
+    )
 
 
 @router.get("/models", response_model=list[ModelConfigOut])
 async def list_models(session: AsyncSession = Depends(get_db)) -> list[ModelConfigOut]:
     models = (await session.execute(select(ModelConfig))).scalars().all()
-    return [
-        ModelConfigOut(
-            model_code=m.model_code, provider=m.provider.value, display_name=m.display_name,
-            category=m.category.value, is_active=m.is_active, is_premium=m.is_premium,
-        )
-        for m in models
-    ]
+    return [_to_model_config_out(m) for m in models]
 
 
-class ModelToggleRequest(BaseModel):
-    is_active: bool
+class ModelUpdateRequest(BaseModel):
+    is_active: bool | None = None
+    credit_cost: int | None = None
 
 
 @router.patch("/models/{model_code}", response_model=ModelConfigOut)
-async def toggle_model(
-    model_code: str, body: ModelToggleRequest, session: AsyncSession = Depends(get_db)
+async def update_model(
+    model_code: str, body: ModelUpdateRequest, session: AsyncSession = Depends(get_db)
 ) -> ModelConfigOut:
     model = (
         await session.execute(select(ModelConfig).where(ModelConfig.model_code == model_code))
@@ -237,13 +259,11 @@ async def toggle_model(
     if model is None:
         raise HTTPException(status_code=404, detail="Модель не найдена")
 
-    model.is_active = body.is_active
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(model, field, value)
     await session.commit()
 
-    return ModelConfigOut(
-        model_code=model.model_code, provider=model.provider.value, display_name=model.display_name,
-        category=model.category.value, is_active=model.is_active, is_premium=model.is_premium,
-    )
+    return _to_model_config_out(model)
 
 
 # --- tariffs ---------------------------------------------------------------

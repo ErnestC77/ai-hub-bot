@@ -16,7 +16,10 @@ class Payment(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    tariff_id: Mapped[int] = mapped_column(ForeignKey("tariffs.id"))
+    # Ровно одно из двух: подписка на тариф (tariff_id) или разовая покупка
+    # пакета кредитов (credit_package_code) -- см. activate_paid_payment().
+    tariff_id: Mapped[int | None] = mapped_column(ForeignKey("tariffs.id"))
+    credit_package_code: Mapped[str | None] = mapped_column(String(32))
 
     provider: Mapped[PaymentProvider] = mapped_column()
     provider_payment_id: Mapped[str | None] = mapped_column(String(128))

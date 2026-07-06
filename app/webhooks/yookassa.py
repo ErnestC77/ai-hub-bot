@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.db.enums import PaymentProvider, PaymentStatus
 from app.db.models import Payment, Tariff, User
 from app.db.session import get_session
-from app.services.notification_service import notify_payment_success
+from app.services.notification_service import notify_credits_purchase, notify_payment_success
 from app.services.payments import GATEWAYS
 from app.services.payments.activation import activate_paid_payment
 
@@ -47,16 +47,20 @@ async def yookassa_webhook(request: Request) -> dict:
             raise HTTPException(status_code=500) from exc
 
         if real_status == PaymentStatus.succeeded:
-            subscription = await activate_paid_payment(
+            result = await activate_paid_payment(
                 session, provider=PaymentProvider.yookassa, provider_payment_id=object_id
             )
-            logger.info("yookassa payment %s activated -> subscription=%s", object_id, subscription)
+            logger.info("yookassa payment %s activated -> result=%s", object_id, result)
 
-            if subscription:
-                user = await session.get(User, subscription.user_id)
-                tariff = await session.get(Tariff, subscription.tariff_id)
+            if result and result.subscription:
+                user = await session.get(User, result.subscription.user_id)
+                tariff = await session.get(Tariff, result.subscription.tariff_id)
                 if user and tariff:
-                    await notify_payment_success(user.telegram_id, tariff.name, subscription.expires_at)
+                    await notify_payment_success(user.telegram_id, tariff.name, result.subscription.expires_at)
+            elif result and result.credits_granted:
+                user = await session.get(User, payment.user_id)
+                if user:
+                    await notify_credits_purchase(user.telegram_id, result.credits_granted)
         elif real_status == PaymentStatus.canceled:
             payment.status = PaymentStatus.canceled
             await session.commit()

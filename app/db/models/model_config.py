@@ -17,6 +17,10 @@ class ModelConfig(Base, TimestampMixin):
     cost_input_per_1m: Mapped[float] = mapped_column(Numeric(10, 4), default=0)
     cost_output_per_1m: Mapped[float] = mapped_column(Numeric(10, 4), default=0)
 
+    # Цена одного запроса в кредитах -- списывается из баланса пользователя,
+    # когда лимит тарифа по этой категории исчерпан (кредиты поверх тарифов).
+    credit_cost: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
     # Какой ключ провайдера использовать (app.services.keys.enums.KeyPurpose) --
     # разные модели одного provider могут требовать разные ключи (text/image/premium/...).
     key_purpose: Mapped[str] = mapped_column(String(50), default="text", server_default="text")

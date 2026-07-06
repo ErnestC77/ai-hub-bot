@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import current_user, get_db
 from app.api.schemas import CategoryLimitOut, LimitsOut, MeOut, SubscriptionStatusOut
 from app.db.models import User
+from app.services.credit_service import get_balance as get_credit_balance
 from app.services.limit_service import get_usage_snapshot
 from app.services.subscription_service import get_active_subscription, get_tariff
 
@@ -16,6 +17,7 @@ async def get_me(user: User = Depends(current_user), session: AsyncSession = Dep
     expires_at = subscription.expires_at if subscription else None
 
     snapshot = await get_usage_snapshot(session, user)
+    credits_balance = await get_credit_balance(session, user)
 
     return MeOut(
         telegram_id=user.telegram_id,
@@ -26,6 +28,7 @@ async def get_me(user: User = Depends(current_user), session: AsyncSession = Dep
         tariff_code=snapshot.tariff_code,
         tariff_name=snapshot.tariff_name,
         subscription_expires_at=expires_at,
+        credits_balance=credits_balance,
         limits=LimitsOut(
             daily_used=snapshot.daily_used,
             daily_limit=snapshot.daily_limit,

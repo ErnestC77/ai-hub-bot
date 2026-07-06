@@ -23,7 +23,8 @@ async def grant_manual_subscription(session: AsyncSession, user: User, tariff: T
     session.add(payment)
     await session.commit()
 
-    return await activate_paid_payment(session, payment_id=payment.id)
+    result = await activate_paid_payment(session, payment_id=payment.id)
+    return result.subscription if result else None
 
 
 async def cancel_subscription(session: AsyncSession, subscription: Subscription) -> None:

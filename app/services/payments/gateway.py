@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import PaymentProvider, PaymentStatus
 from app.db.models import Payment, Tariff, User
+from app.services.credit_packages import CreditPackage
 
 
 @dataclass
@@ -21,6 +22,11 @@ class PaymentGateway(ABC):
 
     @abstractmethod
     async def create_payment(self, session: AsyncSession, user: User, tariff: Tariff) -> PaymentCreateResult: ...
+
+    @abstractmethod
+    async def create_credit_payment(
+        self, session: AsyncSession, user: User, package: CreditPackage
+    ) -> PaymentCreateResult: ...
 
     @abstractmethod
     async def check_payment_status(self, session: AsyncSession, payment: Payment) -> PaymentStatus: ...

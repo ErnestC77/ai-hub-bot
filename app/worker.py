@@ -9,6 +9,7 @@ from app.db.enums import PaymentProvider, PaymentStatus, SubscriptionStatus
 from app.db.models import Payment, Subscription, Tariff, User
 from app.db.session import get_session
 from app.services.notification_service import (
+    notify_credits_purchase,
     notify_payment_success,
     notify_subscription_expired,
     notify_subscription_expiring,
@@ -98,12 +99,16 @@ async def poll_pending_yookassa_payments() -> None:
                 continue
 
             if real_status == PaymentStatus.succeeded:
-                subscription = await activate_paid_payment(session, payment_id=payment.id)
-                if subscription:
-                    user = await session.get(User, subscription.user_id)
-                    tariff = await session.get(Tariff, subscription.tariff_id)
+                result = await activate_paid_payment(session, payment_id=payment.id)
+                if result and result.subscription:
+                    user = await session.get(User, result.subscription.user_id)
+                    tariff = await session.get(Tariff, result.subscription.tariff_id)
                     if user and tariff:
-                        await notify_payment_success(user.telegram_id, tariff.name, subscription.expires_at)
+                        await notify_payment_success(user.telegram_id, tariff.name, result.subscription.expires_at)
+                elif result and result.credits_granted:
+                    user = await session.get(User, payment.user_id)
+                    if user:
+                        await notify_credits_purchase(user.telegram_id, result.credits_granted)
             elif real_status == PaymentStatus.canceled:
                 payment.status = PaymentStatus.canceled
                 await session.commit()

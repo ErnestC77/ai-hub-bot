@@ -34,3 +34,7 @@ async def notify_subscription_expired(telegram_id: int, tariff_name: str) -> Non
         telegram_id,
         f"Подписка «{tariff_name}» закончилась. Оформите новую в приложении, чтобы продолжить пользоваться нейросетями.",
     )
+
+
+async def notify_credits_purchase(telegram_id: int, credits: int) -> None:
+    await _send(telegram_id, f"✅ Оплата прошла! Начислено {credits} кредитов.")

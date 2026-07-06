@@ -24,6 +24,7 @@ class MeOut(BaseModel):
     tariff_name: str
     subscription_expires_at: datetime | None
     limits: LimitsOut
+    credits_balance: int
 
 
 class SubscriptionStatusOut(BaseModel):

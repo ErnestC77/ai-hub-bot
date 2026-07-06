@@ -50,6 +50,7 @@ export interface MeOut {
   tariff_name: string;
   subscription_expires_at: string | null;
   limits: LimitsOut;
+  credits_balance: number;
 }
 
 export interface ModelOut {
@@ -104,6 +105,14 @@ export interface PaymentStatusOut {
   status: "created" | "pending" | "succeeded" | "canceled" | "refunded" | "failed";
 }
 
+export interface CreditPackageOut {
+  code: string;
+  name: string;
+  credits: number;
+  price_rub: number;
+  price_stars: number;
+}
+
 export const api = {
   me: () => request<MeOut>("/api/me"),
   models: () => request<ModelOut[]>("/api/models"),
@@ -126,6 +135,17 @@ export const api = {
       body: JSON.stringify({ tariff_code: tariffCode }),
     }),
   paymentStatus: (paymentId: number) => request<PaymentStatusOut>(`/api/payments/${paymentId}/status`),
+  creditPackages: () => request<CreditPackageOut[]>("/api/credits/packages"),
+  createStarsCreditPayment: (packageCode: string) =>
+    request<CreatePaymentResponse>("/api/payments/credits/stars/create", {
+      method: "POST",
+      body: JSON.stringify({ package_code: packageCode }),
+    }),
+  createYookassaCreditPayment: (packageCode: string) =>
+    request<CreatePaymentResponse>("/api/payments/credits/yookassa/create", {
+      method: "POST",
+      body: JSON.stringify({ package_code: packageCode }),
+    }),
 };
 
 // --- admin ---------------------------------------------------------------
@@ -149,6 +169,7 @@ export interface AdminUserOut {
   is_blocked: boolean;
   tariff_code: string | null;
   subscription_expires_at: string | null;
+  credits_balance: number;
 }
 
 export interface AdminPaymentOut {
@@ -166,6 +187,7 @@ export interface AdminModelOut {
   provider: string;
   display_name: string;
   category: ModelCategory;
+  credit_cost: number;
   is_active: boolean;
   is_premium: boolean;
 }
@@ -198,6 +220,11 @@ export const adminApi = {
     }),
   cancelSubscription: (telegramId: number) =>
     request<AdminUserOut>(`/api/admin/users/${telegramId}/cancel-subscription`, { method: "POST" }),
+  grantCredits: (telegramId: number, amount: number) =>
+    request<AdminUserOut>(`/api/admin/users/${telegramId}/grant-credits`, {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    }),
   payments: () => request<AdminPaymentOut[]>("/api/admin/payments"),
   refundPayment: (id: number) => request<AdminPaymentOut>(`/api/admin/payments/${id}/refund`, { method: "POST" }),
   models: () => request<AdminModelOut[]>("/api/admin/models"),
@@ -205,6 +232,11 @@ export const adminApi = {
     request<AdminModelOut>(`/api/admin/models/${modelCode}`, {
       method: "PATCH",
       body: JSON.stringify({ is_active: isActive }),
+    }),
+  updateModelCreditCost: (modelCode: string, creditCost: number) =>
+    request<AdminModelOut>(`/api/admin/models/${modelCode}`, {
+      method: "PATCH",
+      body: JSON.stringify({ credit_cost: creditCost }),
     }),
   tariffsAdmin: () => request<AdminTariffOut[]>("/api/admin/tariffs"),
   updateTariff: (code: string, patch: Partial<AdminTariffOut>) =>

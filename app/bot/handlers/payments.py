@@ -34,13 +34,15 @@ async def handle_successful_payment(message: Message) -> None:
         return
 
     async with get_session() as session:
-        subscription = await activate_paid_payment(
+        result = await activate_paid_payment(
             session, payment_id=payment_id, charge_id=sp.telegram_payment_charge_id
         )
 
-    if subscription:
-        await message.answer(
-            f"✅ Оплата прошла! Подписка активна до {subscription.expires_at.strftime('%d.%m.%Y')}."
-        )
-    else:
+    if result is None:
         await message.answer("Оплата получена, но уже была обработана ранее.")
+    elif result.subscription:
+        await message.answer(
+            f"✅ Оплата прошла! Подписка активна до {result.subscription.expires_at.strftime('%d.%m.%Y')}."
+        )
+    elif result.credits_granted:
+        await message.answer(f"✅ Оплата прошла! Начислено {result.credits_granted} кредитов.")

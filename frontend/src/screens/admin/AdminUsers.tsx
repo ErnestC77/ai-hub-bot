@@ -59,6 +59,7 @@ export default function AdminUsers() {
               subtitle={
                 `ID ${u.telegram_id}` +
                 (u.tariff_code ? ` · тариф ${u.tariff_code}` : " · без подписки") +
+                ` · ${u.credits_balance} кредитов` +
                 (u.is_blocked ? " · ЗАБЛОКИРОВАН" : "")
               }
             >
@@ -103,6 +104,14 @@ export default function AdminUsers() {
                       Отменить подписку
                     </Button>
                   )}
+                  <Button
+                    size="s"
+                    mode="gray"
+                    loading={busy === u.telegram_id}
+                    onClick={() => withBusy(u.telegram_id, () => adminApi.grantCredits(u.telegram_id, 100))}
+                  >
+                    +100 кредитов
+                  </Button>
                 </div>
               </div>
             </Cell>
