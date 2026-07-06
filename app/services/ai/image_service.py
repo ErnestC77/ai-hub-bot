@@ -1,17 +1,20 @@
 from openai import AsyncOpenAI
 
-from app.config import settings
 from app.db.models import ModelConfig
 from app.services.ai.base import AIError, AIProvider, AIResult
+from app.services.keys.api_key_manager import get_key_manager
+from app.services.keys.enums import KeyPurpose, Provider
 
-_client: AsyncOpenAI | None = None
+_clients: dict[str, AsyncOpenAI] = {}
 
 
-def _get_client() -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(api_key=settings.openai_api_key)
-    return _client
+def _get_client(purpose: KeyPurpose) -> AsyncOpenAI:
+    api_key = get_key_manager().get_key(Provider.OPENAI, purpose)
+    client = _clients.get(api_key)
+    if client is None:
+        client = AsyncOpenAI(api_key=api_key)
+        _clients[api_key] = client
+    return client
 
 
 class ImageProvider(AIProvider):
@@ -19,7 +22,7 @@ class ImageProvider(AIProvider):
 
     async def generate(self, model: ModelConfig, prompt: str, max_output_tokens: int) -> AIResult:
         try:
-            client = _get_client()
+            client = _get_client(KeyPurpose(model.key_purpose))
             response = await client.images.generate(
                 model=model.model_code,
                 prompt=prompt,

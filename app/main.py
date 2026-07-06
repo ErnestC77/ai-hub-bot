@@ -11,6 +11,8 @@ from app.api.routes import admin, chat, me, payments, referral, tariffs, tools
 from app.bot.instance import bot
 from app.bot.setup import create_dispatcher
 from app.config import settings
+from app.db.session import get_session
+from app.services.keys.key_healthcheck import run_key_healthcheck
 from app.services.payments.setup import register_all_gateways
 from app.webhooks import yookassa as yookassa_webhook
 
@@ -23,6 +25,9 @@ _polling_task: asyncio.Task | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _polling_task
+
+    async with get_session() as session:
+        await run_key_healthcheck(session)
 
     if settings.webapp_url.startswith("https://"):
         await bot.set_chat_menu_button(
