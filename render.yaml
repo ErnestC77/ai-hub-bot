@@ -1,0 +1,108 @@
+databases:
+  - name: ai-hub-bot-db
+    databaseName: ai_hub_bot
+    user: ai_hub_bot
+    plan: free
+
+services:
+  - type: keyvalue
+    name: ai-hub-bot-redis
+    plan: starter
+    ipAllowList: []
+
+  - type: web
+    name: ai-hub-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port $PORT'"
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: BOT_MODE
+        value: webhook
+      - key: BOT_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: WEBAPP_URL
+        fromService:
+          type: web
+          name: ai-hub-bot
+          property: hostport
+      - key: PAYMENT_RETURN_URL
+        fromService:
+          type: web
+          name: ai-hub-bot
+          property: hostport
+      - key: YOOKASSA_WEBHOOK_URL
+        fromService:
+          type: web
+          name: ai-hub-bot
+          property: hostport
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-hub-bot-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: ai-hub-bot-redis
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: YOOKASSA_SHOP_ID
+        sync: false
+      - key: YOOKASSA_SECRET_KEY
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+
+  - type: worker
+    name: ai-hub-bot-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: "python -m app.worker"
+    plan: starter
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      - key: WEBAPP_URL
+        fromService:
+          type: web
+          name: ai-hub-bot
+          property: hostport
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-hub-bot-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: ai-hub-bot-redis
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: YOOKASSA_SHOP_ID
+        sync: false
+      - key: YOOKASSA_SECRET_KEY
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
