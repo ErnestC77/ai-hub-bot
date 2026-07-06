@@ -23,23 +23,19 @@ function Fab() {
     <button
       onClick={() => navigate("/chat")}
       aria-label="Открыть чат с нейросетью"
+      className="brand-button press-scale"
       style={{
         position: "fixed",
         right: 16,
-        bottom: 76,
-        width: 56,
-        height: 56,
+        bottom: 80,
+        width: 58,
+        height: 58,
         borderRadius: "50%",
-        border: "none",
-        background: "linear-gradient(135deg, #ff5f6d, #ff2d78 55%, #b721ff)",
-        boxShadow: "0 6px 20px rgba(255, 45, 120, 0.55)",
-        color: "#fff",
         fontSize: 24,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 50,
-        cursor: "pointer",
       }}
     >
       ✨
@@ -69,18 +65,40 @@ function Shell() {
 
       {showFab && <Fab />}
 
-      <Tabbar>
-        {TABS.map((tab) => (
-          <Tabbar.Item
-            key={tab.path}
-            text={tab.text}
-            selected={location.pathname === tab.path}
-            onClick={() => navigate(tab.path)}
-          >
-            <span style={{ fontSize: 20 }}>{tab.icon}</span>
-          </Tabbar.Item>
-        ))}
-      </Tabbar>
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 40,
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          background: "rgba(10,10,12,0.72)",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <Tabbar>
+          {TABS.map((tab) => {
+            const selected = location.pathname === tab.path;
+            return (
+              <Tabbar.Item key={tab.path} text={tab.text} selected={selected} onClick={() => navigate(tab.path)}>
+                <span
+                  style={{
+                    fontSize: 20,
+                    transition: "transform 200ms cubic-bezier(0.16,1,0.3,1)",
+                    transform: selected ? "scale(1.12)" : "scale(1)",
+                    filter: selected ? "drop-shadow(0 0 8px rgba(255,45,120,0.6))" : "none",
+                    display: "inline-block",
+                  }}
+                >
+                  {tab.icon}
+                </span>
+              </Tabbar.Item>
+            );
+          })}
+        </Tabbar>
+      </div>
     </>
   );
 }

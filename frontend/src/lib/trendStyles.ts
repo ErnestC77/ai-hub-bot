@@ -5,15 +5,15 @@ export interface TrendStyle {
   emoji: string;
 }
 
-const DEFAULT_STYLE: TrendStyle = { gradient: "linear-gradient(135deg, #667eea, #764ba2)", emoji: "✨" };
+const DEFAULT_STYLE: TrendStyle = { gradient: "linear-gradient(160deg, #6a5cf6, #b721ff)", emoji: "✨" };
 
 const STYLES_BY_SLUG: Record<string, TrendStyle> = {
-  "write-post": { gradient: "linear-gradient(135deg, #ff9a56, #ff6a88)", emoji: "📝" },
-  "reply-client": { gradient: "linear-gradient(135deg, #4facfe, #00f2fe)", emoji: "💬" },
-  translate: { gradient: "linear-gradient(135deg, #43e97b, #38f9d7)", emoji: "🌐" },
-  "write-code": { gradient: "linear-gradient(135deg, #30cfd0, #330867)", emoji: "💻" },
-  "product-description": { gradient: "linear-gradient(135deg, #fa709a, #fee140)", emoji: "🛍️" },
-  brainstorm: { gradient: "linear-gradient(135deg, #a18cd1, #fbc2eb)", emoji: "💡" },
+  "write-post": { gradient: "linear-gradient(160deg, #ff9a56, #ff2d78)", emoji: "📝" },
+  "reply-client": { gradient: "linear-gradient(160deg, #4facfe, #6a5cf6)", emoji: "💬" },
+  translate: { gradient: "linear-gradient(160deg, #38f9d7, #2ecc71)", emoji: "🌐" },
+  "write-code": { gradient: "linear-gradient(160deg, #30cfd0, #5433a7)", emoji: "💻" },
+  "product-description": { gradient: "linear-gradient(160deg, #fa709a, #ffb347)", emoji: "🛍️" },
+  brainstorm: { gradient: "linear-gradient(160deg, #a18cd1, #ff2d78)", emoji: "💡" },
 };
 
 export function getTrendStyle(slug: string): TrendStyle {

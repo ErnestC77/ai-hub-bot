@@ -34,16 +34,24 @@ export default function MyAccount() {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2 style={{ margin: "8px 0 16px", textAlign: "center" }}>
+      <h2 className="heading-font" style={{ margin: "8px 0 20px", textAlign: "center", fontSize: 19, fontWeight: 600 }}>
         @{me.username ?? me.first_name ?? me.telegram_id}
       </h2>
 
-      <div style={{ borderRadius: 16, background: "var(--tgui--secondary_bg_color)", padding: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 12, opacity: 0.6, textTransform: "uppercase" }}>Current plan</div>
-        <div style={{ fontSize: 22, fontWeight: 700, margin: "4px 0 12px" }}>{me.tariff_name}</div>
+      <div
+        className="glass-card"
+        style={{ position: "relative", padding: 18, marginBottom: 16, overflow: "hidden" }}
+      >
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: "var(--brand-gradient)" }} />
+        <div style={{ fontSize: 12, color: "var(--foreground-muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+          Current plan
+        </div>
+        <div className="heading-font" style={{ fontSize: 22, fontWeight: 600, margin: "4px 0 12px" }}>
+          {me.tariff_name}
+        </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-          <span style={{ opacity: 0.7 }}>Дневные запросы</span>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+          <span style={{ color: "var(--foreground-muted)" }}>Дневные запросы</span>
           <span>
             {me.limits.daily_used} / {me.limits.daily_limit}
           </span>
@@ -60,14 +68,15 @@ export default function MyAccount() {
                 fontSize: 12,
                 padding: "4px 10px",
                 borderRadius: 999,
-                background: "rgba(255,255,255,0.08)",
+                background: "var(--surface-strong)",
+                border: "1px solid var(--border-soft)",
               }}
             >
               {CATEGORY_LABEL[category] ?? category}: {limit.limit - limit.used}/{limit.limit}
             </span>
           ))}
           {me.subscription_expires_at && (
-            <span style={{ fontSize: 12, opacity: 0.6 }}>
+            <span style={{ fontSize: 12, color: "var(--foreground-muted)" }}>
               до {new Date(me.subscription_expires_at).toLocaleDateString("ru-RU")}
             </span>
           )}
@@ -76,15 +85,19 @@ export default function MyAccount() {
 
       {isFree && (
         <div
+          className="press-scale"
           style={{
-            borderRadius: 16,
-            padding: 16,
+            borderRadius: 20,
+            padding: 18,
             marginBottom: 16,
-            background: "linear-gradient(135deg, #ff5f6d, #b721ff)",
+            background: "var(--brand-gradient)",
+            boxShadow: "var(--shadow-glow)",
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 700 }}>🚀 Go Premium</div>
-          <div style={{ fontSize: 13, opacity: 0.9, margin: "4px 0 12px" }}>
+          <div className="heading-font" style={{ fontSize: 18, fontWeight: 600 }}>
+            🚀 Go Premium
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.9, margin: "4px 0 14px" }}>
             Больше запросов, доступ к premium-моделям и генерации картинок
           </div>
           <Button stretched mode="white" onClick={() => navigate("/tariffs")}>
@@ -93,7 +106,9 @@ export default function MyAccount() {
         </div>
       )}
 
-      <div style={{ fontSize: 12, opacity: 0.6, textTransform: "uppercase", margin: "8px 0" }}>Credits</div>
+      <div style={{ fontSize: 12, color: "var(--foreground-muted)", textTransform: "uppercase", margin: "8px 0" }}>
+        Credits
+      </div>
       <List>
         <Section>
           <Cell

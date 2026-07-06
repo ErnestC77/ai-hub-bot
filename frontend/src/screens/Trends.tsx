@@ -27,8 +27,10 @@ export default function Trends() {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2 style={{ margin: "0 0 4px" }}>✨ Photo & Text Trends</h2>
-      <p style={{ margin: "0 0 16px", opacity: 0.7, fontSize: 14 }}>
+      <h2 className="heading-font" style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 600 }}>
+        ✨ Photo & Text Trends
+      </h2>
+      <p style={{ margin: "0 0 16px", color: "var(--foreground-muted)", fontSize: 14 }}>
         Готовые пресеты промптов — выберите и сразу начните диалог
       </p>
 
