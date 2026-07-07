@@ -126,6 +126,10 @@ class Settings(BaseSettings):
     frontend_url: str = ""
     piapi_webhook_secret: str = ""
 
+    # This backend's own public URL -- used to build the PiAPI webhook callback address.
+    # Render sets this via the service's own external hostname (see render.yaml).
+    backend_public_url: str = ""
+
     admin_ids: str = ""
 
     debug: bool = False

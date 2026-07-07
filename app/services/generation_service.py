@@ -19,12 +19,7 @@ class ModelNotFoundError(Exception):
 
 
 def _webhook_url() -> str:
-    # `backend_public_url` is added to Settings in Task 6 alongside route registration.
-    # getattr(..., "") lets this module import and run cleanly before that field exists --
-    # PiAPI just gets an incomplete webhook URL until Task 6 lands (never hit in this
-    # task's tests, since none assert on the URL passed to the mocked PiAPIClient).
-    base_url = getattr(settings, "backend_public_url", "")
-    return f"{base_url}/api/piapi/webhook?secret={settings.piapi_webhook_secret}"
+    return f"{settings.backend_public_url}/api/piapi/webhook?secret={settings.piapi_webhook_secret}"
 
 
 async def _get_model(session: AsyncSession, model_code: str) -> ModelConfig:
