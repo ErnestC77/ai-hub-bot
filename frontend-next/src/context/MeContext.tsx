@@ -30,6 +30,9 @@ export function MeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Fetch-on-mount is intentional here, not derived-state — the rule's cascading-render
+    // concern doesn't apply to a single top-level effect with an empty/stable dep array.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
 
