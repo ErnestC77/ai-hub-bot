@@ -117,6 +117,7 @@ class Settings(BaseSettings):
 
     payment_return_url: str = ""
     yookassa_webhook_url: str = ""
+    frontend_url: str = ""
 
     admin_ids: str = ""
 

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from aiogram.types import MenuButtonWebApp, Update, WebAppInfo
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from starlette.staticfiles import StaticFiles
 
@@ -49,6 +50,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_url] if settings.frontend_url else [],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")

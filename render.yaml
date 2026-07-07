@@ -66,6 +66,17 @@ services:
       - key: ADMIN_IDS
         sync: false
 
+  - type: web
+    name: ai-hub-frontend
+    runtime: docker
+    dockerfilePath: ./frontend-next/Dockerfile
+    dockerContext: ./frontend-next
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+    plan: starter
+    autoDeploy: false
+
   - type: worker
     name: ai-hub-bot-worker
     runtime: docker
