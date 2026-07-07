@@ -1,4 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { mockTelegramWebApp } from "./mock-telegram";
+
+test.beforeEach(async ({ page }) => {
+  const adminId = Number(process.env.TEST_ADMIN_TELEGRAM_ID);
+  await mockTelegramWebApp(page, process.env.TEST_BOT_TOKEN ?? "test-token", adminId);
+});
 
 test("admin banners tab shows the carousel list and the new-banner form", async ({ page }) => {
   await page.goto("/admin");
