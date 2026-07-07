@@ -1,12 +1,10 @@
 import asyncio
-import os
 from contextlib import asynccontextmanager
 
 from aiogram.types import MenuButtonWebApp, Update, WebAppInfo
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-from starlette.staticfiles import StaticFiles
 
 from app.api.routes import admin, banners, chat, me, payments, referral, tariffs, tools
 from app.bot.instance import bot
@@ -96,15 +94,3 @@ async def payment_return() -> str:
         f"<p><a href='https://t.me/{settings.bot_username}'>Открыть бота</a></p>"
         "</body></html>"
     )
-
-
-class SpaStaticFiles(StaticFiles):
-    async def get_response(self, path: str, scope):
-        response = await super().get_response(path, scope)
-        if path in ("", "index.html", "."):
-            response.headers["Cache-Control"] = "no-store"
-        return response
-
-
-frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
-app.mount("/", SpaStaticFiles(directory=frontend_dist, html=True, check_dir=False), name="spa")
