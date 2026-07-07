@@ -312,7 +312,7 @@ git commit -m "Add Spinner, Placeholder, Progress primitives"
 **Interfaces:**
 - Consumes: `cn` (Task 2), `Spinner` (Task 3).
 - Produces:
-  - `Button` from `@/components/ui/button` — props: `mode?: "filled" | "bezeled" | "outline" | "plain"` (default `"filled"`), `size?: "s" | "m" | "l"` (default `"m"`), `stretched?: boolean`, `loading?: boolean`, plus all native `<button>` attributes.
+  - `Button` from `@/components/ui/button` — props: `mode?: "filled" | "bezeled" | "gray" | "outline" | "white" | "plain"` (default `"filled"`), `size?: "s" | "m" | "l"` (default `"m"`), `stretched?: boolean`, `loading?: boolean`, plus all native `<button>` attributes. All six modes are needed: `gray` is used by `Tariffs.tsx`/`AdminUsers.tsx` for de-emphasized/current-state buttons, `white` by `MyAccount.tsx`'s "Unlock Premium" CTA sitting on a colored gradient card.
   - `IconButton` from `@/components/ui/icon-button` — props: all native `<button>` attributes (used as `<IconButton onClick={...} aria-label="...">+</IconButton>`).
 
 - [ ] **Step 1: `button.tsx`**
@@ -323,7 +323,7 @@ import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cn } from "@/lib/cn";
 import { Spinner } from "@/components/ui/spinner";
 
-export type ButtonMode = "filled" | "bezeled" | "outline" | "plain";
+export type ButtonMode = "filled" | "bezeled" | "gray" | "outline" | "white" | "plain";
 export type ButtonSize = "s" | "m" | "l";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -336,7 +336,9 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const MODE_CLASSES: Record<ButtonMode, string> = {
   filled: "bg-[image:var(--brand-gradient)] text-white shadow-glow border border-transparent",
   bezeled: "bg-surface text-foreground border border-border-soft",
+  gray: "bg-surface-strong text-foreground border border-transparent",
   outline: "bg-transparent text-foreground border border-border-soft",
+  white: "bg-white text-brand-2 border border-transparent",
   plain: "bg-transparent text-foreground border border-transparent",
 };
 
@@ -436,7 +438,7 @@ git commit -m "Add Button, IconButton primitives"
 - Consumes: `cn` (Task 2).
 - Produces:
   - `List({ children })` from `@/components/ui/list` — plain vertical container.
-  - `Section({ header, children })` from `@/components/ui/section` — `header?: string`.
+  - `Section({ header, footer, children })` from `@/components/ui/section` — `header?: string`, `footer?: string` (`footer` is used by `Referral.tsx` to show the referral link text below the section).
   - `Cell({ before, after, subtitle, multiline, onClick, children, className })` from `@/components/ui/cell` — `before?: ReactNode`, `after?: ReactNode`, `subtitle?: string`, `multiline?: boolean`, `onClick?: () => void`.
 
 - [ ] **Step 1: `list.tsx`**
@@ -456,13 +458,22 @@ export function List({ children }: { children: ReactNode }) {
 // frontend-next/src/components/ui/section.tsx
 import type { ReactNode } from "react";
 
-export function Section({ header, children }: { header?: string; children: ReactNode }) {
+export function Section({
+  header,
+  footer,
+  children,
+}: {
+  header?: string;
+  footer?: string;
+  children: ReactNode;
+}) {
   return (
     <div>
       {header && (
         <div className="px-3 pb-1.5 text-xs font-medium uppercase tracking-wide text-foreground-muted">{header}</div>
       )}
       <div className="overflow-hidden rounded-lg border border-border-soft bg-surface">{children}</div>
+      {footer && <div className="px-3 pt-1.5 text-xs text-foreground-muted">{footer}</div>}
     </div>
   );
 }
@@ -1459,9 +1470,17 @@ git commit -m "Port Home screen to Next.js/Tailwind"
 **Interfaces:**
 - Consumes: `api`, `ToolOut` (Task 9), `TrendCard` (Task 12), `Placeholder`, `Spinner` (Task 3).
 
-- [ ] **Step 1: Port**
+- [ ] **Step 1: Port, with one interface change**
 
 Read `frontend/src/screens/Trends.tsx` in full. Port to `frontend-next/src/app/trends/page.tsx` with the same mechanical rules as Task 14: `"use client"`, `@telegram-apps/telegram-ui` → `@/components/ui/placeholder` + `@/components/ui/spinner`, `../` imports → `@/` imports, inline styles → Tailwind classes.
+
+One functional change is required: the current `openTool` handler calls `navigate("/chat", { state: { prefillPrompt: tool.prompt_prefix } })` — `react-router-dom`'s history `state` has no equivalent in `next/navigation`'s `router.push`. Replace it with a query parameter, which Task 20's `Chat` screen reads back:
+
+```tsx
+function openTool(tool: ToolOut) {
+  router.push(`/chat?prefill=${encodeURIComponent(tool.prompt_prefix)}`);
+}
+```
 
 - [ ] **Step 2: Write the Playwright test**
 
@@ -1469,9 +1488,12 @@ Read `frontend/src/screens/Trends.tsx` in full. Port to `frontend-next/src/app/t
 // frontend-next/e2e/trends.spec.ts
 import { test, expect } from "@playwright/test";
 
-test("trends screen lists tool cards", async ({ page }) => {
+test("trends screen lists tool cards and opens chat with a prefilled prompt", async ({ page }) => {
   await page.goto("/trends");
-  await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByText("✨ Photo & Text Trends")).toBeVisible();
+  const firstCard = page.locator("button", { hasText: /.+/ }).first();
+  await firstCard.click();
+  await expect(page).toHaveURL(/\/chat\?prefill=/);
 });
 ```
 
@@ -1510,9 +1532,13 @@ import { test, expect } from "@playwright/test";
 
 test("account screen shows plan and credits", async ({ page }) => {
   await page.goto("/account");
-  await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByText("Current plan")).toBeVisible();
+  await expect(page.getByText("Credits")).toBeVisible();
+  await expect(page.getByText(/кредитов/)).toBeVisible();
 });
 ```
+
+(`"Current plan"` and `"Credits"` are hardcoded English labels in the current Russian-language screen — kept verbatim from the source during the port, so they're stable, literal strings to assert on.)
 
 - [ ] **Step 4: Commit**
 
@@ -1535,7 +1561,7 @@ git commit -m "Port MyAccount screen and CreditPurchaseSheet to Next.js/Tailwind
 
 - [ ] **Step 1: Port `Tariffs.tsx`**
 
-Read `frontend/src/screens/Tariffs.tsx` in full. Port to `frontend-next/src/app/tariffs/page.tsx`, swapping `Button, Cell, List, Placeholder, Section, Spinner` per the established mapping.
+Read `frontend/src/screens/Tariffs.tsx` in full. Port to `frontend-next/src/app/tariffs/page.tsx`, swapping `Button, Cell, List, Placeholder, Section, Spinner` per the established mapping. This screen uses `Button mode={tariff.is_current ? "gray" : "filled"}` — the `gray` mode added to the `Button` primitive in Task 4.
 
 - [ ] **Step 2: Port `PaymentMethodSheet.tsx`**
 
@@ -1547,9 +1573,9 @@ Read `frontend/src/screens/tariffs/PaymentMethodSheet.tsx` in full. Port to `fro
 // frontend-next/e2e/tariffs.spec.ts
 import { test, expect } from "@playwright/test";
 
-test("tariffs screen lists plans", async ({ page }) => {
+test("tariffs screen lists plans under the Тарифы section", async ({ page }) => {
   await page.goto("/tariffs");
-  await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByText("Тарифы")).toBeVisible();
 });
 ```
 
@@ -1573,7 +1599,7 @@ git commit -m "Port Tariffs screen and PaymentMethodSheet to Next.js/Tailwind"
 
 - [ ] **Step 1: Port**
 
-Read `frontend/src/screens/Referral.tsx` in full. Port to `frontend-next/src/app/referral/page.tsx`, swapping `Button, Cell, List, Placeholder, Section, Spinner`.
+Read `frontend/src/screens/Referral.tsx` in full. Port to `frontend-next/src/app/referral/page.tsx`, swapping `Button, Cell, List, Placeholder, Section, Spinner`. This screen uses `Section`'s `footer` prop (`<Section header="Реферальная программа" footer={data.link}>`) — added to the `Section` primitive in Task 5.
 
 - [ ] **Step 2: Write the Playwright test**
 
@@ -1581,9 +1607,11 @@ Read `frontend/src/screens/Referral.tsx` in full. Port to `frontend-next/src/app
 // frontend-next/e2e/referral.spec.ts
 import { test, expect } from "@playwright/test";
 
-test("referral screen renders", async ({ page }) => {
+test("referral screen shows invite stats and actions", async ({ page }) => {
   await page.goto("/referral");
-  await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByText("Реферальная программа")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Поделиться" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Скопировать" })).toBeVisible();
 });
 ```
 
@@ -1640,9 +1668,28 @@ git commit -m "Port Settings screen to Next.js/Tailwind"
 **Interfaces:**
 - Consumes: `api`, `ModelOut`, `ChatResponse` (Task 9), `Button`, `Placeholder`, `Spinner`, `Textarea` (Tasks 3, 6), `Cell`, `List`, `Modal`→`Sheet`, `Section` (for `ModelPicker`).
 
-- [ ] **Step 1: Port `Chat.tsx`**
+- [ ] **Step 1: Port `Chat.tsx`, with the prefill mechanism changed to match Task 15**
 
 Read `frontend/src/screens/Chat.tsx` in full. Port to `frontend-next/src/app/chat/page.tsx`, swapping `Button, Placeholder, Spinner, Textarea`.
+
+The current file reads its prefill value via `react-router-dom`'s `useLocation().state`:
+
+```tsx
+const location = useLocation();
+const prefill = (location.state as { prefillPrompt?: string } | null)?.prefillPrompt ?? "";
+```
+
+Since Task 15 now sends the prefill as a `?prefill=` query parameter instead of router state, replace this with `next/navigation`'s `useSearchParams`:
+
+```tsx
+"use client";
+import { useSearchParams } from "next/navigation";
+// ...
+const searchParams = useSearchParams();
+const prefill = searchParams.get("prefill") ?? "";
+```
+
+Everything else in the file (the `prompt`/`messages`/`sending` state, `send()`, the message list rendering) is unchanged.
 
 - [ ] **Step 2: Port `ModelPicker.tsx`**
 
@@ -1738,17 +1785,19 @@ git commit -m "Port GenerateImage screen to Next.js/Tailwind"
 
 - [ ] **Step 1: Port**
 
-Read `frontend/src/screens/admin/AdminPanel.tsx` in full. Port to `frontend-next/src/app/admin/page.tsx`, swapping `Placeholder, SegmentedControl` for the Task 3/7 primitives. This screen renders one of the 5 admin sub-screens (Stats/Users/Payments/Models/Tariffs/Banners) based on `SegmentedControl` tab state — the sub-screens themselves are ported in Tasks 23–25 and imported here unchanged in structure from the current `AdminPanel.tsx`.
+Read `frontend/src/screens/admin/AdminPanel.tsx` in full. Port to `frontend-next/src/app/admin/page.tsx`, swapping `Placeholder, SegmentedControl` for the Task 3/7 primitives. This screen renders one of the 6 admin sub-screens (Stats/Users/Payments/Models/Tariffs/Banners) based on `SegmentedControl` tab state — the sub-screens themselves are ported in Tasks 23–25 and imported here unchanged in structure from the current `AdminPanel.tsx`.
 
 - [ ] **Step 2: Write the Playwright test**
+
+This screen already has a clear, meaningful default-state assertion available: a non-admin user (the default mocked Telegram identity every other spec in this plan uses) must see the access-denied placeholder, never the tab switcher or any admin data.
 
 ```ts
 // frontend-next/e2e/admin-panel.spec.ts
 import { test, expect } from "@playwright/test";
 
-test("admin panel renders tab switcher", async ({ page }) => {
+test("admin panel blocks non-admin users", async ({ page }) => {
   await page.goto("/admin");
-  await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByText("Доступ запрещён")).toBeVisible();
 });
 ```
 
@@ -1766,6 +1815,8 @@ git commit -m "Port AdminPanel shell to Next.js/Tailwind"
 **Files:**
 - Create: `frontend-next/src/screens/admin/AdminStats.tsx`
 - Create: `frontend-next/src/screens/admin/AdminUsers.tsx`
+- Create: `frontend-next/e2e/admin-stats.spec.ts`
+- Create: `frontend-next/e2e/admin-users.spec.ts`
 
 **Interfaces:**
 - Consumes: `adminApi`, `AdminStatsOut`, `AdminUserOut` (Task 9), `Cell`, `List`, `Placeholder`, `Section`, `Spinner` (Tasks 3, 5), `Button`, `Input` (Tasks 4, 6).
@@ -1778,14 +1829,40 @@ Read `frontend/src/screens/admin/AdminStats.tsx` in full. Port to `frontend-next
 
 Read `frontend/src/screens/admin/AdminUsers.tsx` in full. Port to `frontend-next/src/screens/admin/AdminUsers.tsx`. Swap `Button, Cell, Input, List, Section, Spinner`.
 
-- [ ] **Step 3: Wire both into `AdminPanel` (Task 22) and verify**
+- [ ] **Step 3: Wire both into `AdminPanel` (Task 22) and verify manually**
 
-Import `AdminStats`/`AdminUsers` in `frontend-next/src/app/admin/page.tsx`. `npm run dev`, open `/admin` (requires a logged-in admin user via mocked `initData` — see Task 27 for the mocking setup; for a quick manual check without that, temporarily hardcode `is_admin: true` in a local `MeContext` stub, then revert). Expected: switching to "Stats"/"Users" tabs renders their respective lists.
+Import `AdminStats`/`AdminUsers` in `frontend-next/src/app/admin/page.tsx`. `npm run dev`, open `/admin` (requires a logged-in admin user via mocked `initData` — see Task 27 for the mocking setup that the two Playwright specs below depend on; for a quick manual check without that, temporarily hardcode `is_admin: true` in a local `MeContext` stub, then revert). Expected: switching to "Статистика"/"Пользователи" tabs renders their respective lists.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Write the Playwright tests**
+
+These cannot run standalone yet — they need the admin-flavored Telegram mock Task 27 adds. Write them now; Task 27 wires the mock into every spec file including these two.
+
+```ts
+// frontend-next/e2e/admin-stats.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("admin stats tab shows today's numbers", async ({ page }) => {
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Статистика" }).click();
+  await expect(page.getByText("Сегодня")).toBeVisible();
+});
+```
+
+```ts
+// frontend-next/e2e/admin-users.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("admin users tab shows the search section", async ({ page }) => {
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Пользователи" }).click();
+  await expect(page.getByText("Поиск по Telegram ID или username")).toBeVisible();
+});
+```
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add frontend-next/src/screens/admin/AdminStats.tsx frontend-next/src/screens/admin/AdminUsers.tsx
+git add frontend-next/src/screens/admin/AdminStats.tsx frontend-next/src/screens/admin/AdminUsers.tsx frontend-next/e2e/admin-stats.spec.ts frontend-next/e2e/admin-users.spec.ts
 git commit -m "Port AdminStats and AdminUsers to Next.js/Tailwind"
 ```
 
@@ -1796,6 +1873,8 @@ git commit -m "Port AdminStats and AdminUsers to Next.js/Tailwind"
 **Files:**
 - Create: `frontend-next/src/screens/admin/AdminPayments.tsx`
 - Create: `frontend-next/src/screens/admin/AdminModels.tsx`
+- Create: `frontend-next/e2e/admin-payments.spec.ts`
+- Create: `frontend-next/e2e/admin-models.spec.ts`
 
 **Interfaces:**
 - Consumes: `adminApi`, `AdminPaymentOut`, `AdminModelOut` (Task 9), `Button`, `Cell`, `Input`, `List`, `Placeholder`, `Section`, `Spinner`, `Switch` (Tasks 3–7).
@@ -1808,14 +1887,41 @@ Read `frontend/src/screens/admin/AdminPayments.tsx` in full. Port to `frontend-n
 
 Read `frontend/src/screens/admin/AdminModels.tsx` in full. Port to `frontend-next/src/screens/admin/AdminModels.tsx`. Swap `Cell, Input, List, Placeholder, Section, Spinner, Switch` — note the `Switch` call site (`<Switch checked={m.is_active} onChange={(e) => toggle(m.model_code, e.target.checked)} />`) matches the Task 7 `Switch` primitive's prop shape exactly, no logic change needed.
 
-- [ ] **Step 3: Wire into `AdminPanel` and verify**
+- [ ] **Step 3: Wire into `AdminPanel` and verify manually**
 
-Same manual-check procedure as Task 23 Step 3, for the "Payments"/"Models" tabs.
+Same manual-check procedure as Task 23 Step 3, for the "Платежи"/"Модели" tabs.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Write the Playwright tests**
+
+`AdminModels`'s `Section header="Модели"` renders the exact same text as its own `SegmentedControl.Item` tab label — asserting plain visibility would pass even if the tab click did nothing (the tab label text is already on the page). Assert the count goes from 1 (tab only) to 2 (tab + section header) after the click, which only holds if the section actually rendered.
+
+```ts
+// frontend-next/e2e/admin-payments.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("admin payments tab shows recent payments", async ({ page }) => {
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Платежи" }).click();
+  await expect(page.getByText("Последние платежи")).toBeVisible();
+});
+```
+
+```ts
+// frontend-next/e2e/admin-models.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("admin models tab renders the models section", async ({ page }) => {
+  await page.goto("/admin");
+  await expect(page.getByText("Модели")).toHaveCount(1); // only the tab label, section not mounted yet
+  await page.getByRole("button", { name: "Модели" }).click();
+  await expect(page.getByText("Модели")).toHaveCount(2); // tab label + Section header
+});
+```
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add frontend-next/src/screens/admin/AdminPayments.tsx frontend-next/src/screens/admin/AdminModels.tsx
+git add frontend-next/src/screens/admin/AdminPayments.tsx frontend-next/src/screens/admin/AdminModels.tsx frontend-next/e2e/admin-payments.spec.ts frontend-next/e2e/admin-models.spec.ts
 git commit -m "Port AdminPayments and AdminModels to Next.js/Tailwind"
 ```
 
@@ -1826,6 +1932,8 @@ git commit -m "Port AdminPayments and AdminModels to Next.js/Tailwind"
 **Files:**
 - Create: `frontend-next/src/screens/admin/AdminTariffs.tsx`
 - Create: `frontend-next/src/screens/admin/AdminBanners.tsx`
+- Create: `frontend-next/e2e/admin-tariffs.spec.ts`
+- Create: `frontend-next/e2e/admin-banners.spec.ts`
 
 **Interfaces:**
 - Consumes: `adminApi`, `AdminTariffOut`, `AdminBannerOut`, `BannerWriteFields` (Task 9), `Button`, `Cell`, `Input`, `List`, `Placeholder`, `Section`, `Select`, `Spinner`, `Switch` (Tasks 3–7).
@@ -1838,14 +1946,43 @@ Read `frontend/src/screens/admin/AdminTariffs.tsx` in full. Port to `frontend-ne
 
 Read `frontend/src/screens/admin/AdminBanners.tsx` in full (the most form-heavy admin screen — 6 `Input`s, 1 `Select`, 1 `Switch`). Port to `frontend-next/src/screens/admin/AdminBanners.tsx`. Swap `Button, Cell, Input, List, Placeholder, Section, Select, Spinner, Switch`. The `Select` call site (`<Select header="Действие по клику" value={form.action_type} onChange={(e) => setForm({ ...form, action_type: e.target.value as "prompt" | "link" })}>`) matches the Task 6 `Select` primitive's native-`onChange`-event shape exactly.
 
-- [ ] **Step 3: Wire into `AdminPanel` and verify**
+- [ ] **Step 3: Wire into `AdminPanel` and verify manually**
 
-Same manual-check procedure as Task 23 Step 3, for the "Tariffs"/"Banners" tabs. Specifically confirm the banner creation form's inputs render with dark backgrounds and light text/placeholders (this form is where the original `telegram-ui` white-textarea-class bug would have been most visible if it existed here too).
+Same manual-check procedure as Task 23 Step 3, for the "Тарифы"/"Карусель" tabs. Specifically confirm the banner creation form's inputs render with dark backgrounds and light text/placeholders (this form is where the original `telegram-ui` white-textarea-class bug would have been most visible if it existed here too).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Write the Playwright tests**
+
+`AdminTariffs`'s `Section header="Тарифы"` has the same tab/section text-collision as `AdminModels` in Task 24 — use the same before/after count assertion. `AdminBanners`'s section headers ("Карусель на главной", "Новый баннер") don't collide with any tab label, so a plain visibility check is enough there.
+
+```ts
+// frontend-next/e2e/admin-tariffs.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("admin tariffs tab renders the tariffs section", async ({ page }) => {
+  await page.goto("/admin");
+  await expect(page.getByText("Тарифы")).toHaveCount(1); // only the tab label
+  await page.getByRole("button", { name: "Тарифы" }).click();
+  await expect(page.getByText("Тарифы")).toHaveCount(2); // tab label + Section header
+});
+```
+
+```ts
+// frontend-next/e2e/admin-banners.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("admin banners tab shows the carousel list and the new-banner form", async ({ page }) => {
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Карусель" }).click();
+  await expect(page.getByText("Карусель на главной")).toBeVisible();
+  await expect(page.getByText("Новый баннер")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Добавить баннер" })).toBeVisible();
+});
+```
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add frontend-next/src/screens/admin/AdminTariffs.tsx frontend-next/src/screens/admin/AdminBanners.tsx
+git add frontend-next/src/screens/admin/AdminTariffs.tsx frontend-next/src/screens/admin/AdminBanners.tsx frontend-next/e2e/admin-tariffs.spec.ts frontend-next/e2e/admin-banners.spec.ts
 git commit -m "Port AdminTariffs and AdminBanners to Next.js/Tailwind"
 ```
 
@@ -1957,10 +2094,10 @@ git commit -m "Add Next.js frontend Render service and backend CORS"
 **Files:**
 - Create: `frontend-next/playwright.config.ts`
 - Create: `frontend-next/e2e/mock-telegram.ts`
-- Modify: every `e2e/*.spec.ts` file created in Tasks 14–22 (add the Telegram mock)
+- Modify: every `e2e/*.spec.ts` file created in Tasks 14–25 (add the Telegram mock)
 
 **Interfaces:**
-- Produces: a runnable `npm run test:e2e` in `frontend-next` covering all 8 top-level screens plus the admin panel shell.
+- Produces: a runnable `npm run test:e2e` in `frontend-next` covering all 8 top-level screens, the admin panel shell, and all 6 admin sub-screens (15 spec files total).
 
 - [ ] **Step 1: `playwright.config.ts`**
 
@@ -2035,9 +2172,9 @@ export async function mockTelegramWebApp(page: Page, botToken: string, telegramI
 }
 ```
 
-- [ ] **Step 3: Wire the mock into every spec file**
+- [ ] **Step 3: Wire the mock into every spec file — two flavors**
 
-For each of the 9 spec files created in Tasks 14–22 (`home`, `trends`, `account`, `tariffs`, `referral`, `settings`, `chat`, `generate-image`, `admin-panel`), add a `test.beforeEach` that calls `mockTelegramWebApp`:
+Nine spec files (`home`, `trends`, `account`, `tariffs`, `referral`, `settings`, `chat`, `generate-image`, `admin-panel`) test as a regular, non-admin user — the default `telegramId` (`999999`) is correct for them:
 
 ```ts
 import { test, expect } from "@playwright/test";
@@ -2048,18 +2185,32 @@ test.beforeEach(async ({ page }) => {
 });
 ```
 
-(Insert this block right after the imports in each file, keeping the existing `test(...)` bodies unchanged.)
+(Insert this block right after the imports in each of those 9 files, keeping the existing `test(...)` bodies unchanged. `admin-panel.spec.ts` specifically relies on this non-admin identity — it asserts the access-denied gate.)
+
+The 6 admin sub-screen specs from Tasks 23–25 (`admin-stats`, `admin-users`, `admin-payments`, `admin-models`, `admin-tariffs`, `admin-banners`) need a Telegram ID the target backend actually recognizes as an admin (per that backend's `ADMIN_IDS` setting — see `README.md`'s "Обязательные переменные окружения" section). Pass it explicitly instead of relying on the default:
+
+```ts
+import { test, expect } from "@playwright/test";
+import { mockTelegramWebApp } from "./mock-telegram";
+
+test.beforeEach(async ({ page }) => {
+  const adminId = Number(process.env.TEST_ADMIN_TELEGRAM_ID);
+  await mockTelegramWebApp(page, process.env.TEST_BOT_TOKEN ?? "test-token", adminId);
+});
+```
+
+(Insert this block right after the imports in each of those 6 files.)
 
 - [ ] **Step 4: Run the full suite**
 
 ```bash
 cd frontend-next
-TEST_BOT_TOKEN=<real BOT_TOKEN from .env> npm run test:e2e
+TEST_BOT_TOKEN=<real BOT_TOKEN from .env> TEST_ADMIN_TELEGRAM_ID=<a Telegram ID listed in the backend's ADMIN_IDS> npm run test:e2e
 ```
 
 Add the script to `package.json`: `"test:e2e": "playwright test"`.
 
-Expected: all 9 tests pass. If a test fails because the backend isn't running locally (real `/api/me` 401s without a real bot token matching a real backend `.env`), run the backend locally per Task 26 Step 4 first.
+Expected: all 15 tests pass. If a test fails because the backend isn't running locally (real `/api/me` 401s without a real bot token matching a real backend `.env`), run the backend locally per Task 26 Step 4 first. If only the 6 admin specs fail with an access-denied assertion error, `TEST_ADMIN_TELEGRAM_ID` doesn't match an ID in the running backend's `ADMIN_IDS`.
 
 - [ ] **Step 5: Commit**
 
