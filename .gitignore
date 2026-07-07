@@ -10,3 +10,4 @@ frontend/dist/
 *.log
 *.stackdump
 .claude/
+.worktrees/
