@@ -18,5 +18,5 @@ async def handle_any_other_message(message: Message) -> None:
 
     await message.answer(
         "Все функции бота — в приложении 👇",
-        reply_markup=webapp_open_kb("🤖 Открыть AI Hub", settings.webapp_url),
+        reply_markup=webapp_open_kb("🤖 Открыть AI Hub", settings.frontend_url),
     )

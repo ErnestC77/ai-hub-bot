@@ -39,5 +39,5 @@ async def cmd_start(message: Message, command: CommandObject) -> None:
     await message.answer(
         "Привет! Здесь доступ к нескольким нейросетям, тарифам и инструментам.\n"
         "Открывай приложение, чтобы начать 👇",
-        reply_markup=webapp_open_kb("🤖 Открыть AI Hub", settings.webapp_url),
+        reply_markup=webapp_open_kb("🤖 Открыть AI Hub", settings.frontend_url),
     )
