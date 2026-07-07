@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.enums import ModelCategory
 from app.db.models import ModelConfig, Tariff, UsageLimit, User
 from app.services.credit_service import get_balance as get_credit_balance
 from app.services.limit_fields import CATEGORY_LIMIT_FIELD
@@ -127,14 +128,19 @@ async def check_access(
         usage.daily_used = 0
         await session.commit()
 
-    limit_field, used_field = CATEGORY_LIMIT_FIELD[model.category]
-    category_limit = getattr(tariff, limit_field)
-
-    tariff_has_quota = (
-        category_limit > 0
-        and usage.daily_used < tariff.daily_limit
-        and getattr(usage, used_field) < category_limit
-    )
+    # Video is never covered by tariff quota, only by credits -- CATEGORY_LIMIT_FIELD
+    # has no entry for it by design (see app/services/limit_fields.py).
+    if model.category == ModelCategory.video:
+        category_limit = 0
+        tariff_has_quota = False
+    else:
+        limit_field, used_field = CATEGORY_LIMIT_FIELD[model.category]
+        category_limit = getattr(tariff, limit_field)
+        tariff_has_quota = (
+            category_limit > 0
+            and usage.daily_used < tariff.daily_limit
+            and getattr(usage, used_field) < category_limit
+        )
 
     if tariff_has_quota:
         return AccessContext(tariff=tariff, usage_limit=usage, max_output_tokens=tariff.max_output_tokens)
