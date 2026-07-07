@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
-import { Button, Placeholder, Spinner, Textarea } from "@telegram-apps/telegram-ui";
+import { Button, Placeholder, Spinner } from "@telegram-apps/telegram-ui";
 import { useNavigate } from "react-router-dom";
 
 import { api, type BannerOut } from "../api/client";
 import HeroCarousel from "../components/HeroCarousel";
+import ImageStack from "../components/ImageStack";
 import { useMe } from "../context/MeContext";
+
+const GENERATE_IMAGE_STACK = [
+  "https://picsum.photos/seed/ai-hub-generate-1/300/400",
+  "https://picsum.photos/seed/ai-hub-generate-2/300/400",
+  "https://picsum.photos/seed/ai-hub-generate-3/300/400",
+];
 
 export default function Home() {
   const { me, loading } = useMe();
   const navigate = useNavigate();
   const [banners, setBanners] = useState<BannerOut[] | null>(null);
-  const [prompt, setPrompt] = useState("");
 
   useEffect(() => {
     api.banners().then(setBanners).catch(() => setBanners([]));
@@ -31,7 +37,7 @@ export default function Home() {
   }
 
   function generate() {
-    navigate("/chat", { state: { prefillPrompt: prompt } });
+    navigate("/chat");
   }
 
   return (
@@ -43,35 +49,35 @@ export default function Home() {
         style={{
           margin: "0 16px 20px",
           padding: 18,
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
         }}
       >
-        <h3 className="heading-font" style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 600 }}>
-          Generate Image
-        </h3>
-        <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--foreground-muted)" }}>Опишите, что хотите создать</p>
-        <Textarea
-          placeholder="Например: кот-космонавт в стиле аниме"
-          rows={2}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-        />
-        <div style={{ marginTop: 10 }}>
+        <div style={{ flex: 1, minWidth: 0, paddingRight: 76 }}>
+          <h3 className="heading-font" style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 600 }}>
+            Generate Image
+          </h3>
+          <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--foreground-muted)" }}>
+            Опишите, что хотите создать
+          </p>
           <button
             className="brand-button press-scale"
-            disabled={!prompt.trim()}
             onClick={generate}
             style={{
-              width: "100%",
-              padding: "12px 0",
-              borderRadius: 12,
-              fontSize: 15,
+              padding: "10px 22px",
+              borderRadius: 999,
+              fontSize: 14,
               fontWeight: 600,
-              opacity: prompt.trim() ? 1 : 0.4,
-              cursor: prompt.trim() ? "pointer" : "not-allowed",
             }}
           >
             ✨ Generate
           </button>
+        </div>
+
+        <div style={{ position: "absolute", right: 14, top: -18 }}>
+          <ImageStack images={GENERATE_IMAGE_STACK} />
         </div>
       </div>
 
