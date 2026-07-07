@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { initTelegram } from "@/lib/telegram";
+import { initTelegram, tg } from "@/lib/telegram";
 import { cn } from "@/lib/cn";
 
 const TABS = [
@@ -34,6 +34,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     initTelegram();
   }, []);
+
+  useEffect(() => {
+    const webApp = tg;
+    if (!webApp) return;
+    if (pathname === "/") {
+      webApp.BackButton.hide();
+      return;
+    }
+    const handleBack = () => router.back();
+    webApp.BackButton.show();
+    webApp.BackButton.onClick(handleBack);
+    return () => {
+      webApp.BackButton.offClick(handleBack);
+    };
+  }, [pathname, router]);
 
   return (
     <>
