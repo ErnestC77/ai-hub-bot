@@ -11,6 +11,7 @@ interface TelegramWebApp {
   openLink(url: string, options?: { try_instant_view?: boolean }): void;
   openTelegramLink(url: string): void;
   openInvoice(url: string, callback: (status: InvoiceStatus) => void): void;
+  onEvent(event: "themeChanged", cb: () => void): void;
   BackButton: {
     show(): void;
     hide(): void;
@@ -31,10 +32,37 @@ declare global {
 
 export const tg: TelegramWebApp | undefined = window.Telegram?.WebApp;
 
+// Telegram задаёт --tg-theme-* CSS-переменные под реальную тему клиента (может быть светлой).
+// @telegram-apps/telegram-ui резолвит все свои --tgui--* цвета как var(--tg-theme-*, тёмный фолбэк),
+// поэтому реальная светлая тема клиента перебивает AppRoot appearance="dark". Фиксируем свои
+// значения поверх — это единственный способ гарантировать тёмный UI независимо от темы клиента.
+const FORCED_DARK_THEME_VARS: Record<string, string> = {
+  "--tg-theme-bg-color": "#17171b",
+  "--tg-theme-secondary-bg-color": "#0e0e12",
+  "--tg-theme-section-bg-color": "#17171b",
+  "--tg-theme-header-bg-color": "#050506",
+  "--tg-theme-text-color": "#f5f5f7",
+  "--tg-theme-hint-color": "#96979f",
+  "--tg-theme-subtitle-text-color": "#96979f",
+  "--tg-theme-section-header-text-color": "#96979f",
+  "--tg-theme-link-color": "#ff2d78",
+  "--tg-theme-button-color": "#ff2d78",
+  "--tg-theme-button-text-color": "#ffffff",
+};
+
+function forceDarkTheme(): void {
+  const root = document.documentElement.style;
+  for (const [name, value] of Object.entries(FORCED_DARK_THEME_VARS)) {
+    root.setProperty(name, value);
+  }
+}
+
 export function initTelegram(): void {
+  forceDarkTheme();
   if (!tg) return;
   tg.ready();
   tg.expand();
+  tg.onEvent("themeChanged", forceDarkTheme);
 }
 
 export function getInitData(): string {

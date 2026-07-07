@@ -6,11 +6,11 @@ import { useNavigate } from "react-router-dom";
 import { ApiError, api, type ImageAspect, type ImageResolution, type ModelOut } from "../api/client";
 import AspectRatioSheet from "../components/AspectRatioSheet";
 import PhotoUploadBox from "../components/PhotoUploadBox";
-import ResolutionSheet from "../components/ResolutionSheet";
 import { useMe } from "../context/MeContext";
 import { computeImageCreditCost } from "../lib/imageCost";
 import { haptic } from "../lib/telegram";
 
+const RESOLUTIONS: ImageResolution[] = ["1k", "2k", "4k"];
 const RESOLUTION_LABELS: Record<ImageResolution, string> = { "1k": "1K", "2k": "2K", "4k": "4K" };
 
 function chipStyle(active: boolean): CSSProperties {
@@ -38,7 +38,6 @@ export default function GenerateImage() {
   const [aspect, setAspect] = useState<ImageAspect>("auto");
   const [aspectSheetOpen, setAspectSheetOpen] = useState(false);
   const [resolution, setResolution] = useState<ImageResolution>("1k");
-  const [resolutionSheetOpen, setResolutionSheetOpen] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -166,13 +165,25 @@ export default function GenerateImage() {
         )}
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="press-scale" onClick={() => setResolutionSheetOpen(true)} style={chipStyle(resolution !== "1k")}>
-            👑 {RESOLUTION_LABELS[resolution]}
-          </button>
-          <button className="press-scale" onClick={() => setAspectSheetOpen(true)} style={chipStyle(false)}>
-            ▦ {aspect === "auto" ? "Auto" : aspect}
-          </button>
+          {RESOLUTIONS.map((r) => (
+            <button
+              key={r}
+              className="press-scale"
+              onClick={() => setResolution(r)}
+              style={chipStyle(resolution === r)}
+            >
+              {RESOLUTION_LABELS[r]}
+            </button>
+          ))}
         </div>
+
+        <button
+          className="press-scale"
+          onClick={() => setAspectSheetOpen(true)}
+          style={{ ...chipStyle(false), width: "100%" }}
+        >
+          ▦ {aspect === "auto" ? "Auto" : aspect}
+        </button>
 
         {generating && (
           <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
@@ -253,13 +264,6 @@ export default function GenerateImage() {
         value={aspect}
         onOpenChange={setAspectSheetOpen}
         onSelect={setAspect}
-      />
-
-      <ResolutionSheet
-        open={resolutionSheetOpen}
-        value={resolution}
-        onOpenChange={setResolutionSheetOpen}
-        onSelect={setResolution}
       />
     </div>
   );
