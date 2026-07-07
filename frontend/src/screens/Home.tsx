@@ -56,7 +56,7 @@ export default function Home() {
         }}
       >
         <div style={{ flex: 1, minWidth: 0, paddingRight: 76 }}>
-          <h3 className="heading-font" style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 600 }}>
+          <h3 className="heading-font" style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 600, color: "#fff" }}>
             Generate Image
           </h3>
           <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--foreground-muted)" }}>
