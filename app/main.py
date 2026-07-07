@@ -28,9 +28,9 @@ async def lifespan(app: FastAPI):
     async with get_session() as session:
         await run_key_healthcheck(session)
 
-    if settings.webapp_url.startswith("https://"):
+    if settings.frontend_url.startswith("https://"):
         await bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=settings.webapp_url))
+            menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=settings.frontend_url))
         )
 
     if settings.bot_mode == "webhook":

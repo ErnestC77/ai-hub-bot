@@ -32,6 +32,11 @@ services:
           type: web
           name: ai-hub-bot
           property: hostport
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: ai-hub-frontend
+          property: hostport
       - key: PAYMENT_RETURN_URL
         fromService:
           type: web

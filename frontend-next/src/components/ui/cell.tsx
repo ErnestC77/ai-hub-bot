@@ -24,8 +24,10 @@ export function Cell({ before, after, subtitle, multiline, onClick, children, cl
     >
       {before}
       <div className={cn("min-w-0 flex-1", multiline ? "" : "truncate")}>
-        <div className="truncate text-[15px] text-foreground">{children}</div>
-        {subtitle && <div className="truncate text-xs text-foreground-muted">{subtitle}</div>}
+        <div className={cn("text-[15px] text-foreground", multiline ? "" : "truncate")}>{children}</div>
+        {subtitle && (
+          <div className={cn("text-xs text-foreground-muted", multiline ? "" : "truncate")}>{subtitle}</div>
+        )}
       </div>
       {after}
     </Tag>
