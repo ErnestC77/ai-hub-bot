@@ -9,3 +9,4 @@ node_modules/
 frontend/dist/
 *.log
 *.stackdump
+.claude/
