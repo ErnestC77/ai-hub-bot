@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import BackgroundTasks
 
@@ -70,8 +70,14 @@ async def start_generation(
     background_tasks: BackgroundTasks,
 ) -> AIRequest:
     model = await _get_model(session, model_code)
-    await check_access(session, user, model, prompt, credit_cost=credit_cost_override)
-    credit_cost = credit_cost_override if credit_cost_override is not None else model.credit_cost
+    # credit_cost_override is only honored on the synchronous (non-PiAPI) path: the
+    # PiAPI async path charges model.credit_cost later in handle_piapi_webhook, which
+    # has no way to see this override, so applying it here would let a caller be
+    # access-checked against one amount and charged a different one at webhook time.
+    is_piapi = model.provider == ModelProvider.piapi
+    effective_override = None if is_piapi else credit_cost_override
+    await check_access(session, user, model, prompt, credit_cost=effective_override)
+    credit_cost = effective_override if effective_override is not None else model.credit_cost
 
     request = AIRequest(
         user_id=user.id,
@@ -83,17 +89,24 @@ async def start_generation(
     session.add(request)
     await session.commit()
 
-    if model.provider == ModelProvider.piapi:
-        purpose = KeyPurpose.IMAGE if model.category.value == "image" else KeyPurpose.VIDEO
-        api_key = get_key_manager().get_key(Provider.PIAPI, purpose)
-        client = PiAPIClient(api_key=api_key)
-        input_ = {"prompt": prompt, **(model.piapi_extra_input or {})}
-        task_id = await client.create_task(
-            model=model.piapi_model,
-            task_type=model.piapi_task_type,
-            input_=input_,
-            webhook_url=_webhook_url(),
-        )
+    if is_piapi:
+        try:
+            purpose = KeyPurpose(model.key_purpose)
+            api_key = get_key_manager().get_key(Provider.PIAPI, purpose)
+            client = PiAPIClient(api_key=api_key)
+            input_ = {"prompt": prompt, **(model.piapi_extra_input or {})}
+            task_id = await client.create_task(
+                model=model.piapi_model,
+                task_type=model.piapi_task_type,
+                input_=input_,
+                webhook_url=_webhook_url(),
+            )
+        except Exception as exc:
+            request.status = RequestStatus.error
+            request.error_message = str(exc)
+            await session.commit()
+            raise
+
         request.provider_task_id = task_id
         await session.commit()
     else:
@@ -123,13 +136,22 @@ async def handle_piapi_webhook(session: AsyncSession, payload: dict) -> None:
     request = (
         await session.execute(select(AIRequest).where(AIRequest.provider_task_id == task_id))
     ).scalar_one_or_none()
-    if request is None or request.status != RequestStatus.processing:
-        return  # unknown task, or already handled (webhook retry) -- idempotent no-op
+    if request is None:
+        return  # unknown task
 
     status = data.get("status")
     if status == "completed":
-        request.answer = extract_result_url(data)
-        request.status = RequestStatus.success
+        # Atomic claim: the WHERE clause ensures only one concurrent webhook delivery
+        # (PiAPI retry, or multi-worker deployment) can transition processing -> success.
+        # If rowcount is 0, another delivery already claimed this request -- bail out
+        # before spending credits again.
+        result = await session.execute(
+            update(AIRequest)
+            .where(AIRequest.id == request.id, AIRequest.status == RequestStatus.processing)
+            .values(status=RequestStatus.success, answer=extract_result_url(data))
+        )
+        if result.rowcount == 0:
+            return  # already handled (webhook retry) -- idempotent no-op
         await session.commit()
 
         model = await _get_model(session, request.model_code)
@@ -137,6 +159,11 @@ async def handle_piapi_webhook(session: AsyncSession, payload: dict) -> None:
         await spend_credits(session, user, model.credit_cost, reason=f"AI request: {model.model_code}")
     elif status == "failed":
         error = data.get("error") or {}
-        request.status = RequestStatus.error
-        request.error_message = error.get("message") or "generation failed"
+        result = await session.execute(
+            update(AIRequest)
+            .where(AIRequest.id == request.id, AIRequest.status == RequestStatus.processing)
+            .values(status=RequestStatus.error, error_message=error.get("message") or "generation failed")
+        )
+        if result.rowcount == 0:
+            return  # already handled (webhook retry) -- idempotent no-op
         await session.commit()
