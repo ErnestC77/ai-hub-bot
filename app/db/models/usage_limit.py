@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -25,4 +25,4 @@ class UsageLimit(Base):
     images_used: Mapped[int] = mapped_column(Integer, default=0)
     daily_used: Mapped[int] = mapped_column(Integer, default=0)
 
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
