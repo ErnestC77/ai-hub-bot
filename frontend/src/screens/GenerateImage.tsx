@@ -3,14 +3,15 @@ import { useEffect, useState } from "react";
 import { Cell, List, Modal, Section, Spinner, Textarea } from "@telegram-apps/telegram-ui";
 import { useNavigate } from "react-router-dom";
 
-import { ApiError, api, type ImageQuality, type ImageSize, type ModelOut } from "../api/client";
+import { ApiError, api, type ImageAspect, type ImageResolution, type ModelOut } from "../api/client";
+import AspectRatioSheet from "../components/AspectRatioSheet";
+import PhotoUploadBox from "../components/PhotoUploadBox";
+import ResolutionSheet from "../components/ResolutionSheet";
+import { useMe } from "../context/MeContext";
 import { computeImageCreditCost } from "../lib/imageCost";
 import { haptic } from "../lib/telegram";
 
-const SIZE_LABELS: Record<ImageSize, string> = { square: "Квадрат", portrait: "Портрет", landscape: "Альбом" };
-const SIZE_ORDER: ImageSize[] = ["square", "portrait", "landscape"];
-const QUALITY_LABELS: Record<ImageQuality, string> = { standard: "Standard", hd: "HD" };
-const QUALITY_ORDER: ImageQuality[] = ["standard", "hd"];
+const RESOLUTION_LABELS: Record<ImageResolution, string> = { "1k": "1K", "2k": "2K", "4k": "4K" };
 
 function chipStyle(active: boolean): CSSProperties {
   return {
@@ -27,13 +28,17 @@ function chipStyle(active: boolean): CSSProperties {
 
 export default function GenerateImage() {
   const navigate = useNavigate();
+  const { me } = useMe();
   const [models, setModels] = useState<ModelOut[] | null>(null);
   const [model, setModel] = useState<ModelOut | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [prompt, setPrompt] = useState("");
   const [expanded, setExpanded] = useState(false);
-  const [size, setSize] = useState<ImageSize>("square");
-  const [quality, setQuality] = useState<ImageQuality>("standard");
+  const [aspect, setAspect] = useState<ImageAspect>("auto");
+  const [aspectSheetOpen, setAspectSheetOpen] = useState(false);
+  const [resolution, setResolution] = useState<ImageResolution>("1k");
+  const [resolutionSheetOpen, setResolutionSheetOpen] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -49,17 +54,7 @@ export default function GenerateImage() {
       .catch(() => setModels([]));
   }, []);
 
-  const cost = model ? computeImageCreditCost(model.credit_cost, size, quality) : 0;
-
-  function cycleSize() {
-    haptic("light");
-    setSize((prev) => SIZE_ORDER[(SIZE_ORDER.indexOf(prev) + 1) % SIZE_ORDER.length]);
-  }
-
-  function cycleQuality() {
-    haptic("light");
-    setQuality((prev) => QUALITY_ORDER[(QUALITY_ORDER.indexOf(prev) + 1) % QUALITY_ORDER.length]);
-  }
+  const cost = model ? computeImageCreditCost(model.credit_cost, aspect, resolution) : 0;
 
   async function generate() {
     if (!model || !prompt.trim() || generating) return;
@@ -67,7 +62,7 @@ export default function GenerateImage() {
     setError("");
     setResultUrl(null);
     try {
-      const result = await api.generateImage(model.model_code, prompt.trim(), size, quality);
+      const result = await api.generateImage(model.model_code, prompt.trim(), aspect, resolution);
       setResultUrl(result.image_url);
       haptic("medium");
     } catch (err) {
@@ -97,6 +92,10 @@ export default function GenerateImage() {
       </div>
 
       <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="glass-card" style={{ padding: 14 }}>
+          <PhotoUploadBox photos={photos} onChange={setPhotos} />
+        </div>
+
         <div className="glass-card" style={{ padding: 14, position: "relative" }}>
           <Textarea
             placeholder="Опишите, что хотите создать"
@@ -160,18 +159,18 @@ export default function GenerateImage() {
                 flexShrink: 0,
               }}
             >
-              от {computeImageCreditCost(model.credit_cost, "square", "standard")} 💎
+              от {computeImageCreditCost(model.credit_cost, "auto", "1k")} 💎
               {models && models.length > 1 && <span style={{ marginLeft: 2 }}>›</span>}
             </div>
           </div>
         )}
 
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="press-scale" onClick={cycleQuality} style={chipStyle(quality === "hd")}>
-            👑 {QUALITY_LABELS[quality]}
+          <button className="press-scale" onClick={() => setResolutionSheetOpen(true)} style={chipStyle(resolution !== "1k")}>
+            👑 {RESOLUTION_LABELS[resolution]}
           </button>
-          <button className="press-scale" onClick={cycleSize} style={chipStyle(false)}>
-            ▦ {SIZE_LABELS[size]}
+          <button className="press-scale" onClick={() => setAspectSheetOpen(true)} style={chipStyle(false)}>
+            ▦ {aspect === "auto" ? "Auto" : aspect}
           </button>
         </div>
 
@@ -206,6 +205,9 @@ export default function GenerateImage() {
           WebkitBackdropFilter: "blur(20px)",
         }}
       >
+        <div style={{ textAlign: "center", fontSize: 12, color: "var(--foreground-muted)", marginBottom: 8 }}>
+          Баланс: {me?.credits_balance ?? 0} 💎
+        </div>
         <button
           className="brand-button press-scale"
           disabled={!prompt.trim() || generating || !model}
@@ -245,6 +247,20 @@ export default function GenerateImage() {
           </Section>
         </List>
       </Modal>
+
+      <AspectRatioSheet
+        open={aspectSheetOpen}
+        value={aspect}
+        onOpenChange={setAspectSheetOpen}
+        onSelect={setAspect}
+      />
+
+      <ResolutionSheet
+        open={resolutionSheetOpen}
+        value={resolution}
+        onOpenChange={setResolutionSheetOpen}
+        onSelect={setResolution}
+      />
     </div>
   );
 }

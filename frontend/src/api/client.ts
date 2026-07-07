@@ -67,8 +67,19 @@ export interface ChatResponse {
   output_tokens: number;
 }
 
-export type ImageSize = "square" | "portrait" | "landscape";
-export type ImageQuality = "standard" | "hd";
+export type ImageAspect =
+  | "auto"
+  | "1:1"
+  | "3:2"
+  | "2:3"
+  | "4:3"
+  | "3:4"
+  | "4:5"
+  | "5:4"
+  | "9:16"
+  | "16:9"
+  | "21:9";
+export type ImageResolution = "1k" | "2k" | "4k";
 
 export interface ImageGenerateResponse {
   image_url: string;
@@ -142,10 +153,10 @@ export const api = {
       body: JSON.stringify({ model_code: modelCode, prompt }),
     }),
   tools: () => request<ToolOut[]>("/api/tools"),
-  generateImage: (modelCode: string, prompt: string, size: ImageSize, quality: ImageQuality) =>
+  generateImage: (modelCode: string, prompt: string, aspect: ImageAspect, resolution: ImageResolution) =>
     request<ImageGenerateResponse>("/api/chat/image", {
       method: "POST",
-      body: JSON.stringify({ model_code: modelCode, prompt, size, quality }),
+      body: JSON.stringify({ model_code: modelCode, prompt, aspect, resolution }),
     }),
   banners: () => request<BannerOut[]>("/api/banners"),
   referral: () => request<ReferralOut>("/api/referral/me"),

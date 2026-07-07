@@ -12,3 +12,4 @@ anthropic>=0.40
 google-genai>=1.0
 yookassa>=3.0
 httpx>=0.27
+Pillow>=10.0
