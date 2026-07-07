@@ -62,6 +62,10 @@ _PURPOSE_ATTR: dict[Provider, dict[KeyPurpose, str]] = {
     Provider.OPENROUTER: {
         KeyPurpose.FALLBACK: "fallback_key",
     },
+    Provider.PIAPI: {
+        KeyPurpose.IMAGE: "api_key",
+        KeyPurpose.VIDEO: "api_key",
+    },
 }
 
 _DEV_KEY_ATTR = "dev_key"

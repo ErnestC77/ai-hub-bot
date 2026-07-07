@@ -84,6 +84,11 @@ class OpenRouterSettings(_ProviderSettings):
     dev_key: SecretStr | None = Field(default=None, alias="OPENROUTER_DEV_KEY")
 
 
+class PiApiSettings(_ProviderSettings):
+    api_key: SecretStr | None = Field(default=None, alias="PIAPI_API_KEY")
+    dev_key: SecretStr | None = Field(default=None, alias="PIAPI_DEV_KEY")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -111,6 +116,7 @@ class Settings(BaseSettings):
     replicate: ReplicateSettings = Field(default_factory=ReplicateSettings)
     luma: LumaSettings = Field(default_factory=LumaSettings)
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
+    piapi: PiApiSettings = Field(default_factory=PiApiSettings)
 
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
@@ -118,6 +124,7 @@ class Settings(BaseSettings):
     payment_return_url: str = ""
     yookassa_webhook_url: str = ""
     frontend_url: str = ""
+    piapi_webhook_secret: str = ""
 
     admin_ids: str = ""
 
