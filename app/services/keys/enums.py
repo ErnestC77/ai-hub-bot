@@ -14,6 +14,7 @@ class Provider(StrEnum):
     REPLICATE = "replicate"
     LUMA = "luma"
     OPENROUTER = "openrouter"
+    PIAPI = "piapi"
 
 
 class KeyPurpose(StrEnum):

@@ -24,3 +24,6 @@ class AIRequest(Base, TimestampMixin):
 
     status: Mapped[RequestStatus] = mapped_column(default=RequestStatus.processing)
     error_message: Mapped[str | None] = mapped_column(Text)
+
+    # PiAPI's own task id -- the webhook payload only carries this, not our AIRequest.id.
+    provider_task_id: Mapped[str | None] = mapped_column(String(128), index=True, unique=True)

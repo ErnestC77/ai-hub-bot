@@ -28,6 +28,7 @@ class ModelCategory(str, enum.Enum):
     medium = "medium"
     premium = "premium"
     image = "image"
+    video = "video"
 
 
 class ModelProvider(str, enum.Enum):
@@ -35,6 +36,7 @@ class ModelProvider(str, enum.Enum):
     anthropic = "anthropic"
     google = "google"
     deepseek = "deepseek"
+    piapi = "piapi"
 
 
 class RequestStatus(str, enum.Enum):

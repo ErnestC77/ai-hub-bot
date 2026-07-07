@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Integer, Numeric, String
+from sqlalchemy import Boolean, Integer, JSON, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -28,3 +28,11 @@ class ModelConfig(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_premium: Mapped[bool] = mapped_column(Boolean, default=False)
     max_context_tokens: Mapped[int] = mapped_column(Integer, default=8000)
+
+    # PiAPI unified task API identifiers. None for non-PiAPI rows (e.g. dall-e-3).
+    piapi_model: Mapped[str | None] = mapped_column(String(64))
+    piapi_task_type: Mapped[str | None] = mapped_column(String(64))
+    # Fixed request fields PiAPI needs beyond "prompt" (resolution, duration, etc).
+    piapi_extra_input: Mapped[dict | None] = mapped_column(JSON)
+    # Video only -- informational + drives the frontend poll timeout.
+    duration_seconds: Mapped[int | None] = mapped_column(Integer)
