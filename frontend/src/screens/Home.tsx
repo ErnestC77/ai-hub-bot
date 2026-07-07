@@ -37,7 +37,7 @@ export default function Home() {
   }
 
   function generate() {
-    navigate("/chat");
+    navigate("/generate-image");
   }
 
   return (

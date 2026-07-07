@@ -58,12 +58,21 @@ export interface ModelOut {
   display_name: string;
   category: ModelCategory;
   is_premium: boolean;
+  credit_cost: number;
 }
 
 export interface ChatResponse {
   answer: string;
   input_tokens: number;
   output_tokens: number;
+}
+
+export type ImageSize = "square" | "portrait" | "landscape";
+export type ImageQuality = "standard" | "hd";
+
+export interface ImageGenerateResponse {
+  image_url: string;
+  credit_cost: number;
 }
 
 export interface ToolOut {
@@ -133,6 +142,11 @@ export const api = {
       body: JSON.stringify({ model_code: modelCode, prompt }),
     }),
   tools: () => request<ToolOut[]>("/api/tools"),
+  generateImage: (modelCode: string, prompt: string, size: ImageSize, quality: ImageQuality) =>
+    request<ImageGenerateResponse>("/api/chat/image", {
+      method: "POST",
+      body: JSON.stringify({ model_code: modelCode, prompt, size, quality }),
+    }),
   banners: () => request<BannerOut[]>("/api/banners"),
   referral: () => request<ReferralOut>("/api/referral/me"),
   tariffs: () => request<TariffOut[]>("/api/tariffs"),

@@ -98,7 +98,9 @@ async def resolve_tariff_and_period(
     return tariff, None, FREE_TIER_PERIOD_START, FREE_TIER_PERIOD_END
 
 
-async def check_access(session: AsyncSession, user: User, model: ModelConfig, prompt: str) -> AccessContext:
+async def check_access(
+    session: AsyncSession, user: User, model: ModelConfig, prompt: str, credit_cost: int | None = None
+) -> AccessContext:
     """7 проверок доступа перед AI-запросом (раздел 19 bot_ai.md) + кредиты
     поверх тарифа: если квота тарифа по категории исчерпана (или модель вообще
     не входит в тариф), но на балансе хватает кредитов -- запрос всё равно
@@ -109,6 +111,8 @@ async def check_access(session: AsyncSession, user: User, model: ModelConfig, pr
 
     if not model.is_active:
         raise ModelUnavailableError()
+
+    effective_credit_cost = model.credit_cost if credit_cost is None else credit_cost
 
     tariff, subscription_id, period_start, period_end = await resolve_tariff_and_period(session, user)
 
@@ -136,7 +140,7 @@ async def check_access(session: AsyncSession, user: User, model: ModelConfig, pr
         return AccessContext(tariff=tariff, usage_limit=usage, max_output_tokens=tariff.max_output_tokens)
 
     balance = await get_credit_balance(session, user)
-    if balance >= model.credit_cost:
+    if balance >= effective_credit_cost:
         return AccessContext(
             tariff=tariff, usage_limit=usage, max_output_tokens=tariff.max_output_tokens, use_credits=True
         )

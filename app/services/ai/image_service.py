@@ -20,14 +20,18 @@ def _get_client(purpose: KeyPurpose) -> AsyncOpenAI:
 class ImageProvider(AIProvider):
     """Генерация картинок. max_output_tokens не применим — игнорируется."""
 
-    async def generate(self, model: ModelConfig, prompt: str, max_output_tokens: int) -> AIResult:
+    async def generate(
+        self, model: ModelConfig, prompt: str, max_output_tokens: int, extra: dict | None = None
+    ) -> AIResult:
+        extra = extra or {}
         try:
             client = _get_client(KeyPurpose(model.key_purpose))
             response = await client.images.generate(
                 model=model.model_code,
                 prompt=prompt,
                 n=1,
-                size="1024x1024",
+                size=extra.get("size", "1024x1024"),
+                quality=extra.get("quality", "standard"),
                 response_format="url",
             )
             url = response.data[0].url if response.data else None

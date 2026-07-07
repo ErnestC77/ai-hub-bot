@@ -18,7 +18,9 @@ def _get_client(purpose: KeyPurpose) -> AsyncAnthropic:
 
 
 class ClaudeProvider(AIProvider):
-    async def generate(self, model: ModelConfig, prompt: str, max_output_tokens: int) -> AIResult:
+    async def generate(
+        self, model: ModelConfig, prompt: str, max_output_tokens: int, extra: dict | None = None
+    ) -> AIResult:
         try:
             client = _get_client(KeyPurpose(model.key_purpose))
             response = await client.messages.create(

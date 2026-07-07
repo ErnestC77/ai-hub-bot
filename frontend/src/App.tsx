@@ -4,6 +4,7 @@ import { HashRouter, Route, Routes, useLocation, useNavigate } from "react-route
 import { MeProvider } from "./context/MeContext";
 import AdminPanel from "./screens/admin/AdminPanel";
 import Chat from "./screens/Chat";
+import GenerateImage from "./screens/GenerateImage";
 import Home from "./screens/Home";
 import MyAccount from "./screens/MyAccount";
 import Referral from "./screens/Referral";
@@ -16,6 +17,8 @@ const TABS = [
   { path: "/trends", text: "Trends", icon: "✨" },
   { path: "/account", text: "My Account", icon: "👤" },
 ];
+
+const FULLSCREEN_ROUTES = ["/chat", "/generate-image"];
 
 function Fab() {
   const navigate = useNavigate();
@@ -46,16 +49,17 @@ function Fab() {
 function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const showFab = !["/chat"].includes(location.pathname);
+  const isFullscreen = FULLSCREEN_ROUTES.includes(location.pathname);
 
   return (
     <>
-      <div style={{ paddingBottom: 64, minHeight: "100vh" }}>
+      <div style={{ paddingBottom: isFullscreen ? 0 : 64, minHeight: "100vh" }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/trends" element={<Trends />} />
           <Route path="/account" element={<MyAccount />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/generate-image" element={<GenerateImage />} />
           <Route path="/tariffs" element={<Tariffs />} />
           <Route path="/referral" element={<Referral />} />
           <Route path="/settings" element={<Settings />} />
@@ -63,42 +67,44 @@ function Shell() {
         </Routes>
       </div>
 
-      {showFab && <Fab />}
+      {!isFullscreen && <Fab />}
 
-      <div
-        style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 2,
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          background: "rgba(10,10,12,0.72)",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <Tabbar>
-          {TABS.map((tab) => {
-            const selected = location.pathname === tab.path;
-            return (
-              <Tabbar.Item key={tab.path} text={tab.text} selected={selected} onClick={() => navigate(tab.path)}>
-                <span
-                  style={{
-                    fontSize: 20,
-                    transition: "transform 200ms cubic-bezier(0.16,1,0.3,1)",
-                    transform: selected ? "scale(1.12)" : "scale(1)",
-                    filter: selected ? "drop-shadow(0 0 8px rgba(255,45,120,0.6))" : "none",
-                    display: "inline-block",
-                  }}
-                >
-                  {tab.icon}
-                </span>
-              </Tabbar.Item>
-            );
-          })}
-        </Tabbar>
-      </div>
+      {!isFullscreen && (
+        <div
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 2,
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            background: "rgba(10,10,12,0.72)",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <Tabbar>
+            {TABS.map((tab) => {
+              const selected = location.pathname === tab.path;
+              return (
+                <Tabbar.Item key={tab.path} text={tab.text} selected={selected} onClick={() => navigate(tab.path)}>
+                  <span
+                    style={{
+                      fontSize: 20,
+                      transition: "transform 200ms cubic-bezier(0.16,1,0.3,1)",
+                      transform: selected ? "scale(1.12)" : "scale(1)",
+                      filter: selected ? "drop-shadow(0 0 8px rgba(255,45,120,0.6))" : "none",
+                      display: "inline-block",
+                    }}
+                  >
+                    {tab.icon}
+                  </span>
+                </Tabbar.Item>
+              );
+            })}
+          </Tabbar>
+        </div>
+      )}
     </>
   );
 }

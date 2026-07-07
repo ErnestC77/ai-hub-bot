@@ -17,4 +17,6 @@ class AIError(Exception):
 
 class AIProvider(ABC):
     @abstractmethod
-    async def generate(self, model: ModelConfig, prompt: str, max_output_tokens: int) -> AIResult: ...
+    async def generate(
+        self, model: ModelConfig, prompt: str, max_output_tokens: int, extra: dict | None = None
+    ) -> AIResult: ...

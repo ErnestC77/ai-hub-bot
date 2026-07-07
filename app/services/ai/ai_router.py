@@ -28,9 +28,17 @@ async def _get_model(session: AsyncSession, model_code: str) -> ModelConfig:
 
 
 class AIRouter:
-    async def generate(self, session: AsyncSession, user: User, model_code: str, prompt: str) -> AIResult:
+    async def generate(
+        self,
+        session: AsyncSession,
+        user: User,
+        model_code: str,
+        prompt: str,
+        extra: dict | None = None,
+        credit_cost_override: int | None = None,
+    ) -> AIResult:
         model = await _get_model(session, model_code)
-        ctx = await check_access(session, user, model, prompt)
+        ctx = await check_access(session, user, model, prompt, credit_cost=credit_cost_override)
 
         lock_key = f"ai_lock:{user.id}"
         acquired = await redis_client.set(lock_key, "1", nx=True, ex=AI_LOCK_TTL_SECONDS)
@@ -53,7 +61,7 @@ class AIRouter:
                 factory = registry.get(model.provider)
                 if factory is None:
                     raise AIError("provider not implemented")
-                result = await factory().generate(model, prompt, ctx.max_output_tokens)
+                result = await factory().generate(model, prompt, ctx.max_output_tokens, extra)
             except AIError as exc:
                 request.status = RequestStatus.error
                 request.error_message = str(exc)
@@ -63,7 +71,10 @@ class AIRouter:
             await fill_request_cost(session, request, model, result)
             if ctx.use_credits:
                 await spend_credits(
-                    session, user, model.credit_cost, reason=f"AI request: {model.model_code}"
+                    session,
+                    user,
+                    credit_cost_override if credit_cost_override is not None else model.credit_cost,
+                    reason=f"AI request: {model.model_code}",
                 )
             else:
                 await spend(session, ctx.usage_limit, model.category)
