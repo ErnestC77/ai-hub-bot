@@ -169,6 +169,7 @@ export default function GenerateImage() {
           disabled={!prompt.trim() || generating || !model}
           onClick={generate}
           className="py-3.5 text-base"
+          style={{ opacity: prompt.trim() && model ? 1 : 0.4 }}
         >
           ✨ Generate {model && <span>· {cost} 💎</span>}
         </Button>
