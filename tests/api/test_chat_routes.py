@@ -18,7 +18,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.deps import current_user, get_db
-from app.api.routes import chat
+from app.api.routes import chat, me
 from app.db.base import Base
 from app.db.enums import CostUnit, ModelCategory, ModelProvider, ModelTier
 from app.db.models import AiModel, User
@@ -36,6 +36,7 @@ from app.services.text_generation_service import (
 # поэтому собираем минимальное приложение из тестируемых роутеров.
 app = FastAPI()
 app.include_router(chat.router, prefix="/api")
+app.include_router(me.router, prefix="/api")
 
 _test_user = User(
     id=1, telegram_id=1, username="u", first_name="U", is_admin=False,
@@ -190,3 +191,35 @@ async def test_chat_provider_error_maps_to_502(client, monkeypatch):
 async def test_chat_empty_prompt_is_422(client):
     response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": ""})
     assert response.status_code == 422
+
+
+# --- GET /api/me ---
+
+async def test_me_returns_simplified_profile_with_default_model(client):
+    response = await client.get("/api/me")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "telegram_id": 1,
+        "username": "u",
+        "first_name": "U",
+        "is_admin": False,
+        "default_model_code": "deepseek_v3",  # у _test_user не задана -> дефолт из ТЗ
+        "credits_balance": 100,
+        "total_credits_purchased": 0,
+        "total_credits_spent": 0,
+    }
+
+
+async def test_me_keeps_explicit_default_model(client):
+    _test_user.default_model_code = "claude_sonnet"
+    try:
+        response = await client.get("/api/me")
+        assert response.json()["default_model_code"] == "claude_sonnet"
+    finally:
+        _test_user.default_model_code = None
+
+
+async def test_subscription_me_is_gone(client):
+    response = await client.get("/api/subscription/me")
+    assert response.status_code == 404

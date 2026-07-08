@@ -1,17 +1,4 @@
-from datetime import datetime
-
 from pydantic import BaseModel
-
-
-class CategoryLimitOut(BaseModel):
-    used: int
-    limit: int
-
-
-class LimitsOut(BaseModel):
-    daily_used: int
-    daily_limit: int
-    categories: dict[str, CategoryLimitOut]
 
 
 class MeOut(BaseModel):
@@ -19,15 +6,7 @@ class MeOut(BaseModel):
     username: str | None
     first_name: str | None
     is_admin: bool
-    active_model: str | None
-    tariff_code: str
-    tariff_name: str
-    subscription_expires_at: datetime | None
-    limits: LimitsOut
+    default_model_code: str | None
     credits_balance: int
-
-
-class SubscriptionStatusOut(BaseModel):
-    tariff_code: str
-    status: str
-    expires_at: datetime | None
+    total_credits_purchased: int
+    total_credits_spent: int
