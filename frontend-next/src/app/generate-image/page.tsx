@@ -57,15 +57,36 @@ export default function GenerateImage() {
 
   const cost = model ? computeImageCreditCost(model.credit_cost, aspect, resolution) : 0;
 
+  const POLL_INTERVAL_MS = 2000;
+  const POLL_ATTEMPTS = 60;
+
   async function generate() {
     if (!model || !prompt.trim() || generating) return;
     setGenerating(true);
     setError("");
     setResultUrl(null);
     try {
-      const result = await api.generateImage(model.model_code, prompt.trim(), aspect, resolution);
-      setResultUrl(result.image_url);
-      haptic("medium");
+      const isDalle3 = model.model_code === "dall-e-3";
+      const { request_id } = await api.generate(
+        model.model_code,
+        prompt.trim(),
+        isDalle3 ? { aspect, resolution } : undefined,
+      );
+
+      for (let i = 0; i < POLL_ATTEMPTS; i++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        const status = await api.generationStatus(request_id);
+        if (status.status === "success") {
+          setResultUrl(status.result_url);
+          haptic("medium");
+          return;
+        }
+        if (status.status === "error") {
+          setError(status.error_message ?? "Не удалось сгенерировать изображение");
+          return;
+        }
+      }
+      setError("Генерация занимает дольше обычного, попробуйте позже");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось сгенерировать изображение");
     } finally {
