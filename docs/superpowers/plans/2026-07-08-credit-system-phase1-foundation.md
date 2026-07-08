@@ -18,7 +18,15 @@
 - **`users.credits_balance` may ONLY be mutated inside `app/services/credit_service.py`**, always after locking the row with `SELECT ... FOR UPDATE`. `credit_transactions` is an append-only audit log with `balance_before`/`balance_after` snapshots.
 - **No new pip dependencies.** Everything needed is already in `requirements.txt` (sqlalchemy, asyncpg, alembic, aiosqlite, pytest, pytest-asyncio).
 - **Follow existing code style:** SQLAlchemy 2.0 typed models like `app/db/models/user.py`, per-test-file `session` fixture on `sqlite+aiosqlite://` like `tests/services/test_access_service.py`, Russian comments are the codebase convention and are fine.
-- **Known accepted breakage (per approved phasing):** after Phase 1, legacy request-path modules (`app/services/generation_service.py`, `app/services/access_service.py`, `app/services/cost_service.py`, `app/api/routes/*`, `app/worker.py`, `app/main.py`, payment activation flow) have broken imports because the models/enums they use are deleted. They are rewritten in phases 2–4 and MUST NOT be modified in this plan. Only requirement: `pytest` collects and passes (obsolete tests that import those modules are deleted in Task 1).
+- **Known accepted breakage (per approved phasing):** after Phase 1, legacy request-path modules have broken imports because the models/enums they use are deleted. They are rewritten in phases 2–4 and MUST NOT be modified in this plan. Only requirement: `pytest` collects and passes (obsolete tests that import those modules are deleted in Task 1). **Full inventory, confirmed by the Phase 1 final whole-branch review** (the list below is the complete set found by scanning the final tree, wider than originally estimated — phase 2 planning should treat this as the checklist of modules to un-break, not just the originally-named subset):
+  - `app/services/generation_service.py`, `app/services/access_service.py`, `app/services/cost_service.py`
+  - `app/api/routes/*`, `app/worker.py`, `app/main.py`
+  - `app/services/ai/ai_router.py`, `app/services/ai/base.py`, `app/services/ai/deepseek_service.py`, `app/services/ai/claude_service.py`, `app/services/ai/image_service.py`, `app/services/ai/openai_service.py`, `app/services/ai/gemini_service.py` (all import `ModelConfig`)
+  - `app/services/stats_service.py` (`Subscription`, `SubscriptionStatus`)
+  - `app/services/admin_service.py` (`Subscription`, `Tariff`, `SubscriptionStatus`)
+  - `app/services/keys/key_healthcheck.py` (`ModelConfig`)
+  - `app/webhooks/yookassa.py`, `app/services/payments/gateway.py`, `app/services/payments/activation.py`, `app/services/payments/stars_service.py`, `app/services/payments/yookassa_service.py` (`Tariff`, `Subscription`, `UsageLimit`)
+  - The app cannot boot end-to-end until phases 2–4 rewire these; this is expected — Phase 1 only had to keep `pytest` green.
 - **Out of scope (do not build):** OpenRouterClient, FalClient, bot commands (`/balance`, `/buy`, `/models`), admin commands, PaymentProvider, anti-fraud (rate limits, idempotency keys, daily spend limit), `/admin_stats`.
 - Commit after every task; conventional-commit style messages (`feat:`, `test:`, `chore:`).
 
