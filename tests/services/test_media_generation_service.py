@@ -25,6 +25,7 @@ from app.services.media_generation_service import (
     ModelNotFoundError,
     RequestInProgressError,
     get_generation,
+    handle_fal_webhook,
     start_media_generation,
 )
 
@@ -341,3 +342,118 @@ async def test_get_generation_hides_foreign_and_missing_requests(session, fal):
 
     assert await get_generation(session, other, request.id) is None
     assert await get_generation(session, user, request.id + 100) is None
+
+
+# --- handle_fal_webhook ---
+
+def _ok_payload(request_id="fal-req-1", url="https://cdn.fal.media/out.png") -> dict:
+    return {"request_id": request_id, "status": "OK", "payload": {"images": [{"url": url}]}}
+
+
+async def test_webhook_ok_settles_and_stores_result_url(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+    request = await start_media_generation(session, user, "img", "a bear")
+    assert fake_redis.deleted == []  # лок держится весь round-trip
+
+    await handle_fal_webhook(session, _ok_payload())
+
+    await session.refresh(request)
+    assert request.status == RequestStatus.completed
+    # результат -- в durable-колонке ai_requests.result_url, не в Redis
+    assert request.result_url == "https://cdn.fal.media/out.png"
+    assert request.charged_credits == 100
+    assert request.completed_at is not None
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 900
+    # actual == reserved -> settle без корректирующей транзакции (штатный путь)
+    assert await _tx_types(session) == [CreditTxType.reserve]
+    assert fake_redis.deleted == [f"ai_lock:{user.id}"]
+
+
+async def test_webhook_ok_extracts_video_url(session, fal):
+    user = await _seed(session, _video_model(), balance=2000)
+    request = await start_media_generation(session, user, "vid", "a bear runs")
+
+    await handle_fal_webhook(session, {
+        "request_id": "fal-req-1", "status": "OK",
+        "payload": {"video": {"url": "https://cdn.fal.media/out.mp4"}},
+    })
+
+    await session.refresh(request)
+    assert request.status == RequestStatus.completed
+    assert request.result_url == "https://cdn.fal.media/out.mp4"
+
+
+async def test_webhook_error_refunds_and_releases_lock(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+    request = await start_media_generation(session, user, "img", "a bear")
+
+    await handle_fal_webhook(
+        session, {"request_id": "fal-req-1", "status": "ERROR", "error": "nsfw content"}
+    )
+
+    await session.refresh(request)
+    assert request.status == RequestStatus.refunded
+    assert request.charged_credits == 0
+    assert request.error_message == "nsfw content"
+    assert request.result_url is None
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 1000  # резерв возвращён полностью
+    assert await _tx_types(session) == [CreditTxType.reserve, CreditTxType.refund]
+    assert fake_redis.deleted == [f"ai_lock:{user.id}"]
+
+
+async def test_webhook_duplicate_delivery_is_idempotent(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+    request = await start_media_generation(session, user, "img", "a bear")
+
+    await handle_fal_webhook(session, _ok_payload())
+    await handle_fal_webhook(session, _ok_payload())  # повторная доставка
+
+    await session.refresh(request)
+    assert request.status == RequestStatus.completed
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 900               # не списано второй раз
+    assert await _tx_types(session) == [CreditTxType.reserve]
+    assert fake_redis.deleted == [f"ai_lock:{user.id}"]  # лок снят ровно один раз
+
+
+async def test_webhook_unknown_request_id_is_noop(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+    await start_media_generation(session, user, "img", "a bear")
+
+    await handle_fal_webhook(session, _ok_payload(request_id="someone-elses-id"))
+
+    [request] = await _request_rows(session)
+    assert request.status == RequestStatus.reserved  # ничего не изменилось
+    assert fake_redis.deleted == []                  # лок не тронут
+
+
+async def test_webhook_missing_request_id_is_noop(session, fal):
+    user = await _seed(session, _image_model())
+    await start_media_generation(session, user, "img", "a bear")
+
+    await handle_fal_webhook(session, {"status": "OK", "payload": {}})
+
+    [request] = await _request_rows(session)
+    assert request.status == RequestStatus.reserved
+
+
+async def test_webhook_ok_without_extractable_url_refunds(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+    request = await start_media_generation(session, user, "img", "a bear")
+
+    await handle_fal_webhook(
+        session,
+        {"request_id": "fal-req-1", "status": "OK", "payload": {"unexpected": True}},
+    )
+
+    await session.refresh(request)
+    # URL извлечь не удалось -> кредиты за недоставленный результат не списываем
+    assert request.status == RequestStatus.refunded
+    assert request.charged_credits == 0
+    assert request.result_url is None
+    assert request.error_message == "fal webhook: could not extract result url"
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 1000
+    assert fake_redis.deleted == [f"ai_lock:{user.id}"]
