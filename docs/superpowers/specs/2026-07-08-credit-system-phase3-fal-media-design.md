@@ -30,11 +30,23 @@
 
 ## Модель данных
 
-Изменений не требуется. `ai_models.cost_unit` (`image`/`megapixel`/`video`/
-`second`) и `ai_requests` (`category`, `estimated_credits`/`reserved_credits`/
-`charged_credits`, `provider_response_id`, `status`) из фазы 1 уже достаточны
-для image/video-запросов — они были спроектированы под все три категории
-сразу. `FalSettings` в `app/config.py` (`image_key`/`video_key`/`dev_key`) и
+**Одно исправление к фазе 1: нужна небольшая миграция.** `ai_models.cost_unit`
+и `ai_requests` (`category`, `estimated_credits`/`reserved_credits`/
+`charged_credits`, `provider_response_id`, `status`) из фазы 1 покрывают
+биллинг image/video, но фаза 1 намеренно не хранила сам результат (`answer`
+был убран из `AIRequest` — билинговая таблица, не хранилище текстов/ссылок).
+Для текста (фаза 2) это не проблема: ответ уходит клиенту сразу в HTTP-ответе
+`/api/chat`, ничего сохранять не нужно. Для image/video поток асинхронный —
+`POST /api/generate` возвращает `request_id` сразу, а сам результат приходит
+позже через webhook, и клиент забирает его через `GET /api/generate/{id}`.
+Между доставкой webhook и опросом клиента URL результата нужно где-то
+хранить — **в `ai_requests`, не в Redis**: добавляется nullable
+`result_url: Mapped[str | None] = mapped_column(String(1024))`. Опрошенный
+результат не должен пропадать из-за TTL/перезапуска Redis, если пользователь
+не успел его забрать вовремя — кредиты за генерацию уже списаны, доступ к
+результату должен быть постоянным.
+
+`FalSettings` в `app/config.py` (`image_key`/`video_key`/`dev_key`) и
 `_PURPOSE_ATTR[Provider.FAL]` в `api_key_manager.py` (`KeyPurpose.IMAGE`/
 `KeyPurpose.VIDEO`) уже существуют и не меняются.
 
