@@ -83,11 +83,6 @@ export type ImageAspect =
   | "21:9";
 export type ImageResolution = "1k" | "2k" | "4k";
 
-export interface ImageGenerateResponse {
-  image_url: string;
-  credit_cost: number;
-}
-
 export interface GenerationStatus {
   status: "processing" | "success" | "error";
   result_url: string | null;
