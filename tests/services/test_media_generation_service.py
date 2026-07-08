@@ -21,7 +21,7 @@ from app.db.enums import (
 from app.db.models import AIRequest, AiModel, CreditTransaction, User
 from app.services import media_generation_service as mgs
 from app.services.ai.base import AIError
-from app.services.credit_service import InsufficientBalanceError
+from app.services.credit_service import InsufficientBalanceError, settle_request
 from app.services.media_generation_service import (
     ConfirmationRequiredError,
     ModelNotFoundError,
@@ -584,6 +584,38 @@ async def test_refund_stale_reserved_requests_handles_multiple_users(session, fa
     assert fetched2.credits_balance == 500   # 500 - 50 + 50, без перекрёстного влияния
 
     assert set(fake_redis.deleted) == {f"ai_lock:{user1.id}", f"ai_lock:{user2.id}"}
+
+
+async def test_refund_stale_reserved_requests_skips_request_settled_concurrently(
+    session, fake_redis
+):
+    """Гонка: настоящий (не потерянный) вебхук settle-ит запрос ПОСЛЕ того, как
+    sweep уже прочитал его как reserved через SELECT, но ДО того, как sweep
+    дошёл до refund. Атомарный claim в refund_stale_reserved_requests должен
+    получить rowcount=0 и пропустить строку, не откатывая settle обратно."""
+    model = _image_model()
+    user = await _seed(session, model)
+    request = await _seed_reserved_request(session, user, model, age_minutes=30)
+
+    # "Вебхук выиграл гонку": settle-им запрос напрямую, как это сделал бы
+    # handle_fal_webhook в своей OK-ветке, ДО вызова sweep.
+    await settle_request(session, request, request.estimated_credits)
+    await session.commit()
+    await session.refresh(request)
+    assert request.status == RequestStatus.completed
+    assert request.charged_credits == 100
+
+    count = await refund_stale_reserved_requests(session, older_than_minutes=20)
+
+    assert count == 0  # ничего не возвращено -- claim не сработал, запрос уже settled
+    await session.refresh(request)
+    assert request.status == RequestStatus.completed  # не откатился на refunded
+    assert request.charged_credits == 100  # реальная settled-сумма не тронута
+    fetched = await session.get(User, user.id)
+    # Баланс отражает реальный settle (900, резерв уже списан settle'ом), без
+    # спурного возврата поверх него.
+    assert fetched.credits_balance == 900
+    assert fake_redis.deleted == []  # sweep не трогал лок несобственной строки
 
 
 # --- Конкурентная доставка вебхука: интеграционный тест с реальным Postgres ---

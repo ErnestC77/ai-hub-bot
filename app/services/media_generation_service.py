@@ -280,6 +280,14 @@ async def refund_stale_reserved_requests(
     при падении на середине списка просто ничего не коммитится и следующий
     прогон повторит попытку для всех тех же строк (idempotent: refund_request
     требует status=reserved, что гарантируется select ниже перед изменениями).
+
+    Гонка с "опоздавшим" вебхуком: между этим SELECT и обработкой строки
+    настоящий (не потерянный) вебхук может успеть прийти в отдельной
+    транзакции и settle-ить запрос. Поэтому, как и в handle_fal_webhook,
+    перед refund_request берём атомарный claim -- UPDATE ... WHERE
+    status=reserved. Если rowcount=0, значит вебхук успел раньше и уже
+    закоммитил settle/refund; строку пропускаем, не трогая её in-memory
+    (устаревший) объект.
     """
     threshold = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
     stale_requests = (
@@ -292,11 +300,32 @@ async def refund_stale_reserved_requests(
         )
     ).scalars().all()
 
+    refunded_count = 0
     for request in stale_requests:
+        claimed = await session.execute(
+            update(AIRequest)
+            .where(
+                AIRequest.id == request.id,
+                AIRequest.status == RequestStatus.reserved,
+                AIRequest.created_at < threshold,
+            )
+            .values(error_message="reconciliation: fal webhook never arrived")
+            # synchronize_session=False: не нужно синхронизировать identity map
+            # по этому UPDATE (мы не читаем error_message из `request` дальше,
+            # только status, который эта строка не меняет) -- "evaluate"
+            # пытался бы сравнить created_at в памяти с threshold и падал на
+            # naive/aware datetime в тестовом sqlite; "fetch" был бы лишним
+            # round-trip'ом на каждую строку в batch-джобе.
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount == 0:
+            continue  # уже обработан (вебхук успел раньше) -- не наш запрос больше
+
         await refund_request(
             session, request, reason="reconciliation: fal webhook never arrived"
         )
         await redis_client.delete(f"ai_lock:{request.user_id}")
+        refunded_count += 1
 
     await session.commit()
-    return len(stale_requests)
+    return refunded_count
