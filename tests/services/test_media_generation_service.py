@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("BOT_TOKEN", "test-token")
 os.environ.setdefault("DATABASE_URL", "postgresql://test")
@@ -27,6 +28,7 @@ from app.services.media_generation_service import (
     RequestInProgressError,
     get_generation,
     handle_fal_webhook,
+    refund_stale_reserved_requests,
     start_media_generation,
 )
 
@@ -458,6 +460,130 @@ async def test_webhook_ok_without_extractable_url_refunds(session, fake_redis, f
     fetched = await session.get(User, user.id)
     assert fetched.credits_balance == 1000
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]
+
+
+# --- reconciliation: возврат кредитов за "зависшие" reserved-запросы ---
+
+
+async def _seed_reserved_request(
+    session, user, model, *, reserved_credits=100, age_minutes=30, status=RequestStatus.reserved
+) -> AIRequest:
+    """Имитирует состояние ПОСЛЕ start_media_generation: AIRequest в статусе
+    reserved (или другом, для теста игнорирования) и баланс уже списан на
+    reserved_credits -- как в test_concurrent_webhook_delivery_settles_exactly_once,
+    где резерв воссоздаётся напрямую, без вызова start_media_generation."""
+    created_at = datetime.now(timezone.utc) - timedelta(minutes=age_minutes)
+    request = AIRequest(
+        user_id=user.id,
+        provider="fal",
+        model_code=model.code,
+        category=model.category,
+        status=status,
+        prompt_preview="stale",
+        estimated_credits=reserved_credits,
+        reserved_credits=reserved_credits,
+        charged_credits=reserved_credits if status == RequestStatus.completed else 0,
+        provider_response_id=f"fal-stale-{user.id}",
+        created_at=created_at,
+    )
+    session.add(request)
+
+    balance_before = user.credits_balance
+    user.credits_balance = balance_before - reserved_credits
+    tx = CreditTransaction(
+        user_id=user.id,
+        type=CreditTxType.reserve,
+        amount=-reserved_credits,
+        balance_before=balance_before,
+        balance_after=user.credits_balance,
+        provider="fal",
+        model_code=model.code,
+        request_id=None,
+    )
+    session.add(tx)
+    await session.flush()
+    tx.request_id = request.id
+    await session.commit()
+    await session.refresh(request)
+    return request
+
+
+async def test_refund_stale_reserved_requests_refunds_old_reserves(session, fake_redis):
+    model = _image_model()
+    user = await _seed(session, model)
+    request = await _seed_reserved_request(session, user, model, age_minutes=30)
+
+    count = await refund_stale_reserved_requests(session, older_than_minutes=20)
+
+    assert count == 1
+    await session.refresh(request)
+    assert request.status == RequestStatus.refunded
+    assert request.charged_credits == 0
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 1000  # резерв (100) возвращён полностью
+    assert fake_redis.deleted == [f"ai_lock:{user.id}"]
+
+
+async def test_refund_stale_reserved_requests_ignores_recent_reserves(session, fake_redis):
+    model = _image_model()
+    user = await _seed(session, model)
+    request = await _seed_reserved_request(session, user, model, age_minutes=1)
+
+    count = await refund_stale_reserved_requests(session, older_than_minutes=20)
+
+    assert count == 0
+    await session.refresh(request)
+    assert request.status == RequestStatus.reserved
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 900  # резерв всё ещё удержан
+    assert fake_redis.deleted == []
+
+
+async def test_refund_stale_reserved_requests_ignores_non_reserved_status(session, fake_redis):
+    model = _image_model()
+    user = await _seed(session, model)
+    request = await _seed_reserved_request(
+        session, user, model, age_minutes=30, status=RequestStatus.completed
+    )
+
+    count = await refund_stale_reserved_requests(session, older_than_minutes=20)
+
+    assert count == 0
+    await session.refresh(request)
+    assert request.status == RequestStatus.completed  # без изменений, без двойного возврата
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 900
+    assert fake_redis.deleted == []
+
+
+async def test_refund_stale_reserved_requests_handles_multiple_users(session, fake_redis):
+    model = _image_model()
+    user1 = await _seed(session, model)
+    user2 = User(telegram_id=2, username="u2", credits_balance=500)
+    session.add(user2)
+    await session.commit()
+
+    request1 = await _seed_reserved_request(
+        session, user1, model, reserved_credits=100, age_minutes=30
+    )
+    request2 = await _seed_reserved_request(
+        session, user2, model, reserved_credits=50, age_minutes=45
+    )
+
+    count = await refund_stale_reserved_requests(session, older_than_minutes=20)
+
+    assert count == 2
+    await session.refresh(request1)
+    await session.refresh(request2)
+    assert request1.status == RequestStatus.refunded
+    assert request2.status == RequestStatus.refunded
+
+    fetched1 = await session.get(User, user1.id)
+    fetched2 = await session.get(User, user2.id)
+    assert fetched1.credits_balance == 1000  # 1000 - 100 + 100
+    assert fetched2.credits_balance == 500   # 500 - 50 + 50, без перекрёстного влияния
+
+    assert set(fake_redis.deleted) == {f"ai_lock:{user1.id}", f"ai_lock:{user2.id}"}
 
 
 # --- Конкурентная доставка вебхука: интеграционный тест с реальным Postgres ---
