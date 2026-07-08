@@ -80,6 +80,7 @@ class LumaSettings(_ProviderSettings):
 
 
 class OpenRouterSettings(_ProviderSettings):
+    api_key: SecretStr | None = Field(default=None, alias="OPENROUTER_API_KEY")
     fallback_key: SecretStr | None = Field(default=None, alias="OPENROUTER_FALLBACK_KEY")
     dev_key: SecretStr | None = Field(default=None, alias="OPENROUTER_DEV_KEY")
 
