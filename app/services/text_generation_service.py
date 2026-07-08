@@ -156,18 +156,18 @@ async def generate_text(
 
         try:
             result = await _provider.generate(model, prompt, TIER_MAX[model.tier])
-        except AIError as exc:
+            request.input_tokens = result.input_tokens
+            request.output_tokens = result.output_tokens
+            actual = calculate_text_credits(
+                model, result.input_tokens, result.output_tokens, settings=pricing
+            )
+            await settle_request(session, request, actual)
+        except Exception as exc:
             request.error_message = str(exc)
             await refund_request(session, request, reason=f"provider error: {exc}")
             await session.commit()
             raise
 
-        request.input_tokens = result.input_tokens
-        request.output_tokens = result.output_tokens
-        actual = calculate_text_credits(
-            model, result.input_tokens, result.output_tokens, settings=pricing
-        )
-        await settle_request(session, request, actual)
         charged = request.charged_credits
         balance_after = user.credits_balance
         await session.commit()

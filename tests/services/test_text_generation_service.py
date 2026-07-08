@@ -1,4 +1,5 @@
 import os
+from unittest.mock import AsyncMock
 
 os.environ.setdefault("BOT_TOKEN", "test-token")
 os.environ.setdefault("DATABASE_URL", "postgresql://test")
@@ -166,6 +167,29 @@ async def test_provider_error_refunds_and_reraises(session, fake_redis, monkeypa
     assert fetched.credits_balance == 100  # резерв возвращён полностью
     assert await _tx_types(session) == [CreditTxType.reserve, CreditTxType.refund]
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]  # лок снят и при ошибке
+
+
+async def test_settle_failure_after_successful_call_refunds_and_reraises(session, fake_redis, monkeypatch):
+    # Провайдер отвечает успешно, но settle_request после него падает произвольным
+    # исключением (не AIError) -- это тоже должно приводить к refund, а не
+    # к "зависшему" reserved-запросу с потерянным балансом.
+    user = await _seed(session, _model())
+    provider = FakeProvider(result=AIResult(answer="ответ", input_tokens=500, output_tokens=200))
+    monkeypatch.setattr(tgs, "_provider", provider)
+    monkeypatch.setattr(tgs, "settle_request", AsyncMock(side_effect=RuntimeError("boom")))
+
+    with pytest.raises(RuntimeError):
+        await generate_text(session, user, "cheap", "привет")
+
+    [request] = await _request_rows(session)
+    assert request.status == RequestStatus.refunded
+    assert request.charged_credits == 0
+    assert request.error_message == "boom"
+
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 100  # резерв возвращён полностью
+    assert await _tx_types(session) == [CreditTxType.reserve, CreditTxType.refund]
+    assert fake_redis.deleted == [f"ai_lock:{user.id}"]  # лок снят и при ошибке после провайдера
 
 
 # --- подтверждение дорогого запроса ---
