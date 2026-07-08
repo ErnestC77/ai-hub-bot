@@ -1,12 +1,6 @@
 import enum
 
 
-class SubscriptionStatus(str, enum.Enum):
-    active = "active"
-    expired = "expired"
-    canceled = "canceled"
-
-
 class PaymentProvider(str, enum.Enum):
     telegram_stars = "telegram_stars"
     yookassa = "yookassa"
@@ -23,31 +17,46 @@ class PaymentStatus(str, enum.Enum):
     failed = "failed"
 
 
+class ModelProvider(str, enum.Enum):
+    openrouter = "openrouter"
+    fal = "fal"
+
+
 class ModelCategory(str, enum.Enum):
-    fast = "fast"
-    medium = "medium"
-    premium = "premium"
+    text = "text"
     image = "image"
     video = "video"
 
 
-class ModelProvider(str, enum.Enum):
-    openai = "openai"
-    anthropic = "anthropic"
-    google = "google"
-    deepseek = "deepseek"
-    piapi = "piapi"
+class ModelTier(str, enum.Enum):
+    economy = "economy"
+    standard = "standard"
+    premium = "premium"
+    pro = "pro"
+    ultra = "ultra"
+
+
+class CostUnit(str, enum.Enum):
+    tokens = "tokens"
+    image = "image"
+    megapixel = "megapixel"
+    second = "second"
+    video = "video"
 
 
 class RequestStatus(str, enum.Enum):
+    pending = "pending"
+    reserved = "reserved"
     processing = "processing"
-    success = "success"
-    error = "error"
+    completed = "completed"
+    failed = "failed"
+    refunded = "refunded"
 
 
 class CreditTxType(str, enum.Enum):
-    deposit = "deposit"
+    purchase = "purchase"
     spend = "spend"
     refund = "refund"
-    bonus = "bonus"
-    manual_adjustment = "manual_adjustment"
+    reserve = "reserve"
+    release = "release"
+    admin_adjustment = "admin_adjustment"
