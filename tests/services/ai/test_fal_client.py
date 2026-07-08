@@ -101,3 +101,23 @@ def test_extract_result_url_none_when_unknown_shape():
     assert extract_result_url({"images": []}) is None
     assert extract_result_url({"video": {}}) is None
     assert extract_result_url({"unexpected": {"url": "https://x/a.png"}}) is None
+
+
+def test_extract_result_url_survives_non_list_images():
+    assert extract_result_url({"images": 42}) is None
+    assert extract_result_url({"images": True}) is None
+    assert extract_result_url({"images": {"nested": "oops"}}) is None
+
+
+def test_extract_result_url_survives_non_dict_items_in_images_list():
+    assert extract_result_url({"images": ["not-a-dict"]}) is None
+    assert extract_result_url({"images": [None]}) is None
+
+
+def test_extract_result_url_survives_none_payload():
+    assert extract_result_url(None) is None
+
+
+def test_extract_result_url_survives_non_dict_payload():
+    assert extract_result_url("not-a-dict") is None
+    assert extract_result_url([1, 2, 3]) is None

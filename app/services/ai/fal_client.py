@@ -8,7 +8,7 @@ from app.db.models import AiModel
 BASE_URL = "https://queue.fal.run"
 
 
-def extract_result_url(payload: dict) -> str | None:
+def extract_result_url(payload: dict | None) -> str | None:
     """Разные fal-модели кладут URL результата по-разному. Перебираем известные
     формы по порядку; None, если ничего не подошло (по образцу удалённого
     piapi_client.extract_result_url).
@@ -17,11 +17,19 @@ def extract_result_url(payload: dict) -> str | None:
     - image-модели: {"images": [{"url": ...}, ...]}
     - video-модели: {"video": {"url": ...}}
 
+    Вызывается напрямую на непроверенном теле вебхука без обёртки try/except,
+    поэтому обязана не бросать исключения ни при каких «мусорных» входных
+    данных (None, не-dict, не-list и т.п.) — каждый шаг разбора проверяется
+    isinstance перед использованием.
+
     PLACEHOLDER: перед продакшн-запуском уточнить формы ответа всех 8 моделей
     каталога (fal-ai/*) и дополнить перебор.
     """
-    images = payload.get("images") or []
-    if images and isinstance(images[0], dict) and images[0].get("url"):
+    if not isinstance(payload, dict):
+        return None
+
+    images = payload.get("images")
+    if isinstance(images, list) and images and isinstance(images[0], dict) and images[0].get("url"):
         return images[0]["url"]
 
     video = payload.get("video") or {}
