@@ -1,10 +1,11 @@
+import asyncio
 import os
 
 os.environ.setdefault("BOT_TOKEN", "test-token")
 os.environ.setdefault("DATABASE_URL", "postgresql://test")
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.base import Base
@@ -457,3 +458,99 @@ async def test_webhook_ok_without_extractable_url_refunds(session, fake_redis, f
     fetched = await session.get(User, user.id)
     assert fetched.credits_balance == 1000
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]
+
+
+# --- Конкурентная доставка вебхука: интеграционный тест с реальным Postgres ---
+# Как test_concurrent_reserve_cannot_overdraw_balance в test_credit_service.py:
+# SQLite не берёт настоящих row-level локов на UPDATE, поэтому доказать, что
+# claim-UPDATE (WHERE status='reserved') в handle_fal_webhook действительно
+# защищает от двойного settle при ИСТИННО параллельных транзакциях (не просто
+# последовательной повторной доставке, как в
+# test_webhook_duplicate_delivery_is_idempotent выше), можно только на
+# настоящем Postgres. Задайте TEST_DATABASE_URL на ОДНОРАЗОВУЮ базу, например:
+#   postgresql+asyncpg://postgres:postgres@localhost:5432/ai_hub_test
+# Тест делает drop_all/create_all -- не указывайте рабочую базу.
+
+POSTGRES_TEST_URL = os.environ.get("TEST_DATABASE_URL")
+
+
+@pytest.mark.skipif(
+    not POSTGRES_TEST_URL,
+    reason="TEST_DATABASE_URL not set; row-lock test requires a real Postgres",
+)
+async def test_concurrent_webhook_delivery_settles_exactly_once():
+    engine = create_async_engine(POSTGRES_TEST_URL)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with maker() as s:
+            user = User(telegram_id=998, username="racer2", credits_balance=100)
+            s.add(user)
+            model = _image_model(code="race-img")
+            s.add(model)
+            await s.flush()
+            # reserved=50 отражает состояние после reserve_credits (баланс уже
+            # списан на этапе start_media_generation); estimated=30 нарочно
+            # отличается от reserved, чтобы settle_request создал
+            # корректирующую transaction (release) с ненулевой суммой -- это
+            # даёт однозначно считаемый сигнал: если бы вебхук settle'ил
+            # дважды, release создался бы дважды и баланс "уполз" бы выше 70.
+            request = AIRequest(
+                user_id=user.id,
+                provider="fal",
+                model_code=model.code,
+                category=ModelCategory.image,
+                status=RequestStatus.reserved,
+                prompt_preview="race",
+                estimated_credits=30,
+                reserved_credits=50,
+                provider_response_id="fal-req-race",
+            )
+            s.add(request)
+            user.credits_balance = 50  # состояние после reserve (100 - 50)
+            await s.commit()
+            user_id = user.id
+            request_id = request.id
+
+        payload = {
+            "request_id": "fal-req-race",
+            "status": "OK",
+            "payload": {"images": [{"url": "https://cdn.fal.media/race.png"}]},
+        }
+
+        async def deliver():
+            # Отдельная сессия = отдельное соединение = отдельная транзакция,
+            # как try_reserve() в test_concurrent_reserve_cannot_overdraw_balance.
+            async with maker() as s:
+                await handle_fal_webhook(s, payload)
+
+        await asyncio.gather(deliver(), deliver())
+
+        async with maker() as s:
+            fetched_request = await s.get(AIRequest, request_id)
+            assert fetched_request.status == RequestStatus.completed
+            assert fetched_request.charged_credits == 30
+
+            fetched_user = await s.get(User, user_id)
+            # 50 (после reserve) + 20 (release 50-30) = 70 ровно один раз --
+            # НЕ 90, что было бы при двойном settle одной и той же доставки.
+            assert fetched_user.credits_balance == 70
+
+            release_count = (
+                await s.execute(
+                    select(func.count())
+                    .select_from(CreditTransaction)
+                    .where(
+                        CreditTransaction.request_id == request_id,
+                        CreditTransaction.type == CreditTxType.release,
+                    )
+                )
+            ).scalar_one()
+            assert release_count == 1, "settle must apply exactly once under concurrent delivery"
+    finally:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
