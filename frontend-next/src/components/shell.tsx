@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { initTelegram, tg } from "@/lib/telegram";
+import { haptic, initTelegram, tg } from "@/lib/telegram";
 import { cn } from "@/lib/cn";
 
 const TABS = [
@@ -11,14 +11,33 @@ const TABS = [
   { path: "/account", text: "My Account", icon: "👤" },
 ];
 
-const FULLSCREEN_ROUTES = ["/chat", "/generate-image"];
+const FULLSCREEN_ROUTES = ["/chat", "/generate-image", "/generate-video"];
 
 function Fab() {
   const router = useRouter();
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+
+  function startPress() {
+    longPressed.current = false;
+    pressTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      haptic("medium");
+      router.push("/generate-video");
+    }, 500);
+  }
+
+  function endPress() {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    if (!longPressed.current) router.push("/chat");
+  }
+
   return (
     <button
-      onClick={() => router.push("/chat")}
-      aria-label="Открыть чат с нейросетью"
+      onPointerDown={startPress}
+      onPointerUp={endPress}
+      onPointerLeave={() => pressTimer.current && clearTimeout(pressTimer.current)}
+      aria-label="Открыть чат с нейросетью (удержите для генерации видео)"
       className="press-scale fixed bottom-20 right-4 z-[2] flex h-[58px] w-[58px] items-center justify-center rounded-full bg-[image:var(--brand-gradient)] text-2xl shadow-glow"
     >
       ✨

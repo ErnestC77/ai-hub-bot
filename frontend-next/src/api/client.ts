@@ -29,7 +29,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export type ModelCategory = "fast" | "medium" | "premium" | "image";
+export type ModelCategory = "fast" | "medium" | "premium" | "image" | "video";
 
 export interface CategoryLimitOut {
   used: number;
