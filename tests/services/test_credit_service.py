@@ -266,3 +266,58 @@ async def test_grant_rejects_non_positive_amount(session):
     user = await _make_user(session, balance=0)
     with pytest.raises(ValueError):
         await grant_credits(session, user.id, -5, reason="nope")
+
+
+# --- Конкурентный reserve: интеграционный тест с реальным Postgres ---
+# SQLite игнорирует FOR UPDATE, поэтому блокировку строки можно проверить только
+# на настоящей БД. Задайте TEST_DATABASE_URL на ОДНОРАЗОВУЮ базу, например:
+#   postgresql+asyncpg://postgres:postgres@localhost:5432/ai_hub_test
+# Тест делает drop_all/create_all -- не указывайте рабочую базу.
+
+POSTGRES_TEST_URL = os.environ.get("TEST_DATABASE_URL")
+
+
+@pytest.mark.skipif(
+    not POSTGRES_TEST_URL,
+    reason="TEST_DATABASE_URL not set; row-lock test requires a real Postgres",
+)
+async def test_concurrent_reserve_cannot_overdraw_balance():
+    engine = create_async_engine(POSTGRES_TEST_URL)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with maker() as s:
+            user = User(telegram_id=999, username="racer", credits_balance=100)
+            s.add(user)
+            await s.commit()
+            user_id = user.id
+
+        async def try_reserve() -> CreditTransaction:
+            # Отдельная сессия = отдельное соединение = отдельная транзакция.
+            async with maker() as s:
+                async with s.begin():
+                    return await reserve_credits(
+                        s, user_id, 60, request_id=None, provider="openrouter", model_code="deepseek_v3"
+                    )
+
+        results = await asyncio.gather(try_reserve(), try_reserve(), return_exceptions=True)
+
+        errors = [r for r in results if isinstance(r, InsufficientBalanceError)]
+        successes = [r for r in results if isinstance(r, CreditTransaction)]
+        assert len(successes) == 1, f"exactly one reserve must win, got results: {results!r}"
+        assert len(errors) == 1, f"the loser must get InsufficientBalanceError, got: {results!r}"
+
+        async with maker() as s:
+            fetched = await s.get(User, user_id)
+            assert fetched.credits_balance == 40  # 100 - 60, второй reserve не прошёл
+            tx_total = (
+                await s.execute(select(func.count()).select_from(CreditTransaction))
+            ).scalar_one()
+            assert tx_total == 1
+    finally:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
