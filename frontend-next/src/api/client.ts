@@ -88,6 +88,13 @@ export interface ImageGenerateResponse {
   credit_cost: number;
 }
 
+export interface GenerationStatus {
+  status: "processing" | "success" | "error";
+  result_url: string | null;
+  error_message: string | null;
+  credit_cost: number;
+}
+
 export interface ToolOut {
   slug: string;
   title: string;
@@ -155,11 +162,17 @@ export const api = {
       body: JSON.stringify({ model_code: modelCode, prompt }),
     }),
   tools: () => request<ToolOut[]>("/api/tools"),
-  generateImage: (modelCode: string, prompt: string, aspect: ImageAspect, resolution: ImageResolution) =>
-    request<ImageGenerateResponse>("/api/chat/image", {
+  generate: (modelCode: string, prompt: string, extra?: Record<string, unknown>, creditCostOverride?: number) =>
+    request<{ request_id: number }>("/api/generate", {
       method: "POST",
-      body: JSON.stringify({ model_code: modelCode, prompt, aspect, resolution }),
+      body: JSON.stringify({
+        model_code: modelCode,
+        prompt,
+        extra: extra ?? null,
+        credit_cost_override: creditCostOverride ?? null,
+      }),
     }),
+  generationStatus: (requestId: number) => request<GenerationStatus>(`/api/generate/${requestId}`),
   banners: () => request<BannerOut[]>("/api/banners"),
   referral: () => request<ReferralOut>("/api/referral/me"),
   tariffs: () => request<TariffOut[]>("/api/tariffs"),
