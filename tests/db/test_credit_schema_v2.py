@@ -137,3 +137,31 @@ async def test_legacy_models_are_gone():
 
     for legacy in ("ModelConfig", "Tariff", "Subscription", "UsageLimit"):
         assert not hasattr(models, legacy)
+
+
+async def test_ai_request_result_url_round_trip(session):
+    user = User(telegram_id=3)
+    session.add(user)
+    await session.flush()
+
+    request = AIRequest(
+        user_id=user.id,
+        provider="fal",
+        model_code="flux_dev",
+        category=ModelCategory.image,
+        status=RequestStatus.reserved,
+        prompt_preview="a bear",
+        estimated_credits=100,
+        reserved_credits=100,
+    )
+    session.add(request)
+    await session.commit()
+
+    fetched = await session.get(AIRequest, request.id)
+    assert fetched.result_url is None  # nullable, пусто до вебхука
+
+    fetched.result_url = "https://cdn.fal.media/out.png"
+    await session.commit()
+
+    again = await session.get(AIRequest, request.id)
+    assert again.result_url == "https://cdn.fal.media/out.png"
