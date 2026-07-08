@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from app.db.models import ModelConfig
+from app.db.models import AiModel
 
 
 @dataclass
@@ -18,5 +18,5 @@ class AIError(Exception):
 class AIProvider(ABC):
     @abstractmethod
     async def generate(
-        self, model: ModelConfig, prompt: str, max_output_tokens: int, extra: dict | None = None
+        self, model: AiModel, prompt: str, max_output_tokens: int, extra: dict | None = None
     ) -> AIResult: ...

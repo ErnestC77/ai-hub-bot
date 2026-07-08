@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
-from app.api.routes import admin, banners, chat, generate, me, payments, referral, tariffs, tools
+from app.api.routes import admin, banners, chat, generate, me, payments, referral, tools
 from app.bot.instance import bot
 from app.bot.setup import create_dispatcher
 from app.config import settings
@@ -69,7 +69,6 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(tools.router, prefix="/api")
 app.include_router(banners.router, prefix="/api")
 app.include_router(referral.router, prefix="/api")
-app.include_router(tariffs.router, prefix="/api")
 app.include_router(payments.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(generate.router, prefix="/api")

@@ -60,6 +60,7 @@ _PURPOSE_ATTR: dict[Provider, dict[KeyPurpose, str]] = {
         KeyPurpose.VIDEO: "video_key",
     },
     Provider.OPENROUTER: {
+        KeyPurpose.TEXT: "api_key",
         KeyPurpose.FALLBACK: "fallback_key",
     },
     Provider.PIAPI: {

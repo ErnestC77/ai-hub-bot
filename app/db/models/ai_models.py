@@ -31,3 +31,7 @@ class AiModel(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Код резервной модели той же категории (без FK: существование fallback-модели
+    # валидируется в text_generation_service, не на уровне БД -- см. спеку фазы 2).
+    fallback_model_code: Mapped[str | None] = mapped_column(String(64))
