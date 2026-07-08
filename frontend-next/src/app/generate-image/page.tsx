@@ -55,7 +55,8 @@ export default function GenerateImage() {
       .catch(() => setModels([]));
   }, []);
 
-  const cost = model ? computeImageCreditCost(model.credit_cost, aspect, resolution) : 0;
+  const isDalle3 = model?.model_code === "dall-e-3";
+  const cost = model ? (isDalle3 ? computeImageCreditCost(model.credit_cost, aspect, resolution) : model.credit_cost) : 0;
 
   const POLL_INTERVAL_MS = 2000;
   const POLL_ATTEMPTS = 60;
@@ -66,7 +67,6 @@ export default function GenerateImage() {
     setError("");
     setResultUrl(null);
     try {
-      const isDalle3 = model.model_code === "dall-e-3";
       const { request_id } = await api.generate(
         model.model_code,
         prompt.trim(),
@@ -155,17 +155,21 @@ export default function GenerateImage() {
           </div>
         )}
 
-        <div className="flex gap-2.5">
-          {RESOLUTIONS.map((r) => (
-            <button key={r} className={chipClass(resolution === r)} onClick={() => setResolution(r)}>
-              {RESOLUTION_LABELS[r]}
-            </button>
-          ))}
-        </div>
+        {isDalle3 && (
+          <div className="flex gap-2.5">
+            {RESOLUTIONS.map((r) => (
+              <button key={r} className={chipClass(resolution === r)} onClick={() => setResolution(r)}>
+                {RESOLUTION_LABELS[r]}
+              </button>
+            ))}
+          </div>
+        )}
 
-        <button className={cn(chipClass(false), "w-full")} onClick={() => setAspectSheetOpen(true)}>
-          ▦ {aspect === "auto" ? "Auto" : aspect}
-        </button>
+        {isDalle3 && (
+          <button className={cn(chipClass(false), "w-full")} onClick={() => setAspectSheetOpen(true)}>
+            ▦ {aspect === "auto" ? "Auto" : aspect}
+          </button>
+        )}
 
         {generating && (
           <div className="flex justify-center p-6">

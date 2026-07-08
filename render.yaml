@@ -70,6 +70,15 @@ services:
         sync: false
       - key: ADMIN_IDS
         sync: false
+      - key: PIAPI_API_KEY
+        sync: false
+      - key: PIAPI_WEBHOOK_SECRET
+        generateValue: true
+      - key: BACKEND_PUBLIC_URL
+        fromService:
+          type: web
+          name: ai-hub-bot
+          property: hostport
 
   - type: web
     name: ai-hub-frontend

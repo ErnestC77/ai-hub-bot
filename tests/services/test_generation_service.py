@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.base import Base
 from app.db.enums import ModelCategory, ModelProvider, RequestStatus
-from app.db.models import AIRequest, ModelConfig, Tariff, User
+from app.db.models import AIRequest, ModelConfig, Tariff, UsageLimit, User
+from app.services.access_service import RequestInProgressError
 from app.services.generation_service import get_generation, handle_piapi_webhook, start_generation
 
 
@@ -20,6 +21,31 @@ async def session():
     async with maker() as s:
         yield s
     await engine.dispose()
+
+
+class FakeRedis:
+    """Minimal in-memory stand-in for redis.asyncio.Redis, supporting only the
+    SET NX EX / DELETE calls generation_service.py makes for the per-user in-flight
+    lock. No real Redis server is available in the test environment."""
+
+    def __init__(self):
+        self._store: dict[str, str] = {}
+
+    async def set(self, key: str, value: str, nx: bool = False, ex: int | None = None):
+        if nx and key in self._store:
+            return None  # lock already held -- not acquired
+        self._store[key] = value
+        return True
+
+    async def delete(self, key: str) -> int:
+        return 1 if self._store.pop(key, None) is not None else 0
+
+
+@pytest.fixture(autouse=True)
+def fake_redis(monkeypatch):
+    fake = FakeRedis()
+    monkeypatch.setattr("app.services.generation_service.redis_client", fake)
+    return fake
 
 
 async def _setup(session, credit_cost=51):
@@ -270,3 +296,163 @@ async def test_dalle3_aspect_resolution_credit_multiplier(mock_image_provider_cl
     # landscape + 4k = multiplier 4 (see app/services/generation_service.py table)
     assert compute_dalle3_credit_cost(15, aspect="16:9", resolution="4k") == 60
     assert compute_dalle3_credit_cost(15, aspect="1:1", resolution="1k") == 15
+
+
+async def _setup_image_model_with_quota(session, image_limit=5, credit_cost=20):
+    # code="free" is required: the user has no active Subscription, so check_access
+    # resolves their tariff via resolve_tariff_and_period -> get_free_tariff, which
+    # looks up Tariff.code == "free" specifically.
+    tariff = Tariff(
+        code="free", name="Free", price_rub=0, price_stars=0, period_days=36500,
+        fast_limit=5, medium_limit=5, premium_limit=5, image_limit=image_limit, daily_limit=50,
+        max_input_tokens=2000, max_output_tokens=1000,
+    )
+    session.add(tariff)
+    user = User(telegram_id=42, username="quota_user")
+    session.add(user)
+    await session.flush()
+    from app.db.models import CreditTransaction
+    from app.db.enums import CreditTxType
+    session.add(CreditTransaction(user_id=user.id, type=CreditTxType.deposit, amount=1000, reason="test"))
+    model = ModelConfig(
+        model_code="piapi-image-model", provider=ModelProvider.piapi, display_name="PiAPI Image",
+        category=ModelCategory.image, credit_cost=credit_cost, key_purpose="image",
+        piapi_model="some-image-model", piapi_task_type="image-task", piapi_extra_input={},
+    )
+    session.add(model)
+    await session.commit()
+    return user, model
+
+
+@patch("app.services.generation_service.PiAPIClient")
+async def test_start_generation_blocks_concurrent_request_for_same_user(mock_client_cls, session):
+    """A second start_generation call for the same user while the first request is
+    still processing must be rejected -- otherwise a user can fire N concurrent
+    generations that all pass check_access (which only reads balance, doesn't reserve)
+    and all get billed by the provider while only one ever gets charged back to us."""
+    mock_client = AsyncMock()
+    mock_client.create_task.return_value = "task-lock-1"
+    mock_client_cls.return_value = mock_client
+
+    user, model = await _setup(session)
+
+    first = await start_generation(
+        session, user, model.model_code, "first", extra=None, credit_cost_override=None,
+        background_tasks=BackgroundTasks(),
+    )
+    assert first.status == RequestStatus.processing
+
+    mock_client.create_task.return_value = "task-lock-2"
+    with pytest.raises(RequestInProgressError):
+        await start_generation(
+            session, user, model.model_code, "second", extra=None, credit_cost_override=None,
+            background_tasks=BackgroundTasks(),
+        )
+
+    # The rejected second attempt must not have created a request or called PiAPI again.
+    mock_client.create_task.assert_awaited_once()
+
+
+@patch("app.services.generation_service.PiAPIClient")
+async def test_lock_released_after_webhook_completes_allows_new_request(mock_client_cls, session, fake_redis):
+    """The in-flight lock is only released once the generation is truly finished --
+    for the PiAPI path that means inside handle_piapi_webhook, not at the end of
+    start_generation (which returns immediately while PiAPI works asynchronously)."""
+    mock_client = AsyncMock()
+    mock_client.create_task.return_value = "task-release"
+    mock_client_cls.return_value = mock_client
+
+    user, model = await _setup(session)
+
+    await start_generation(
+        session, user, model.model_code, "x", extra=None, credit_cost_override=None,
+        background_tasks=BackgroundTasks(),
+    )
+    assert f"ai_lock:{user.id}" in fake_redis._store
+
+    # Still locked -- a concurrent second call is rejected.
+    with pytest.raises(RequestInProgressError):
+        await start_generation(
+            session, user, model.model_code, "y", extra=None, credit_cost_override=None,
+            background_tasks=BackgroundTasks(),
+        )
+
+    await handle_piapi_webhook(session, {
+        "data": {
+            "task_id": "task-release",
+            "status": "completed",
+            "output": {"video_url": "https://cdn.example.com/out.mp4"},
+            "error": {"code": 0, "message": ""},
+        }
+    })
+
+    assert f"ai_lock:{user.id}" not in fake_redis._store
+
+    mock_client.create_task.return_value = "task-after-release"
+    third = await start_generation(
+        session, user, model.model_code, "z", extra=None, credit_cost_override=None,
+        background_tasks=BackgroundTasks(),
+    )
+    assert third.status == RequestStatus.processing
+
+
+@patch("app.services.generation_service.PiAPIClient")
+async def test_lock_released_after_webhook_failure(mock_client_cls, session, fake_redis):
+    """Symmetric to the completed case: a failed PiAPI generation must also release
+    the lock so the user isn't permanently blocked by a failed request."""
+    mock_client = AsyncMock()
+    mock_client.create_task.return_value = "task-fail"
+    mock_client_cls.return_value = mock_client
+
+    user, model = await _setup(session)
+    await start_generation(
+        session, user, model.model_code, "x", extra=None, credit_cost_override=None,
+        background_tasks=BackgroundTasks(),
+    )
+    assert f"ai_lock:{user.id}" in fake_redis._store
+
+    await handle_piapi_webhook(session, {
+        "data": {
+            "task_id": "task-fail",
+            "status": "failed",
+            "error": {"code": 1, "message": "boom"},
+        }
+    })
+
+    assert f"ai_lock:{user.id}" not in fake_redis._store
+
+
+@patch("app.services.generation_service.PiAPIClient")
+async def test_webhook_completion_spends_tariff_quota_when_available_for_image_model(mock_client_cls, session):
+    """If check_access re-derived at completion time still finds tariff quota for the
+    model's category (image, in this case), the charge must go through
+    limit_service.spend (incrementing the tariff usage counter) instead of
+    spend_credits -- otherwise subscribers get charged credits for generations their
+    tariff already covers."""
+    mock_client = AsyncMock()
+    mock_client.create_task.return_value = "task-quota"
+    mock_client_cls.return_value = mock_client
+
+    user, model = await _setup_image_model_with_quota(session)
+    await start_generation(
+        session, user, model.model_code, "a cat", extra=None, credit_cost_override=None,
+        background_tasks=BackgroundTasks(),
+    )
+
+    from app.services.credit_service import get_balance
+    balance_before = await get_balance(session, user)
+
+    await handle_piapi_webhook(session, {
+        "data": {
+            "task_id": "task-quota",
+            "status": "completed",
+            "output": {"image_url": "https://cdn.example.com/out.png"},
+            "error": {"code": 0, "message": ""},
+        }
+    })
+
+    balance_after = await get_balance(session, user)
+    assert balance_after == balance_before  # credits untouched -- tariff quota used instead
+
+    usage = (await session.execute(select(UsageLimit).where(UsageLimit.user_id == user.id))).scalar_one()
+    assert usage.images_used == 1
