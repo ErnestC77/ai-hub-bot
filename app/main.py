@@ -14,7 +14,7 @@ from app.db.session import get_session
 from app.services.keys.key_healthcheck import run_key_healthcheck
 from app.services.payments.setup import register_all_gateways
 from app.webhooks import yookassa as yookassa_webhook
-from app.webhooks import piapi as piapi_webhook
+from app.webhooks import fal as fal_webhook
 
 register_all_gateways()
 dp = create_dispatcher()
@@ -73,7 +73,7 @@ app.include_router(payments.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(generate.router, prefix="/api")
 app.include_router(yookassa_webhook.router)
-app.include_router(piapi_webhook.router)
+app.include_router(fal_webhook.router)
 
 
 @app.post("/webhook/{secret}")
