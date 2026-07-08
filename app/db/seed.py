@@ -67,7 +67,8 @@ AI_MODELS = [
          min_credits=10, recommended_credits=15, sort_order=70),
     dict(**_TEXT, code="gpt_premium", display_name="GPT Premium", tier=ModelTier.premium,
          provider_model_id="openai/gpt-4o",  # PLACEHOLDER
-         min_credits=20, recommended_credits=30, sort_order=80),
+         min_credits=20, recommended_credits=30, sort_order=80,
+         fallback_model_code="gemini_flash"),
     dict(**_TEXT, code="gemini_flash", display_name="Gemini Flash", tier=ModelTier.premium,
          provider_model_id="google/gemini-flash-1.5",  # PLACEHOLDER
          min_credits=20, recommended_credits=30, sort_order=90),
@@ -79,7 +80,8 @@ AI_MODELS = [
          min_credits=40, recommended_credits=50, sort_order=110),
     dict(**_TEXT, code="claude_opus", display_name="Claude Opus", tier=ModelTier.ultra,
          provider_model_id="anthropic/claude-3-opus",  # PLACEHOLDER
-         min_credits=70, recommended_credits=90, sort_order=120),
+         min_credits=70, recommended_credits=90, sort_order=120,
+         fallback_model_code="claude_sonnet"),
     # --- IMAGE (fal.ai), 4 модели из ТЗ ---
     dict(**_MEDIA, category=ModelCategory.image, code="qwen_image", display_name="Qwen Image",
          tier=ModelTier.economy, cost_unit=CostUnit.megapixel,

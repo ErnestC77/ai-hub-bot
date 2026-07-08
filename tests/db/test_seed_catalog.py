@@ -95,3 +95,23 @@ async def test_apply_seed_inserts_and_is_idempotent(session):
     assert models == 20
     assert packages == 5
     assert settings_count == 5
+
+
+def test_fallback_pairs_from_phase2_spec():
+    by_code = {m["code"]: m for m in AI_MODELS}
+    assert by_code["gpt_premium"]["fallback_model_code"] == "gemini_flash"
+    assert by_code["claude_opus"]["fallback_model_code"] == "claude_sonnet"
+    with_fallback = {m["code"] for m in AI_MODELS if m.get("fallback_model_code")}
+    assert with_fallback == {"gpt_premium", "claude_opus"}
+
+
+async def test_fallback_column_roundtrips_through_orm(session):
+    await apply_seed(session)
+    row = (
+        await session.execute(select(AiModel).where(AiModel.code == "gpt_premium"))
+    ).scalar_one()
+    assert row.fallback_model_code == "gemini_flash"
+    deepseek = (
+        await session.execute(select(AiModel).where(AiModel.code == "deepseek_v3"))
+    ).scalar_one()
+    assert deepseek.fallback_model_code is None
