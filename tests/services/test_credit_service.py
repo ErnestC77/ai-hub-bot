@@ -170,6 +170,21 @@ async def test_settle_actual_equals_reserved_needs_no_adjustment(session):
     assert await _tx_count(session) == 0
 
 
+async def test_settle_rejects_already_completed_request(session):
+    user = await _make_user(session, balance=100)
+    request = await _make_reserved_request(session, user, reserved=40)
+    user.credits_balance = 60
+
+    await settle_request(session, request, actual_credits=25)
+    await session.commit()
+    assert user.credits_balance == 75  # состояние после первого (валидного) settle
+
+    with pytest.raises(ValueError):
+        await settle_request(session, request, actual_credits=25)
+
+    assert user.credits_balance == 75  # повторный вызов не тронул баланс
+
+
 # --- refund_request ---
 
 async def test_refund_after_reserve_returns_reserved_credits(session):
@@ -203,6 +218,21 @@ async def test_refund_after_settle_returns_charged_credits(session):
     assert user.credits_balance == 100
     assert user.total_credits_spent == 0  # возврат снимает учтённое списание
     assert request.status == RequestStatus.refunded
+
+
+async def test_refund_rejects_already_refunded_request(session):
+    user = await _make_user(session, balance=100)
+    request = await _make_reserved_request(session, user, reserved=40)
+    user.credits_balance = 60
+
+    await refund_request(session, request, reason="provider error")
+    await session.commit()
+    assert user.credits_balance == 100  # состояние после первого (валидного) refund
+
+    with pytest.raises(ValueError):
+        await refund_request(session, request, reason="retried webhook")
+
+    assert user.credits_balance == 100  # повторный вызов не начислил кредиты ещё раз
 
 
 # --- grant_credits ---

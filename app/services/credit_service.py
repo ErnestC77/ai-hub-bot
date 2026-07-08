@@ -74,6 +74,8 @@ async def settle_request(
     если корректировка не нужна / доплата невозможна."""
     if actual_credits < 0:
         raise ValueError(f"actual_credits must be >= 0, got {actual_credits}")
+    if request.status != RequestStatus.reserved:
+        raise ValueError(f"cannot settle request {request.id} with status {request.status}")
 
     user = await _lock_user(session, request.user_id)
     reserved = request.reserved_credits
@@ -132,6 +134,9 @@ async def refund_request(
 ) -> CreditTransaction:
     """Полный возврат при ошибке провайдера: reserved_credits, либо
     charged_credits, если запрос уже был рассчитан (settle)."""
+    if request.status not in (RequestStatus.reserved, RequestStatus.completed):
+        raise ValueError(f"cannot refund request {request.id} with status {request.status}")
+
     user = await _lock_user(session, request.user_id)
     already_settled = request.status == RequestStatus.completed
     refund_amount = request.charged_credits if already_settled else request.reserved_credits
