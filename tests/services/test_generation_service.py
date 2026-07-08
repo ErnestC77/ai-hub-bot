@@ -238,3 +238,35 @@ async def test_credit_cost_override_ignored_for_piapi_models(mock_client_cls, se
 
     balance_after = await get_balance(session, user)
     assert balance_after == balance_before - model.credit_cost  # NOT balance_before - 999_999
+
+
+@patch("app.services.generation_service.ImageProvider")
+async def test_dalle3_aspect_resolution_credit_multiplier(mock_image_provider_cls, session):
+    tariff = Tariff(
+        code="free", name="Free", price_rub=0, price_stars=0, period_days=36500,
+        fast_limit=5, medium_limit=0, premium_limit=0, image_limit=0, daily_limit=5,
+        max_input_tokens=2000, max_output_tokens=1000,
+    )
+    session.add(tariff)
+    user = User(telegram_id=9, username="u9")
+    session.add(user)
+    await session.flush()
+    from app.db.models import CreditTransaction
+    from app.db.enums import CreditTxType
+    session.add(CreditTransaction(user_id=user.id, type=CreditTxType.deposit, amount=1000, reason="test"))
+    model = ModelConfig(
+        model_code="dall-e-3", provider=ModelProvider.openai, display_name="Генерация картинок",
+        category=ModelCategory.image, credit_cost=15, key_purpose="image",
+    )
+    session.add(model)
+    await session.commit()
+
+    mock_provider = AsyncMock()
+    from app.services.ai.base import AIResult
+    mock_provider.generate.return_value = AIResult(answer="https://x/out.png", input_tokens=0, output_tokens=0)
+    mock_image_provider_cls.return_value = mock_provider
+
+    from app.services.generation_service import compute_dalle3_credit_cost
+    # landscape + 4k = multiplier 4 (see app/services/generation_service.py table)
+    assert compute_dalle3_credit_cost(15, aspect="16:9", resolution="4k") == 60
+    assert compute_dalle3_credit_cost(15, aspect="1:1", resolution="1k") == 15

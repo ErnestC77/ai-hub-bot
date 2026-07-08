@@ -18,6 +18,26 @@ class ModelNotFoundError(Exception):
     pass
 
 
+_IMAGE_ASPECT_TO_BUCKET: dict[str, str] = {
+    "auto": "square", "1:1": "square", "4:3": "square", "4:5": "square", "5:4": "square",
+    "3:2": "landscape", "16:9": "landscape", "21:9": "landscape",
+    "2:3": "portrait", "3:4": "portrait", "9:16": "portrait",
+}
+_IMAGE_BUCKET_TO_SIZE = {"square": "1024x1024", "portrait": "1024x1792", "landscape": "1792x1024"}
+_RESOLUTION_TO_QUALITY = {"1k": "standard", "2k": "hd", "4k": "hd"}
+_COST_MULTIPLIER: dict[tuple[str, str], int] = {
+    ("square", "1k"): 1, ("square", "2k"): 2, ("square", "4k"): 3,
+    ("landscape", "1k"): 2, ("landscape", "2k"): 3, ("landscape", "4k"): 4,
+    ("portrait", "1k"): 2, ("portrait", "2k"): 3, ("portrait", "4k"): 4,
+}
+
+
+def compute_dalle3_credit_cost(base_cost: int, aspect: str, resolution: str) -> int:
+    bucket = _IMAGE_ASPECT_TO_BUCKET.get(aspect, "square")
+    multiplier = _COST_MULTIPLIER[(bucket, resolution)]
+    return max(1, round(base_cost * multiplier))
+
+
 def _webhook_url() -> str:
     return f"{settings.backend_public_url}/api/piapi/webhook?secret={settings.piapi_webhook_secret}"
 
@@ -65,6 +85,17 @@ async def start_generation(
     background_tasks: BackgroundTasks,
 ) -> AIRequest:
     model = await _get_model(session, model_code)
+
+    if model.model_code == "dall-e-3" and extra and "aspect" in extra and "resolution" in extra:
+        aspect, resolution = extra["aspect"], extra["resolution"]
+        credit_cost_override = compute_dalle3_credit_cost(model.credit_cost, aspect, resolution)
+        bucket = _IMAGE_ASPECT_TO_BUCKET.get(aspect, "square")
+        extra = {
+            "size": _IMAGE_BUCKET_TO_SIZE[bucket],
+            "quality": _RESOLUTION_TO_QUALITY[resolution],
+            "resolution": resolution,
+        }
+
     # credit_cost_override is only honored on the synchronous (non-PiAPI) path: the
     # PiAPI async path charges model.credit_cost later in handle_piapi_webhook, which
     # has no way to see this override, so applying it here would let a caller be
