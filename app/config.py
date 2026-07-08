@@ -126,6 +126,7 @@ class Settings(BaseSettings):
     yookassa_webhook_url: str = ""
     frontend_url: str = ""
     piapi_webhook_secret: str = ""
+    fal_webhook_secret: str = ""
 
     # This backend's own public URL -- used to build the PiAPI webhook callback address.
     # Render sets this via the service's own external hostname (see render.yaml).
