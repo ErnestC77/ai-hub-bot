@@ -31,6 +31,10 @@ class AIRequest(Base):
     provider_cost_usd: Mapped[float] = mapped_column(Numeric(12, 6), default=0)
 
     provider_response_id: Mapped[str | None] = mapped_column(String(128))
+    # URL готового изображения/видео от fal.ai (фаза 3). Durable-хранилище:
+    # кредиты за генерацию уже списаны, поэтому результат должен переживать
+    # рестарты/евикции Redis -- хранится в Postgres, без TTL.
+    result_url: Mapped[str | None] = mapped_column(String(1024))
     error_message: Mapped[str | None] = mapped_column(Text)
     # actual > reserved и баланса на доплату не хватило -- см. credit_service.settle_request.
     insufficient_balance_after_usage: Mapped[bool] = mapped_column(Boolean, default=False)
