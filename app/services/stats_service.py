@@ -1,11 +1,21 @@
+"""Статистика для GET /admin/stats. Фаза 5: минимальный фикс под новую схему
+(AiModel/CreditPackage/CreditTransaction), НЕ Phase-6 аналитика.
+
+- api_cost_usd читает AIRequest.provider_cost_usd: поле существует, но ни одна
+  фаза его не заполняет -- стабильно вернёт 0.0 до Phase 6 (вне скоупа).
+- active_subscriptions больше нет (подписки удалены в фазе 1); ближайший
+  осмысленный аналог "активности" -- credits_purchases_count (число покупок
+  кредитов за месяц).
+"""
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import PaymentStatus, RequestStatus, SubscriptionStatus
-from app.db.models import AIRequest, Payment, Subscription, User
+from app.db.enums import CreditTxType, PaymentStatus, RequestStatus
+from app.db.models import AIRequest, CreditTransaction, Payment, User
 
 
 @dataclass
@@ -21,7 +31,7 @@ class DailyStats:
 @dataclass
 class MonthlyStats:
     revenue_rub: float
-    active_subscriptions: int
+    credits_purchases_count: int
 
 
 async def get_daily_stats(session: AsyncSession) -> DailyStats:
@@ -48,7 +58,7 @@ async def get_daily_stats(session: AsyncSession) -> DailyStats:
 
     api_cost = (
         await session.execute(
-            select(func.coalesce(func.sum(AIRequest.estimated_cost_usd), 0)).where(
+            select(func.coalesce(func.sum(AIRequest.provider_cost_usd), 0)).where(
                 AIRequest.created_at >= day_start
             )
         )
@@ -57,7 +67,7 @@ async def get_daily_stats(session: AsyncSession) -> DailyStats:
     errors = (
         await session.execute(
             select(func.count(AIRequest.id)).where(
-                AIRequest.created_at >= day_start, AIRequest.status == RequestStatus.error
+                AIRequest.created_at >= day_start, AIRequest.status == RequestStatus.failed
             )
         )
     ).scalar_one()
@@ -86,12 +96,15 @@ async def get_monthly_stats(session: AsyncSession) -> MonthlyStats:
         )
     ).scalar_one()
 
-    active_subscriptions = (
+    credits_purchases_count = (
         await session.execute(
-            select(func.count(Subscription.id)).where(
-                Subscription.status == SubscriptionStatus.active, Subscription.expires_at > now
+            select(func.count(CreditTransaction.id)).where(
+                CreditTransaction.type == CreditTxType.purchase,
+                CreditTransaction.created_at >= month_start,
             )
         )
     ).scalar_one()
 
-    return MonthlyStats(revenue_rub=float(revenue), active_subscriptions=active_subscriptions)
+    return MonthlyStats(
+        revenue_rub=float(revenue), credits_purchases_count=credits_purchases_count
+    )
