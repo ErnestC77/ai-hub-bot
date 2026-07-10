@@ -15,5 +15,6 @@ class CreditPackage(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(64))
     credits: Mapped[int] = mapped_column(Integer)
     price_rub: Mapped[float] = mapped_column(Numeric(10, 2))
+    price_stars: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     description: Mapped[str | None] = mapped_column(String(256))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

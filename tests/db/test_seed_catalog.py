@@ -38,6 +38,11 @@ def test_five_packages_from_tz():
     assert (by_code["plus"]["credits"], by_code["plus"]["price_rub"]) == (12000, 1290)
     assert (by_code["pro"]["credits"], by_code["pro"]["price_rub"]) == (30000, 2990)
     assert (by_code["business"]["credits"], by_code["business"]["price_rub"]) == (70000, 5990)
+    assert by_code["start"]["price_stars"] == 75
+    assert by_code["basic"]["price_stars"] == 300
+    assert by_code["plus"]["price_stars"] == 645
+    assert by_code["pro"]["price_stars"] == 1495
+    assert by_code["business"]["price_stars"] == 2995
 
 
 def test_twenty_models_split_12_text_4_image_4_video():

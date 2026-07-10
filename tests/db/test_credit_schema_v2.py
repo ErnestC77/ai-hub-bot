@@ -8,9 +8,10 @@ from app.db.enums import (
     ModelCategory,
     ModelProvider,
     ModelTier,
+    PaymentProvider,
     RequestStatus,
 )
-from app.db.models import AiModel, AIRequest, CreditPackage, CreditTransaction, Setting, User
+from app.db.models import AiModel, AIRequest, CreditPackage, CreditTransaction, Payment, Setting, User
 
 
 @pytest.fixture
@@ -165,3 +166,26 @@ async def test_ai_request_result_url_round_trip(session):
 
     again = await session.get(AIRequest, request.id)
     assert again.result_url == "https://cdn.fal.media/out.png"
+
+
+async def test_credit_package_price_stars_round_trip(session):
+    pkg = CreditPackage(code="stars_pkg", title="STARS", credits=1000, price_rub=149, price_stars=75)
+    session.add(pkg)
+    await session.commit()
+
+    fetched = await session.get(CreditPackage, pkg.id)
+    assert fetched.price_stars == 75
+
+
+async def test_credit_package_price_stars_defaults_to_zero(session):
+    pkg = CreditPackage(code="no_stars", title="NS", credits=100, price_rub=10)
+    session.add(pkg)
+    await session.commit()
+
+    fetched = await session.get(CreditPackage, pkg.id)
+    assert fetched.price_stars == 0
+
+
+async def test_payment_has_no_tariff_id_and_crypto_provider_exists():
+    assert not hasattr(Payment, "tariff_id")
+    assert PaymentProvider.crypto.value == "crypto"
