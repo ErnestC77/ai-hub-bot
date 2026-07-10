@@ -40,7 +40,12 @@ from app.services.credit_service import (
 )
 from app.services.keys.api_key_manager import get_key_manager
 from app.services.keys.enums import KeyPurpose, Provider
-from app.services.pricing import calculate_image_credits, calculate_video_credits
+from app.services.pricing import (
+    calculate_image_api_cost_usd,
+    calculate_image_credits,
+    calculate_video_api_cost_usd,
+    calculate_video_credits,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +123,13 @@ async def start_media_generation(
         estimated = calculate_image_credits(
             model, quantity=1, megapixels=1.0, is_edit=image_url is not None
         )
+        provider_cost_usd = calculate_image_api_cost_usd(model, quantity=1, megapixels=1.0)
         threshold = IMAGE_CONFIRM_THRESHOLD_CREDITS
     else:
         estimated = calculate_video_credits(
+            model, duration_seconds or VIDEO_DEFAULT_DURATION_SECONDS
+        )
+        provider_cost_usd = calculate_video_api_cost_usd(
             model, duration_seconds or VIDEO_DEFAULT_DURATION_SECONDS
         )
         threshold = VIDEO_CONFIRM_THRESHOLD_CREDITS
@@ -149,6 +158,7 @@ async def start_media_generation(
             prompt_preview=prompt[:200],
             estimated_credits=estimated,
             reserved_credits=estimated,
+            provider_cost_usd=provider_cost_usd,
         )
         session.add(request)
         await session.flush()

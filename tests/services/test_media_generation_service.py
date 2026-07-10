@@ -160,20 +160,22 @@ EXPECTED_WEBHOOK_URL = "https://backend.example.com/api/fal/webhook?secret=whsec
 
 
 def _image_model(code="img", *, cost_unit=CostUnit.image, recommended=100,
-                 min_credits=0) -> AiModel:
+                 min_credits=0, fixed_cost_usd=0.0) -> AiModel:
     return AiModel(
         provider=ModelProvider.fal, category=ModelCategory.image, code=code,
         display_name=code, provider_model_id=f"fal-ai/{code}", tier=ModelTier.standard,
         cost_unit=cost_unit, min_credits=min_credits, recommended_credits=recommended,
+        fixed_cost_usd=fixed_cost_usd,
     )
 
 
 def _video_model(code="vid", *, cost_unit=CostUnit.second, recommended=600,
-                 min_credits=0) -> AiModel:
+                 min_credits=0, fixed_cost_usd=0.0) -> AiModel:
     return AiModel(
         provider=ModelProvider.fal, category=ModelCategory.video, code=code,
         display_name=code, provider_model_id=f"fal-ai/{code}", tier=ModelTier.premium,
         cost_unit=cost_unit, min_credits=min_credits, recommended_credits=recommended,
+        fixed_cost_usd=fixed_cost_usd,
     )
 
 
@@ -265,6 +267,41 @@ async def test_video_duration_scales_credits_and_is_passed_to_fal(session, fal):
 
     assert request.estimated_credits == 1200  # ceil(10/5 * 600); >1000 -> нужен confirm
     assert fal.video_calls[0]["duration_seconds"] == 10
+
+
+# --- provider_cost_usd (фаза 6) ---
+
+async def test_image_start_fills_provider_cost_usd(session, fal):
+    user = await _seed(session, _image_model(fixed_cost_usd=0.04))
+
+    request = await start_media_generation(session, user, "img", "a bear")
+
+    # cost_unit=image: 1 * fixed_cost_usd = 0.04, считается на reserve
+    assert float(request.provider_cost_usd) == pytest.approx(0.04)
+
+
+async def test_image_edit_does_not_multiply_provider_cost_usd(session, fal):
+    user = await _seed(session, _image_model(fixed_cost_usd=0.04))
+
+    request = await start_media_generation(
+        session, user, "img", "make it night",
+        image_url="https://cdn.example.com/in.png",
+    )
+
+    # Кредиты с edit-множителем (150), себестоимость -- без него (fal берёт столько же)
+    assert request.estimated_credits == 150
+    assert float(request.provider_cost_usd) == pytest.approx(0.04)
+
+
+async def test_video_start_fills_provider_cost_usd(session, fal):
+    user = await _seed(session, _video_model(fixed_cost_usd=0.5), balance=2000)
+
+    request = await start_media_generation(
+        session, user, "vid", "a bear runs", duration_seconds=10, confirm=True
+    )
+
+    # cost_unit=second: 10/5 * 0.5 = 1.0 (та же длительность, что и в кредитах)
+    assert float(request.provider_cost_usd) == pytest.approx(1.0)
 
 
 # --- подтверждение дорогого запроса ---
