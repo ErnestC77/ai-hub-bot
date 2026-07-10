@@ -23,6 +23,15 @@ from app.db.models import AIRequest, AiModel, User
 from app.redis_client import redis_client
 from app.services.ai.base import AIError
 from app.services.ai.fal_client import FalClient, extract_result_url
+from app.services.antifraud_service import (
+    check_daily_spend_limit,
+    check_duplicate_request,
+    check_free_tier_cap,
+    check_rate_limits,
+    check_tier_allowed,
+    load_antifraud_settings,
+    record_daily_spend,
+)
 from app.services.credit_service import (
     InsufficientBalanceError,
     refund_request,
@@ -93,6 +102,15 @@ async def start_media_generation(
 ) -> AIRequest:
     model = await _get_media_model(session, model_code)
 
+    # Antifraud pre-checks (фаза 5) -- быстрый отказ до оценки и лока.
+    af_settings = await load_antifraud_settings(session)
+    if not confirm:
+        # confirm=True -- осознанный повтор после 409 ConfirmationRequired:
+        # он приходит внутри cooldown-окна и не должен блокироваться дедупом.
+        await check_duplicate_request(user.id, model_code, prompt, settings=af_settings)
+    await check_rate_limits(user.id, model.code, settings=af_settings)
+    await check_tier_allowed(user, model)
+
     # category зафиксирована в строке каталога -- клиент её не выбирает.
     # Для image множитель редактирования включается всегда, когда передан
     # image_url, без проверки "поддерживает ли модель edit" (см. спеку фазы 3).
@@ -106,6 +124,11 @@ async def start_media_generation(
             model, duration_seconds or VIDEO_DEFAULT_DURATION_SECONDS
         )
         threshold = VIDEO_CONFIRM_THRESHOLD_CREDITS
+
+    # Antifraud (фаза 5): free-tier cap и дневной лимит -- после оценки, ДО
+    # confirmation-gate (запись в daily-счётчик будет после reserve).
+    await check_free_tier_cap(user, estimated, settings=af_settings)
+    await check_daily_spend_limit(user.id, estimated, settings=af_settings)
 
     if estimated > threshold and not confirm:
         # Ничего не создано, лок ещё не брался.
@@ -150,6 +173,8 @@ async def start_media_generation(
         await redis_client.delete(lock_key)
         raise
 
+    await record_daily_spend(user.id, estimated)
+
     purpose = KeyPurpose.IMAGE if model.category == ModelCategory.image else KeyPurpose.VIDEO
     try:
         api_key = get_key_manager().get_key(Provider.FAL, purpose)
@@ -170,6 +195,7 @@ async def start_media_generation(
         request.error_message = str(exc)
         await refund_request(session, request, reason=f"fal submit failed: {exc}")
         await session.commit()
+        await record_daily_spend(user.id, -estimated)
         await redis_client.delete(lock_key)
         raise AIError(f"fal submit failed: {exc}") from exc
 
@@ -232,6 +258,7 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
                 await refund_request(
                     session, request, reason="fal webhook: could not extract result url"
                 )
+                await record_daily_spend(request.user_id, -request.reserved_credits)
             else:
                 # quantity/duration известны на этапе запроса, поэтому
                 # actual == estimated == reserved: settle_request штатно вернёт
@@ -255,6 +282,7 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
             return  # повторная доставка -- идемпотентный no-op
         try:
             await refund_request(session, request, reason=f"fal error: {error_message}")
+            await record_daily_spend(request.user_id, -request.reserved_credits)
             await session.commit()
         finally:
             await redis_client.delete(lock_key)
@@ -323,6 +351,7 @@ async def refund_stale_reserved_requests(
         await refund_request(
             session, request, reason="reconciliation: fal webhook never arrived"
         )
+        await record_daily_spend(request.user_id, -request.reserved_credits)
         await redis_client.delete(f"ai_lock:{request.user_id}")
         refunded_count += 1
 
