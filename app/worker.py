@@ -5,15 +5,11 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
-from app.db.enums import PaymentProvider, PaymentStatus, SubscriptionStatus
-from app.db.models import Payment, Subscription, Tariff, User
+from app.db.enums import PaymentProvider, PaymentStatus
+from app.db.models import Payment, User
 from app.db.session import get_session
-from app.services.notification_service import (
-    notify_credits_purchase,
-    notify_payment_success,
-    notify_subscription_expired,
-    notify_subscription_expiring,
-)
+from app.services.media_generation_service import refund_stale_reserved_requests
+from app.services.notification_service import notify_credits_purchase
 from app.services.payments import GATEWAYS
 from app.services.payments.activation import activate_paid_payment
 from app.services.payments.setup import register_all_gateways
@@ -23,60 +19,9 @@ logger = logging.getLogger(__name__)
 register_all_gateways()
 
 
-async def expire_subscriptions() -> None:
-    now = datetime.now(timezone.utc)
-    async with get_session() as session:
-        subs = (
-            await session.execute(
-                select(Subscription).where(
-                    Subscription.status == SubscriptionStatus.active,
-                    Subscription.expires_at <= now,
-                )
-            )
-        ).scalars().all()
-
-        for sub in subs:
-            sub.status = SubscriptionStatus.expired
-            user = await session.get(User, sub.user_id)
-            tariff = await session.get(Tariff, sub.tariff_id)
-            if user and tariff:
-                await notify_subscription_expired(user.telegram_id, tariff.name)
-
-        if subs:
-            await session.commit()
-
-
-async def warn_expiring_subscriptions() -> None:
-    """Одно напоминание за ~23-24ч до конца подписки.
-
-    Без отдельного поля "напоминание отправлено" (schema фиксирована ТЗ) —
-    узкое скользящее окно, равное интервалу запуска джобы, гарантирует, что
-    подписка попадёт в него ровно один раз (если воркер не был подолгу выключен).
-    """
-    now = datetime.now(timezone.utc)
-    window_start = now + timedelta(hours=23)
-    window_end = now + timedelta(hours=24)
-
-    async with get_session() as session:
-        subs = (
-            await session.execute(
-                select(Subscription).where(
-                    Subscription.status == SubscriptionStatus.active,
-                    Subscription.expires_at >= window_start,
-                    Subscription.expires_at < window_end,
-                )
-            )
-        ).scalars().all()
-
-        for sub in subs:
-            user = await session.get(User, sub.user_id)
-            tariff = await session.get(Tariff, sub.tariff_id)
-            if user and tariff:
-                await notify_subscription_expiring(user.telegram_id, tariff.name, sub.expires_at)
-
-
 async def poll_pending_yookassa_payments() -> None:
-    """Страховка на случай потерянного webhook (раздел 7 bot_ai.md)."""
+    """Страховка на случай потерянного webhook ЮKassa: опрашиваем зависшие
+    pending-платежи и активируем оплаченные (только пакеты кредитов, фаза 4)."""
     now = datetime.now(timezone.utc)
     async with get_session() as session:
         pending = (
@@ -100,12 +45,7 @@ async def poll_pending_yookassa_payments() -> None:
 
             if real_status == PaymentStatus.succeeded:
                 result = await activate_paid_payment(session, payment_id=payment.id)
-                if result and result.subscription:
-                    user = await session.get(User, result.subscription.user_id)
-                    tariff = await session.get(Tariff, result.subscription.tariff_id)
-                    if user and tariff:
-                        await notify_payment_success(user.telegram_id, tariff.name, result.subscription.expires_at)
-                elif result and result.credits_granted:
+                if result and result.credits_granted:
                     user = await session.get(User, payment.user_id)
                     if user:
                         await notify_credits_purchase(user.telegram_id, result.credits_granted)
@@ -133,12 +73,21 @@ async def cancel_stale_created_payments() -> None:
             await session.commit()
 
 
+async def reconcile_stale_media_reserves() -> None:
+    """Возврат кредитов за image/video-запросы, по которым вебхук fal.ai так и
+    не пришёл (фаза 3 оставила refund_stale_reserved_requests готовой к
+    подключению сюда; сама функция коммитит транзакцию)."""
+    async with get_session() as session:
+        refunded = await refund_stale_reserved_requests(session)
+    if refunded:
+        logger.info("reconcile: refunded %d stale media reserves", refunded)
+
+
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(expire_subscriptions, "interval", minutes=5, id="expire_subscriptions")
-    scheduler.add_job(warn_expiring_subscriptions, "interval", hours=1, id="warn_expiring_subscriptions")
     scheduler.add_job(poll_pending_yookassa_payments, "interval", minutes=2, id="poll_pending_yookassa")
     scheduler.add_job(cancel_stale_created_payments, "interval", hours=24, id="cancel_stale_created_payments")
+    scheduler.add_job(reconcile_stale_media_reserves, "interval", minutes=5, id="reconcile_stale_media_reserves")
     return scheduler
 
 
