@@ -293,6 +293,58 @@ async def test_patch_unknown_setting_is_404(client):
     assert response.status_code == 404
 
 
+async def test_patch_int_setting_with_non_numeric_value_is_422_and_unchanged(client, db_sessionmaker):
+    async with db_sessionmaker() as s:
+        s.add(Setting(
+            key="minimum_text_credits", value="3", type="int",
+            description="Минимум кредитов за текстовый запрос",
+        ))
+        await s.commit()
+
+    response = await client.patch(
+        "/api/admin/settings/minimum_text_credits", json={"value": "free"}
+    )
+    assert response.status_code == 422
+
+    async with db_sessionmaker() as s:
+        row = await s.get(Setting, "minimum_text_credits")
+        assert row.value == "3"  # значение не должно было измениться
+
+
+async def test_patch_int_setting_with_valid_numeric_value_succeeds(client, db_sessionmaker):
+    async with db_sessionmaker() as s:
+        s.add(Setting(
+            key="minimum_text_credits", value="3", type="int",
+            description="Минимум кредитов за текстовый запрос",
+        ))
+        await s.commit()
+
+    response = await client.patch(
+        "/api/admin/settings/minimum_text_credits", json={"value": "5"}
+    )
+    assert response.status_code == 200
+    assert response.json()["value"] == "5"
+
+    async with db_sessionmaker() as s:
+        row = await s.get(Setting, "minimum_text_credits")
+        assert row.value == "5"
+
+
+async def test_patch_bool_setting_rejects_invalid_value(client, db_sessionmaker):
+    async with db_sessionmaker() as s:
+        s.add(Setting(
+            key="fake_flag", value="true", type="bool", description="тестовый флаг",
+        ))
+        await s.commit()
+
+    response = await client.patch("/api/admin/settings/fake_flag", json={"value": "maybe"})
+    assert response.status_code == 422
+
+    ok = await client.patch("/api/admin/settings/fake_flag", json={"value": "false"})
+    assert ok.status_code == 200
+    assert ok.json()["value"] == "false"
+
+
 # --- старые tariff-эндпойнты удалены ---
 
 async def test_tariffs_endpoints_are_gone(client):

@@ -351,6 +351,14 @@ async def refund_stale_reserved_requests(
         await refund_request(
             session, request, reason="reconciliation: fal webhook never arrived"
         )
+        # decrement здесь (как и на webhook-ветках submit/ERROR/no-result-url выше)
+        # может случиться минуты-часы спустя после исходного +estimated в
+        # reserve_credits, а _daily_spend_key считается от текущего UTC-дня отдельно
+        # в каждый момент -- если резерв пришёлся на конец дня D, а decrement уже
+        # на день D+1, счётчик D+1 уйдёт в небольшой минус (чуть смягчает завтрашний
+        # лимит), а счётчик D останется завышенным (не страшно, его больше никто не
+        # читает). Это ограничено 25ч TTL (DAILY_SPEND_TTL_SECONDS) и осознанный
+        # компромисс в пользу защиты от убытков, а не баг.
         await record_daily_spend(request.user_id, -request.reserved_credits)
         await redis_client.delete(f"ai_lock:{request.user_id}")
         refunded_count += 1

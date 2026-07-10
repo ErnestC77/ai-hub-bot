@@ -399,6 +399,36 @@ class SettingUpdateRequest(BaseModel):
     value: str
 
 
+def _validate_setting_value(type_: str, value: str) -> None:
+    """Проверяет, что value парсится согласно заявленному типу настройки. Без этой
+    проверки некорректная строка тихо запишется в БД, а упадёт только следующий
+    запрос генерации (get_setting делает cast(row.value) на каждый вызов) -- поэтому
+    ошибка должна быть здесь, на PATCH, а не там."""
+    if type_ == "int":
+        try:
+            int(value)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"value должно быть целым числом (int), получено: {value!r}",
+            )
+    elif type_ == "float":
+        try:
+            float(value)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"value должно быть числом (float), получено: {value!r}",
+            )
+    elif type_ == "bool":
+        if value.lower() not in ("true", "false"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"value должно быть 'true' или 'false' (bool), получено: {value!r}",
+            )
+    # type_ == "str" -- любая строка валидна, проверка не требуется.
+
+
 @router.patch("/settings/{key}", response_model=SettingOut)
 async def update_setting(
     key: str, body: SettingUpdateRequest, session: AsyncSession = Depends(get_db)
@@ -406,6 +436,8 @@ async def update_setting(
     row = await session.get(Setting, key)
     if row is None:
         raise HTTPException(status_code=404, detail="Настройка не найдена")
+
+    _validate_setting_value(row.type, body.value)
 
     # type/description не меняются при обновлении значения существующего ключа.
     row = await set_setting(session, key, body.value, type_=row.type, description=row.description)
