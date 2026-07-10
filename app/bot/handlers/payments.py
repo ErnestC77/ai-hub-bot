@@ -40,9 +40,5 @@ async def handle_successful_payment(message: Message) -> None:
 
     if result is None:
         await message.answer("Оплата получена, но уже была обработана ранее.")
-    elif result.subscription:
-        await message.answer(
-            f"✅ Оплата прошла! Подписка активна до {result.subscription.expires_at.strftime('%d.%m.%Y')}."
-        )
     elif result.credits_granted:
         await message.answer(f"✅ Оплата прошла! Начислено {result.credits_granted} кредитов.")
