@@ -39,8 +39,8 @@ from app.services.text_generation_service import (
     TextGenerationResult,
 )
 
-# app.main пока неимпортируем (admin/generate/payments чинятся в фазах 3-5),
-# поэтому собираем минимальное приложение из тестируемых роутеров.
+# Минимальное приложение из тестируемых роутеров: изолирует тест от
+# lifespan/бота/вебхуков app.main (сам app.main импортируем с фазы 5).
 app = FastAPI()
 app.include_router(chat.router, prefix="/api")
 app.include_router(me.router, prefix="/api")

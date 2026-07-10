@@ -39,8 +39,8 @@ from app.services.media_generation_service import (
 )
 from app.webhooks import fal as fal_webhook
 
-# app.main пока неимпортируем (admin/key_healthcheck чинятся в фазах 4-5),
-# поэтому собираем минимальное приложение из тестируемых роутеров.
+# Минимальное приложение из тестируемых роутеров: изолирует тест от
+# lifespan/бота/вебхуков app.main (сам app.main импортируем с фазы 5).
 app = FastAPI()
 app.include_router(generate.router, prefix="/api")
 app.include_router(fal_webhook.router)
