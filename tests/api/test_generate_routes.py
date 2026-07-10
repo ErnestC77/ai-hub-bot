@@ -24,6 +24,13 @@ from app.db.models import AIRequest, AiModel, User
 from app.services import antifraud_service as afs
 from app.services import media_generation_service as mgs
 from app.services.ai.base import AIError
+from app.services.antifraud_service import (
+    DailySpendLimitExceededError,
+    DuplicateRequestError,
+    FreeTierLimitExceededError,
+    RateLimitExceededError,
+    TierNotAllowedError,
+)
 from app.services.credit_service import InsufficientBalanceError
 from app.services.media_generation_service import (
     ConfirmationRequiredError,
@@ -272,6 +279,51 @@ async def test_generate_provider_error_maps_to_502(client, monkeypatch):
     response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
     assert response.status_code == 502
     assert response.json()["detail"] == "Модель временно недоступна, попробуйте позже"
+
+
+async def test_generate_duplicate_request_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=DuplicateRequestError("dup"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Слишком быстрый повтор запроса, подождите пару секунд"
+
+
+async def test_generate_rate_limit_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=RateLimitExceededError("rl"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Слишком много запросов, попробуйте через минуту"
+
+
+async def test_generate_tier_not_allowed_maps_to_403(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=TierNotAllowedError("tier"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "veo_video", "prompt": "hi"})
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Эта модель доступна после первой покупки пакета"
+
+
+async def test_generate_free_tier_limit_maps_to_402(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=FreeTierLimitExceededError("cap"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
+    assert response.status_code == 402
+    assert response.json()["detail"] == "Бесплатный лимит исчерпан, купите пакет кредитов"
+
+
+async def test_generate_daily_spend_limit_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=DailySpendLimitExceededError("daily"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Дневной лимит трат исчерпан, попробуйте завтра"
 
 
 # --- GET /api/generate/{id} ---
