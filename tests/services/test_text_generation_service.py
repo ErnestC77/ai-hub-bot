@@ -186,6 +186,18 @@ async def test_success_reserves_settles_and_returns_result(session, fake_redis, 
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]
 
 
+async def test_success_fills_provider_cost_usd(session, monkeypatch):
+    user = await _seed(session, _model())  # price=1 -> input/output = 1 USD за 1M токенов
+    provider = FakeProvider(result=AIResult(answer="ответ", input_tokens=500, output_tokens=200))
+    monkeypatch.setattr(tgs, "_provider", provider)
+
+    await generate_text(session, user, "cheap", "привет")
+
+    [request] = await _request_rows(session)
+    # По ФАКТУ usage (500/200), не по оценке (2000/1000): 500/1e6*1 + 200/1e6*1 = 0.0007
+    assert float(request.provider_cost_usd) == pytest.approx(0.0007)
+
+
 async def test_tier_max_caps_output_tokens(session, monkeypatch):
     user = await _seed(session, _model(code="big", tier=ModelTier.ultra), purchased=1)
     provider = FakeProvider(result=AIResult(answer="a", input_tokens=1, output_tokens=1))

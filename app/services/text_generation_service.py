@@ -31,7 +31,7 @@ from app.services.credit_service import (
     reserve_credits,
     settle_request,
 )
-from app.services.pricing import calculate_text_credits
+from app.services.pricing import calculate_api_cost_usd, calculate_text_credits
 from app.services.settings_service import load_pricing_settings
 
 logger = logging.getLogger(__name__)
@@ -184,6 +184,9 @@ async def generate_text(
             request.output_tokens = result.output_tokens
             actual = calculate_text_credits(
                 model, result.input_tokens, result.output_tokens, settings=pricing
+            )
+            request.provider_cost_usd = calculate_api_cost_usd(
+                model, result.input_tokens, result.output_tokens
             )
             await settle_request(session, request, actual)
         except Exception as exc:
