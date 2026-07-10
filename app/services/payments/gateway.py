@@ -22,9 +22,6 @@ class PaymentGateway(ABC):
     provider: PaymentProvider
 
     @abstractmethod
-    async def create_payment(self, session: AsyncSession, user: User, tariff: Tariff) -> PaymentCreateResult: ...
-
-    @abstractmethod
     async def create_credit_payment(
         self, session: AsyncSession, user: User, package: CreditPackage
     ) -> PaymentCreateResult: ...
