@@ -16,6 +16,15 @@ from app.db.models import AIRequest, AiModel, User
 from app.redis_client import redis_client
 from app.services.ai.base import AIError, AIProvider
 from app.services.ai.openrouter_service import OpenRouterProvider
+from app.services.antifraud_service import (
+    check_daily_spend_limit,
+    check_duplicate_request,
+    check_free_tier_cap,
+    check_rate_limits,
+    check_tier_allowed,
+    load_antifraud_settings,
+    record_daily_spend,
+)
 from app.services.credit_service import (
     InsufficientBalanceError,
     refund_request,
@@ -106,6 +115,15 @@ async def generate_text(
 ) -> TextGenerationResult:
     model, requested = await _resolve_model(session, model_code)
 
+    # Antifraud pre-checks (фаза 5) -- быстрый и дешёвый отказ ДО взятия лока.
+    af_settings = await load_antifraud_settings(session)
+    if not confirm:
+        # confirm=True -- осознанный повтор после 409 ConfirmationRequired:
+        # он приходит внутри cooldown-окна и не должен блокироваться дедупом.
+        await check_duplicate_request(user.id, model_code, prompt, settings=af_settings)
+    await check_rate_limits(user.id, model.code, settings=af_settings)
+    await check_tier_allowed(user, model)
+
     lock_key = f"ai_lock:{user.id}"
     acquired = await redis_client.set(lock_key, "1", nx=True, ex=AI_LOCK_TTL_SECONDS)
     if not acquired:
@@ -116,6 +134,11 @@ async def generate_text(
         estimated = calculate_text_credits(
             model, ESTIMATE_INPUT_TOKENS, ESTIMATE_OUTPUT_TOKENS, settings=pricing
         )
+
+        # Antifraud (фаза 5): free-tier cap и дневной лимит -- после оценки,
+        # ДО confirmation-gate (запись в daily-счётчик будет после reserve).
+        await check_free_tier_cap(user, estimated, settings=af_settings)
+        await check_daily_spend_limit(user.id, estimated, settings=af_settings)
 
         fallback_used = model is not requested
         needs_confirmation = estimated > CONFIRM_THRESHOLD_CREDITS or (
@@ -153,6 +176,7 @@ async def generate_text(
         # reserve_credits не трогает статус AIRequest -- это ответственность вызывающего.
         request.status = RequestStatus.reserved
         await session.commit()  # резерв фиксируется ДО долгого внешнего вызова
+        await record_daily_spend(user.id, estimated)
 
         try:
             result = await _provider.generate(model, prompt, TIER_MAX[model.tier])
@@ -166,7 +190,13 @@ async def generate_text(
             request.error_message = str(exc)
             await refund_request(session, request, reason=f"provider error: {exc}")
             await session.commit()
+            await record_daily_spend(user.id, -estimated)
             raise
+
+        if request.charged_credits != estimated:
+            # settle скорректировал списание (release или доплата) --
+            # выравниваем дневной счётчик на разницу.
+            await record_daily_spend(user.id, request.charged_credits - estimated)
 
         charged = request.charged_credits
         balance_after = user.credits_balance
