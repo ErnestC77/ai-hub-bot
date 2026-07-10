@@ -8,6 +8,13 @@ from app.api.deps import current_user, get_db
 from app.db.enums import ModelCategory
 from app.db.models import AiModel, User
 from app.services.ai.base import AIError
+from app.services.antifraud_service import (
+    DailySpendLimitExceededError,
+    DuplicateRequestError,
+    FreeTierLimitExceededError,
+    RateLimitExceededError,
+    TierNotAllowedError,
+)
 from app.services.credit_service import InsufficientBalanceError
 from app.services.text_generation_service import (
     ConfirmationRequiredError,
@@ -92,6 +99,26 @@ async def chat(
         raise HTTPException(status_code=409, detail=exc.user_message) from exc
     except InsufficientBalanceError as exc:
         raise HTTPException(status_code=402, detail="Недостаточно кредитов") from exc
+    except DuplicateRequestError as exc:
+        raise HTTPException(
+            status_code=429, detail="Слишком быстрый повтор запроса, подождите пару секунд"
+        ) from exc
+    except RateLimitExceededError as exc:
+        raise HTTPException(
+            status_code=429, detail="Слишком много запросов, попробуйте через минуту"
+        ) from exc
+    except TierNotAllowedError as exc:
+        raise HTTPException(
+            status_code=403, detail="Эта модель доступна после первой покупки пакета"
+        ) from exc
+    except FreeTierLimitExceededError as exc:
+        raise HTTPException(
+            status_code=402, detail="Бесплатный лимит исчерпан, купите пакет кредитов"
+        ) from exc
+    except DailySpendLimitExceededError as exc:
+        raise HTTPException(
+            status_code=429, detail="Дневной лимит трат исчерпан, попробуйте завтра"
+        ) from exc
     except AIError as exc:
         raise HTTPException(
             status_code=502, detail="Модель временно недоступна, попробуйте позже"

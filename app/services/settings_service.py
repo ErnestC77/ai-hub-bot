@@ -41,3 +41,25 @@ async def load_pricing_settings(session: AsyncSession) -> PricingSettings:
             session, "minimum_text_credits", cast=int, default=defaults.minimum_text_credits
         ),
     )
+
+
+async def set_setting(
+    session: AsyncSession,
+    key: str,
+    value: str,
+    *,
+    type_: str,
+    description: str | None = None,
+) -> Setting:
+    """Upsert строки settings. Единственное место записи в таблицу settings.
+    При обновлении существующего ключа меняется только value -- type/description
+    заданы сидом и при правке значения не трогаются (спека фазы 5).
+    flush, не commit -- транзакцией владеет вызывающий код."""
+    row = await session.get(Setting, key)
+    if row is None:
+        row = Setting(key=key, value=value, type=type_, description=description)
+        session.add(row)
+    else:
+        row.value = value
+    await session.flush()
+    return row

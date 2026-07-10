@@ -24,6 +24,13 @@ from app.db.enums import CostUnit, ModelCategory, ModelProvider, ModelTier
 from app.db.models import AiModel, User
 from app.services.ai.base import AIError
 from app.services.credit_service import InsufficientBalanceError
+from app.services.antifraud_service import (
+    DailySpendLimitExceededError,
+    DuplicateRequestError,
+    FreeTierLimitExceededError,
+    RateLimitExceededError,
+    TierNotAllowedError,
+)
 from app.services.text_generation_service import (
     ConfirmationRequiredError,
     ModelNotFoundError,
@@ -32,8 +39,8 @@ from app.services.text_generation_service import (
     TextGenerationResult,
 )
 
-# app.main пока неимпортируем (admin/generate/payments чинятся в фазах 3-5),
-# поэтому собираем минимальное приложение из тестируемых роутеров.
+# Минимальное приложение из тестируемых роутеров: изолирует тест от
+# lifespan/бота/вебхуков app.main (сам app.main импортируем с фазы 5).
 app = FastAPI()
 app.include_router(chat.router, prefix="/api")
 app.include_router(me.router, prefix="/api")
@@ -186,6 +193,41 @@ async def test_chat_provider_error_maps_to_502(client, monkeypatch):
     response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "hi"})
     assert response.status_code == 502
     assert response.json()["detail"] == "Модель временно недоступна, попробуйте позже"
+
+
+async def test_chat_duplicate_request_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(chat, "generate_text", AsyncMock(side_effect=DuplicateRequestError("dup")))
+    response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Слишком быстрый повтор запроса, подождите пару секунд"
+
+
+async def test_chat_rate_limit_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(chat, "generate_text", AsyncMock(side_effect=RateLimitExceededError("rl")))
+    response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Слишком много запросов, попробуйте через минуту"
+
+
+async def test_chat_tier_not_allowed_maps_to_403(client, monkeypatch):
+    monkeypatch.setattr(chat, "generate_text", AsyncMock(side_effect=TierNotAllowedError("tier")))
+    response = await client.post("/api/chat", json={"model_code": "claude_opus", "prompt": "hi"})
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Эта модель доступна после первой покупки пакета"
+
+
+async def test_chat_free_tier_limit_maps_to_402(client, monkeypatch):
+    monkeypatch.setattr(chat, "generate_text", AsyncMock(side_effect=FreeTierLimitExceededError("cap")))
+    response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "hi"})
+    assert response.status_code == 402
+    assert response.json()["detail"] == "Бесплатный лимит исчерпан, купите пакет кредитов"
+
+
+async def test_chat_daily_spend_limit_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(chat, "generate_text", AsyncMock(side_effect=DailySpendLimitExceededError("daily")))
+    response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Дневной лимит трат исчерпан, попробуйте завтра"
 
 
 async def test_chat_empty_prompt_is_422(client):

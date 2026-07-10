@@ -21,8 +21,16 @@ from app.config import settings
 from app.db.base import Base
 from app.db.enums import CostUnit, ModelCategory, ModelProvider, ModelTier, RequestStatus
 from app.db.models import AIRequest, AiModel, User
+from app.services import antifraud_service as afs
 from app.services import media_generation_service as mgs
 from app.services.ai.base import AIError
+from app.services.antifraud_service import (
+    DailySpendLimitExceededError,
+    DuplicateRequestError,
+    FreeTierLimitExceededError,
+    RateLimitExceededError,
+    TierNotAllowedError,
+)
 from app.services.credit_service import InsufficientBalanceError
 from app.services.media_generation_service import (
     ConfirmationRequiredError,
@@ -31,8 +39,8 @@ from app.services.media_generation_service import (
 )
 from app.webhooks import fal as fal_webhook
 
-# app.main пока неимпортируем (admin/key_healthcheck чинятся в фазах 4-5),
-# поэтому собираем минимальное приложение из тестируемых роутеров.
+# Минимальное приложение из тестируемых роутеров: изолирует тест от
+# lifespan/бота/вебхуков app.main (сам app.main импортируем с фазы 5).
 app = FastAPI()
 app.include_router(generate.router, prefix="/api")
 app.include_router(fal_webhook.router)
@@ -49,15 +57,50 @@ async def _fake_user():
 
 
 class FakeRedis:
+    """In-memory Redis: set(nx)/get/delete/incr/incrby/decrby/expire.
+
+    locked=True отклоняет ТОЛЬКО попытку взять ai_lock:* (эмуляция занятого
+    per-user лока) -- antifraud-ключи (dup:*, rate_limit:*, daily_spend:*)
+    живут как обычно. Тот же класс скопирован из test_text_generation_service.py.
+    """
+
     def __init__(self, locked: bool = False):
         self.locked = locked
         self.deleted: list[str] = []
+        self.store: dict[str, str] = {}
+        self.expire_calls: list[tuple[str, int]] = []
 
     async def set(self, key, value, nx=False, ex=None):
-        return None if self.locked else True
+        if key.startswith("ai_lock:") and self.locked:
+            return None
+        if nx and key in self.store:
+            return None
+        self.store[key] = str(value)
+        if ex is not None:
+            self.expire_calls.append((key, ex))
+        return True
+
+    async def get(self, key):
+        return self.store.get(key)
 
     async def delete(self, key):
         self.deleted.append(key)
+        self.store.pop(key, None)
+
+    async def incr(self, key):
+        return await self.incrby(key, 1)
+
+    async def incrby(self, key, amount):
+        value = int(self.store.get(key, "0")) + int(amount)
+        self.store[key] = str(value)
+        return value
+
+    async def decrby(self, key, amount):
+        return await self.incrby(key, -int(amount))
+
+    async def expire(self, key, seconds):
+        self.expire_calls.append((key, seconds))
+        return True
 
 
 class FakeKeyManager:
@@ -120,7 +163,9 @@ async def real_service(db_sessionmaker, monkeypatch):
     """Интеграционный режим: реальные start_media_generation/handle_fal_webhook,
     фейки только на границах (Redis, fal HTTP, key manager, сессия вебхука)."""
     fal = FakeFalClient()
-    monkeypatch.setattr(mgs, "redis_client", FakeRedis())
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(mgs, "redis_client", fake_redis)
+    monkeypatch.setattr(afs, "redis_client", fake_redis)
     monkeypatch.setattr(mgs, "FalClient", fal)
     monkeypatch.setattr(mgs, "get_key_manager", lambda: FakeKeyManager())
     monkeypatch.setattr(settings, "backend_public_url", "https://backend.example.com")
@@ -234,6 +279,51 @@ async def test_generate_provider_error_maps_to_502(client, monkeypatch):
     response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
     assert response.status_code == 502
     assert response.json()["detail"] == "Модель временно недоступна, попробуйте позже"
+
+
+async def test_generate_duplicate_request_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=DuplicateRequestError("dup"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Слишком быстрый повтор запроса, подождите пару секунд"
+
+
+async def test_generate_rate_limit_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=RateLimitExceededError("rl"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Слишком много запросов, попробуйте через минуту"
+
+
+async def test_generate_tier_not_allowed_maps_to_403(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=TierNotAllowedError("tier"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "veo_video", "prompt": "hi"})
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Эта модель доступна после первой покупки пакета"
+
+
+async def test_generate_free_tier_limit_maps_to_402(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=FreeTierLimitExceededError("cap"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
+    assert response.status_code == 402
+    assert response.json()["detail"] == "Бесплатный лимит исчерпан, купите пакет кредитов"
+
+
+async def test_generate_daily_spend_limit_maps_to_429(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation", AsyncMock(side_effect=DailySpendLimitExceededError("daily"))
+    )
+    response = await client.post("/api/generate", json={"model_code": "img", "prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Дневной лимит трат исчерпан, попробуйте завтра"
 
 
 # --- GET /api/generate/{id} ---

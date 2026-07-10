@@ -19,8 +19,8 @@ from app.db.enums import PaymentProvider, PaymentStatus
 from app.db.models import CreditPackage, Payment, User
 from app.services.payments import GATEWAYS, PaymentCreateResult
 
-# app.main не импортируем (admin чинится в фазе 5) -- минимальное приложение
-# из тестируемого роутера, как в tests/api/test_generate_routes.py.
+# Минимальное приложение из тестируемого роутера, как в
+# tests/api/test_generate_routes.py (сам app.main импортируем с фазы 5).
 app = FastAPI()
 app.include_router(payments_routes.router, prefix="/api")
 

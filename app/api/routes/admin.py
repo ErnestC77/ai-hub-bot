@@ -6,14 +6,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_admin, get_db
-from app.db.enums import CreditTxType, PaymentProvider, PaymentStatus
-from app.db.models import Banner, ModelConfig, Payment, Tariff, User
-from app.services.admin_service import cancel_subscription, grant_manual_subscription
-from app.services.credit_service import get_balance as get_credit_balance
-from app.services.credit_service import grant_credits
+from app.db.enums import PaymentProvider, PaymentStatus
+from app.db.models import (
+    AiModel,
+    Banner,
+    CreditPackage,
+    CreditTransaction,
+    Payment,
+    Setting,
+    User,
+)
+from app.services.credit_service import InsufficientBalanceError, adjust_credits_admin
 from app.services.payments.refund_service import refund
+from app.services.settings_service import set_setting
 from app.services.stats_service import get_daily_stats, get_monthly_stats
-from app.services.subscription_service import get_active_subscription, get_tariff_by_code
 from app.services.user_service import get_user_by_telegram_id, search_users, set_blocked
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(current_admin)])
@@ -29,7 +35,7 @@ class StatsOut(BaseModel):
     today_api_cost_usd: float
     today_errors: int
     month_revenue_rub: float
-    month_active_subscriptions: int
+    month_credits_purchases_count: int
 
 
 @router.get("/stats", response_model=StatsOut)
@@ -44,7 +50,7 @@ async def stats(session: AsyncSession = Depends(get_db)) -> StatsOut:
         today_api_cost_usd=daily.api_cost_usd,
         today_errors=daily.errors,
         month_revenue_rub=monthly.revenue_rub,
-        month_active_subscriptions=monthly.active_subscriptions,
+        month_credits_purchases_count=monthly.credits_purchases_count,
     )
 
 
@@ -56,33 +62,28 @@ class UserOut(BaseModel):
     first_name: str | None
     is_admin: bool
     is_blocked: bool
-    tariff_code: str | None
-    subscription_expires_at: str | None
     credits_balance: int
+    total_credits_purchased: int
+    total_credits_spent: int
 
 
-async def _to_user_out(session: AsyncSession, user: User) -> UserOut:
-    subscription = await get_active_subscription(session, user.id)
-    tariff = None
-    if subscription:
-        tariff = await session.get(Tariff, subscription.tariff_id)
-
+def _to_user_out(user: User) -> UserOut:
     return UserOut(
         telegram_id=user.telegram_id,
         username=user.username,
         first_name=user.first_name,
         is_admin=user.is_admin,
         is_blocked=user.is_blocked,
-        tariff_code=tariff.code if tariff else None,
-        subscription_expires_at=subscription.expires_at.isoformat() if subscription else None,
-        credits_balance=await get_credit_balance(session, user),
+        credits_balance=user.credits_balance,
+        total_credits_purchased=user.total_credits_purchased,
+        total_credits_spent=user.total_credits_spent,
     )
 
 
 @router.get("/users", response_model=list[UserOut])
 async def list_users(query: str | None = None, session: AsyncSession = Depends(get_db)) -> list[UserOut]:
     users = await search_users(session, query)
-    return [await _to_user_out(session, u) for u in users]
+    return [_to_user_out(u) for u in users]
 
 
 async def _get_user_or_404(session: AsyncSession, telegram_id: int) -> User:
@@ -95,62 +96,88 @@ async def _get_user_or_404(session: AsyncSession, telegram_id: int) -> User:
 @router.get("/users/{telegram_id}", response_model=UserOut)
 async def get_user(telegram_id: int, session: AsyncSession = Depends(get_db)) -> UserOut:
     user = await _get_user_or_404(session, telegram_id)
-    return await _to_user_out(session, user)
+    return _to_user_out(user)
 
 
 @router.post("/users/{telegram_id}/block", response_model=UserOut)
 async def block_user(telegram_id: int, session: AsyncSession = Depends(get_db)) -> UserOut:
     user = await _get_user_or_404(session, telegram_id)
     await set_blocked(session, user, True)
-    return await _to_user_out(session, user)
+    return _to_user_out(user)
 
 
 @router.post("/users/{telegram_id}/unblock", response_model=UserOut)
 async def unblock_user(telegram_id: int, session: AsyncSession = Depends(get_db)) -> UserOut:
     user = await _get_user_or_404(session, telegram_id)
     await set_blocked(session, user, False)
-    return await _to_user_out(session, user)
+    return _to_user_out(user)
 
 
-class GrantRequest(BaseModel):
-    tariff_code: str
-
-
-@router.post("/users/{telegram_id}/grant", response_model=UserOut)
-async def grant_subscription(
-    telegram_id: int, body: GrantRequest, session: AsyncSession = Depends(get_db)
-) -> UserOut:
-    user = await _get_user_or_404(session, telegram_id)
-    tariff = await get_tariff_by_code(session, body.tariff_code)
-    if tariff is None:
-        raise HTTPException(status_code=404, detail="Тариф не найден")
-
-    await grant_manual_subscription(session, user, tariff)
-    return await _to_user_out(session, user)
-
-
-class GrantCreditsRequest(BaseModel):
+class TransactionOut(BaseModel):
+    id: int
+    type: str
     amount: int
+    balance_before: int
+    balance_after: int
+    provider: str | None
+    model_code: str | None
+    request_id: int | None
+    description: str | None
+    created_at: str
 
 
-@router.post("/users/{telegram_id}/grant-credits", response_model=UserOut)
-async def grant_credits_to_user(
-    telegram_id: int, body: GrantCreditsRequest, session: AsyncSession = Depends(get_db)
+@router.get("/users/{telegram_id}/transactions", response_model=list[TransactionOut])
+async def list_user_transactions(
+    telegram_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_db),
+) -> list[TransactionOut]:
+    user = await _get_user_or_404(session, telegram_id)
+    txs = (
+        await session.execute(
+            select(CreditTransaction)
+            .where(CreditTransaction.user_id == user.id)
+            .order_by(CreditTransaction.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).scalars().all()
+    return [
+        TransactionOut(
+            id=tx.id,
+            type=tx.type.value,
+            amount=tx.amount,
+            balance_before=tx.balance_before,
+            balance_after=tx.balance_after,
+            provider=tx.provider,
+            model_code=tx.model_code,
+            request_id=tx.request_id,
+            description=tx.description,
+            created_at=tx.created_at.isoformat(),
+        )
+        for tx in txs
+    ]
+
+
+class AdjustCreditsRequest(BaseModel):
+    amount: int
+    reason: str = "ручная корректировка админом"
+
+
+@router.post("/users/{telegram_id}/credits", response_model=UserOut)
+async def adjust_user_credits(
+    telegram_id: int, body: AdjustCreditsRequest, session: AsyncSession = Depends(get_db)
 ) -> UserOut:
+    if body.amount == 0:
+        raise HTTPException(status_code=422, detail="amount не может быть нулевым")
     user = await _get_user_or_404(session, telegram_id)
-    await grant_credits(
-        session, user.id, body.amount, reason="manual admin grant", tx_type=CreditTxType.manual_adjustment
-    )
-    return await _to_user_out(session, user)
-
-
-@router.post("/users/{telegram_id}/cancel-subscription", response_model=UserOut)
-async def cancel_user_subscription(telegram_id: int, session: AsyncSession = Depends(get_db)) -> UserOut:
-    user = await _get_user_or_404(session, telegram_id)
-    subscription = await get_active_subscription(session, user.id)
-    if subscription:
-        await cancel_subscription(session, subscription)
-    return await _to_user_out(session, user)
+    try:
+        await adjust_credits_admin(session, user.id, body.amount, reason=body.reason)
+    except InsufficientBalanceError as exc:
+        raise HTTPException(status_code=400, detail="Недостаточно кредитов для списания") from exc
+    await session.commit()
+    return _to_user_out(user)
 
 
 # --- payments ------------------------------------------------------------
@@ -223,40 +250,65 @@ async def refund_payment(payment_id: int, session: AsyncSession = Depends(get_db
 
 # --- models ---------------------------------------------------------------
 
-class ModelConfigOut(BaseModel):
-    model_code: str
+class AiModelAdminOut(BaseModel):
+    code: str
     provider: str
-    display_name: str
     category: str
-    credit_cost: int
+    tier: str
+    display_name: str
+    provider_model_id: str
+    input_price_usd_per_1m_tokens: float
+    output_price_usd_per_1m_tokens: float
+    min_credits: int
+    recommended_credits: int
     is_active: bool
-    is_premium: bool
+    is_visible: bool
+    sort_order: int
 
 
-def _to_model_config_out(m: ModelConfig) -> ModelConfigOut:
-    return ModelConfigOut(
-        model_code=m.model_code, provider=m.provider.value, display_name=m.display_name,
-        category=m.category.value, credit_cost=m.credit_cost, is_active=m.is_active, is_premium=m.is_premium,
+def _to_model_out(m: AiModel) -> AiModelAdminOut:
+    return AiModelAdminOut(
+        code=m.code,
+        provider=m.provider.value,
+        category=m.category.value,
+        tier=m.tier.value,
+        display_name=m.display_name,
+        provider_model_id=m.provider_model_id,
+        input_price_usd_per_1m_tokens=float(m.input_price_usd_per_1m_tokens),
+        output_price_usd_per_1m_tokens=float(m.output_price_usd_per_1m_tokens),
+        min_credits=m.min_credits,
+        recommended_credits=m.recommended_credits,
+        is_active=m.is_active,
+        is_visible=m.is_visible,
+        sort_order=m.sort_order,
     )
 
 
-@router.get("/models", response_model=list[ModelConfigOut])
-async def list_models(session: AsyncSession = Depends(get_db)) -> list[ModelConfigOut]:
-    models = (await session.execute(select(ModelConfig))).scalars().all()
-    return [_to_model_config_out(m) for m in models]
+@router.get("/models", response_model=list[AiModelAdminOut])
+async def list_models(session: AsyncSession = Depends(get_db)) -> list[AiModelAdminOut]:
+    models = (
+        await session.execute(select(AiModel).order_by(AiModel.sort_order, AiModel.id))
+    ).scalars().all()
+    return [_to_model_out(m) for m in models]
 
 
-class ModelUpdateRequest(BaseModel):
+class AiModelUpdateRequest(BaseModel):
     is_active: bool | None = None
-    credit_cost: int | None = None
+    is_visible: bool | None = None
+    recommended_credits: int | None = None
+    min_credits: int | None = None
+    provider_model_id: str | None = None
+    input_price_usd_per_1m_tokens: float | None = None
+    output_price_usd_per_1m_tokens: float | None = None
+    sort_order: int | None = None
 
 
-@router.patch("/models/{model_code}", response_model=ModelConfigOut)
+@router.patch("/models/{code}", response_model=AiModelAdminOut)
 async def update_model(
-    model_code: str, body: ModelUpdateRequest, session: AsyncSession = Depends(get_db)
-) -> ModelConfigOut:
+    code: str, body: AiModelUpdateRequest, session: AsyncSession = Depends(get_db)
+) -> AiModelAdminOut:
     model = (
-        await session.execute(select(ModelConfig).where(ModelConfig.model_code == model_code))
+        await session.execute(select(AiModel).where(AiModel.code == code))
     ).scalar_one_or_none()
     if model is None:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -265,62 +317,132 @@ async def update_model(
         setattr(model, field, value)
     await session.commit()
 
-    return _to_model_config_out(model)
+    return _to_model_out(model)
 
 
-# --- tariffs ---------------------------------------------------------------
+# --- packages ---------------------------------------------------------------
 
-class TariffAdminOut(BaseModel):
+class PackageAdminOut(BaseModel):
     code: str
-    name: str
+    title: str
+    credits: int
     price_rub: float
     price_stars: int
-    fast_limit: int
-    medium_limit: int
-    premium_limit: int
-    image_limit: int
-    daily_limit: int
+    description: str | None
     is_active: bool
 
 
-class TariffUpdateRequest(BaseModel):
-    fast_limit: int | None = None
-    medium_limit: int | None = None
-    premium_limit: int | None = None
-    image_limit: int | None = None
-    daily_limit: int | None = None
+def _to_package_out(p: CreditPackage) -> PackageAdminOut:
+    return PackageAdminOut(
+        code=p.code,
+        title=p.title,
+        credits=p.credits,
+        price_rub=float(p.price_rub),
+        price_stars=p.price_stars,
+        description=p.description,
+        is_active=p.is_active,
+    )
+
+
+@router.get("/packages", response_model=list[PackageAdminOut])
+async def list_packages(session: AsyncSession = Depends(get_db)) -> list[PackageAdminOut]:
+    packages = (
+        await session.execute(select(CreditPackage).order_by(CreditPackage.price_rub))
+    ).scalars().all()
+    return [_to_package_out(p) for p in packages]
+
+
+class PackageUpdateRequest(BaseModel):
+    credits: int | None = None
     price_rub: float | None = None
     price_stars: int | None = None
     is_active: bool | None = None
 
 
-def _to_tariff_admin_out(t: Tariff) -> TariffAdminOut:
-    return TariffAdminOut(
-        code=t.code, name=t.name, price_rub=float(t.price_rub), price_stars=t.price_stars,
-        fast_limit=t.fast_limit, medium_limit=t.medium_limit, premium_limit=t.premium_limit,
-        image_limit=t.image_limit, daily_limit=t.daily_limit, is_active=t.is_active,
-    )
-
-
-@router.get("/tariffs", response_model=list[TariffAdminOut])
-async def list_all_tariffs(session: AsyncSession = Depends(get_db)) -> list[TariffAdminOut]:
-    tariffs = (await session.execute(select(Tariff))).scalars().all()
-    return [_to_tariff_admin_out(t) for t in tariffs]
-
-
-@router.patch("/tariffs/{code}", response_model=TariffAdminOut)
-async def update_tariff(
-    code: str, body: TariffUpdateRequest, session: AsyncSession = Depends(get_db)
-) -> TariffAdminOut:
-    tariff = (await session.execute(select(Tariff).where(Tariff.code == code))).scalar_one_or_none()
-    if tariff is None:
-        raise HTTPException(status_code=404, detail="Тариф не найден")
+@router.patch("/packages/{code}", response_model=PackageAdminOut)
+async def update_package(
+    code: str, body: PackageUpdateRequest, session: AsyncSession = Depends(get_db)
+) -> PackageAdminOut:
+    package = (
+        await session.execute(select(CreditPackage).where(CreditPackage.code == code))
+    ).scalar_one_or_none()
+    if package is None:
+        raise HTTPException(status_code=404, detail="Пакет не найден")
 
     for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(tariff, field, value)
+        setattr(package, field, value)
     await session.commit()
 
-    return _to_tariff_admin_out(tariff)
+    return _to_package_out(package)
+
+
+# --- settings ---------------------------------------------------------------
+
+class SettingOut(BaseModel):
+    key: str
+    value: str
+    type: str
+    description: str | None
+
+
+def _to_setting_out(s: Setting) -> SettingOut:
+    return SettingOut(key=s.key, value=s.value, type=s.type, description=s.description)
+
+
+@router.get("/settings", response_model=list[SettingOut])
+async def list_settings(session: AsyncSession = Depends(get_db)) -> list[SettingOut]:
+    rows = (await session.execute(select(Setting).order_by(Setting.key))).scalars().all()
+    return [_to_setting_out(s) for s in rows]
+
+
+class SettingUpdateRequest(BaseModel):
+    value: str
+
+
+def _validate_setting_value(type_: str, value: str) -> None:
+    """Проверяет, что value парсится согласно заявленному типу настройки. Без этой
+    проверки некорректная строка тихо запишется в БД, а упадёт только следующий
+    запрос генерации (get_setting делает cast(row.value) на каждый вызов) -- поэтому
+    ошибка должна быть здесь, на PATCH, а не там."""
+    if type_ == "int":
+        try:
+            int(value)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"value должно быть целым числом (int), получено: {value!r}",
+            )
+    elif type_ == "float":
+        try:
+            float(value)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"value должно быть числом (float), получено: {value!r}",
+            )
+    elif type_ == "bool":
+        if value.lower() not in ("true", "false"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"value должно быть 'true' или 'false' (bool), получено: {value!r}",
+            )
+    # type_ == "str" -- любая строка валидна, проверка не требуется.
+
+
+@router.patch("/settings/{key}", response_model=SettingOut)
+async def update_setting(
+    key: str, body: SettingUpdateRequest, session: AsyncSession = Depends(get_db)
+) -> SettingOut:
+    row = await session.get(Setting, key)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Настройка не найдена")
+
+    _validate_setting_value(row.type, body.value)
+
+    # type/description не меняются при обновлении значения существующего ключа.
+    row = await set_setting(session, key, body.value, type_=row.type, description=row.description)
+    await session.commit()
+    return _to_setting_out(row)
 
 
 # --- banners ---------------------------------------------------------------

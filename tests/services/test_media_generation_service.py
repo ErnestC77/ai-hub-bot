@@ -19,8 +19,16 @@ from app.db.enums import (
     RequestStatus,
 )
 from app.db.models import AIRequest, AiModel, CreditTransaction, User
+from app.services import antifraud_service as afs
 from app.services import media_generation_service as mgs
 from app.services.ai.base import AIError
+from app.services.antifraud_service import (
+    DailySpendLimitExceededError,
+    DuplicateRequestError,
+    FreeTierLimitExceededError,
+    RateLimitExceededError,
+    TierNotAllowedError,
+)
 from app.services.credit_service import InsufficientBalanceError, settle_request
 from app.services.media_generation_service import (
     ConfirmationRequiredError,
@@ -34,17 +42,50 @@ from app.services.media_generation_service import (
 
 
 class FakeRedis:
-    """Как в test_text_generation_service.py: set(nx) + delete с записью вызовов."""
+    """In-memory Redis: set(nx)/get/delete/incr/incrby/decrby/expire.
+
+    locked=True отклоняет ТОЛЬКО попытку взять ai_lock:* (эмуляция занятого
+    per-user лока) -- antifraud-ключи (dup:*, rate_limit:*, daily_spend:*)
+    живут как обычно. Тот же класс скопирован из test_text_generation_service.py.
+    """
 
     def __init__(self, locked: bool = False):
         self.locked = locked
         self.deleted: list[str] = []
+        self.store: dict[str, str] = {}
+        self.expire_calls: list[tuple[str, int]] = []
 
     async def set(self, key, value, nx=False, ex=None):
-        return None if self.locked else True
+        if key.startswith("ai_lock:") and self.locked:
+            return None
+        if nx and key in self.store:
+            return None
+        self.store[key] = str(value)
+        if ex is not None:
+            self.expire_calls.append((key, ex))
+        return True
+
+    async def get(self, key):
+        return self.store.get(key)
 
     async def delete(self, key):
         self.deleted.append(key)
+        self.store.pop(key, None)
+
+    async def incr(self, key):
+        return await self.incrby(key, 1)
+
+    async def incrby(self, key, amount):
+        value = int(self.store.get(key, "0")) + int(amount)
+        self.store[key] = str(value)
+        return value
+
+    async def decrby(self, key, amount):
+        return await self.incrby(key, -int(amount))
+
+    async def expire(self, key, seconds):
+        self.expire_calls.append((key, seconds))
+        return True
 
 
 class FakeKeyManager:
@@ -101,6 +142,7 @@ async def session():
 def fake_redis(monkeypatch):
     fake = FakeRedis()
     monkeypatch.setattr(mgs, "redis_client", fake)
+    monkeypatch.setattr(afs, "redis_client", fake)
     return fake
 
 
@@ -135,8 +177,11 @@ def _video_model(code="vid", *, cost_unit=CostUnit.second, recommended=600,
     )
 
 
-async def _seed(session, *models, balance=1000) -> User:
-    user = User(telegram_id=1, username="u", credits_balance=balance)
+async def _seed(session, *models, balance=1000, purchased=1, spent=0) -> User:
+    user = User(
+        telegram_id=1, username="u", credits_balance=balance,
+        total_credits_purchased=purchased, total_credits_spent=spent,
+    )
     session.add(user)
     for m in models:
         session.add(m)
@@ -712,3 +757,112 @@ async def test_concurrent_webhook_delivery_settles_exactly_once():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
         await engine.dispose()
+
+
+# --- antifraud (фаза 5) ---
+
+async def test_duplicate_media_prompt_within_cooldown_is_rejected(session, fal):
+    user = await _seed(session, _image_model())
+
+    await start_media_generation(session, user, "img", "a bear")
+    with pytest.raises(DuplicateRequestError):
+        await start_media_generation(session, user, "img", "a bear")
+
+    assert len(fal.image_calls) == 1
+    assert len(await _request_rows(session)) == 1
+
+
+async def test_media_user_rate_limit_rejects_over_limit(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+    bucket = afs._minute_bucket()
+    fake_redis.store[f"rate_limit:user:{user.id}:{bucket}"] = "10"
+
+    with pytest.raises(RateLimitExceededError):
+        await start_media_generation(session, user, "img", "a bear")
+
+    assert fal.image_calls == []
+    assert await _request_rows(session) == []
+
+
+async def test_video_blocked_until_first_purchase(session, fake_redis, fal):
+    user = await _seed(session, _video_model(), purchased=0)
+
+    with pytest.raises(TierNotAllowedError):
+        await start_media_generation(session, user, "vid", "a bear runs")
+
+    assert fal.video_calls == []
+    assert await _request_rows(session) == []
+    assert fake_redis.deleted == []  # отказ ДО взятия лока
+
+
+async def test_free_tier_cap_blocks_media_over_cap(session, fal):
+    # cap=100, spent=50, оценка image = 100 -> 50 + 100 > 100.
+    user = await _seed(session, _image_model(), purchased=0, spent=50)
+
+    with pytest.raises(FreeTierLimitExceededError):
+        await start_media_generation(session, user, "img", "a bear")
+
+    assert await _request_rows(session) == []
+
+
+async def test_daily_spend_limit_blocks_media(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+    fake_redis.store[afs._daily_spend_key(user.id)] = "9950"  # 9950 + 100 > 10000
+
+    with pytest.raises(DailySpendLimitExceededError):
+        await start_media_generation(session, user, "img", "a bear")
+
+    assert await _request_rows(session) == []
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "9950"
+
+
+async def test_start_records_daily_spend(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+
+    await start_media_generation(session, user, "img", "a bear")
+
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "100"
+
+
+async def test_submit_failure_decrements_daily_spend(session, fake_redis, monkeypatch):
+    user = await _seed(session, _image_model())
+    monkeypatch.setattr(mgs, "FalClient", FakeFalClient(error=RuntimeError("fal down")))
+
+    with pytest.raises(AIError):
+        await start_media_generation(session, user, "img", "a bear")
+
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "0"
+
+
+async def test_webhook_error_decrements_daily_spend(session, fake_redis, fal):
+    user = await _seed(session, _image_model())
+    await start_media_generation(session, user, "img", "a bear")
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "100"
+
+    await handle_fal_webhook(
+        session, {"request_id": "fal-req-1", "status": "ERROR", "error": "nsfw content"}
+    )
+
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "0"
+
+
+async def test_webhook_ok_keeps_daily_spend(session, fake_redis, fal):
+    # actual == estimated -> settle без корректировки, счётчик остаётся равным списанию.
+    user = await _seed(session, _image_model())
+    await start_media_generation(session, user, "img", "a bear")
+
+    await handle_fal_webhook(session, _ok_payload())
+
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "100"
+
+
+async def test_reconcile_refund_decrements_daily_spend(session, fake_redis):
+    model = _image_model()
+    user = await _seed(session, model)
+    await _seed_reserved_request(session, user, model, reserved_credits=100, age_minutes=30)
+    fake_redis.store[afs._daily_spend_key(user.id)] = "100"  # состояние после record при reserve
+
+    count = await refund_stale_reserved_requests(session, older_than_minutes=20)
+
+    assert count == 1
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "0"

@@ -18,8 +18,16 @@ from app.db.enums import (
     RequestStatus,
 )
 from app.db.models import AIRequest, AiModel, CreditTransaction, User
+from app.services import antifraud_service as afs
 from app.services import text_generation_service as tgs
 from app.services.ai.base import AIError, AIProvider, AIResult
+from app.services.antifraud_service import (
+    DailySpendLimitExceededError,
+    DuplicateRequestError,
+    FreeTierLimitExceededError,
+    RateLimitExceededError,
+    TierNotAllowedError,
+)
 from app.services.credit_service import InsufficientBalanceError
 from app.services.text_generation_service import (
     ConfirmationRequiredError,
@@ -32,15 +40,50 @@ from app.services.text_generation_service import (
 
 
 class FakeRedis:
+    """In-memory Redis: set(nx)/get/delete/incr/incrby/decrby/expire.
+
+    locked=True отклоняет ТОЛЬКО попытку взять ai_lock:* (эмуляция занятого
+    per-user лока) -- antifraud-ключи (dup:*, rate_limit:*, daily_spend:*)
+    живут как обычно. Тот же класс копируется в generation-тесты (Tasks 4-5).
+    """
+
     def __init__(self, locked: bool = False):
         self.locked = locked
         self.deleted: list[str] = []
+        self.store: dict[str, str] = {}
+        self.expire_calls: list[tuple[str, int]] = []
 
     async def set(self, key, value, nx=False, ex=None):
-        return None if self.locked else True
+        if key.startswith("ai_lock:") and self.locked:
+            return None
+        if nx and key in self.store:
+            return None
+        self.store[key] = str(value)
+        if ex is not None:
+            self.expire_calls.append((key, ex))
+        return True
+
+    async def get(self, key):
+        return self.store.get(key)
 
     async def delete(self, key):
         self.deleted.append(key)
+        self.store.pop(key, None)
+
+    async def incr(self, key):
+        return await self.incrby(key, 1)
+
+    async def incrby(self, key, amount):
+        value = int(self.store.get(key, "0")) + int(amount)
+        self.store[key] = str(value)
+        return value
+
+    async def decrby(self, key, amount):
+        return await self.incrby(key, -int(amount))
+
+    async def expire(self, key, seconds):
+        self.expire_calls.append((key, seconds))
+        return True
 
 
 class FakeProvider(AIProvider):
@@ -71,6 +114,7 @@ async def session():
 def fake_redis(monkeypatch):
     fake = FakeRedis()
     monkeypatch.setattr(tgs, "redis_client", fake)
+    monkeypatch.setattr(afs, "redis_client", fake)
     return fake
 
 
@@ -86,8 +130,11 @@ def _model(code="cheap", *, tier=ModelTier.economy, price=1, min_credits=3,
     )
 
 
-async def _seed(session, *models, balance=100) -> User:
-    user = User(telegram_id=1, username="u", credits_balance=balance)
+async def _seed(session, *models, balance=100, purchased=0, spent=0) -> User:
+    user = User(
+        telegram_id=1, username="u", credits_balance=balance,
+        total_credits_purchased=purchased, total_credits_spent=spent,
+    )
     session.add(user)
     for m in models:
         session.add(m)
@@ -140,7 +187,7 @@ async def test_success_reserves_settles_and_returns_result(session, fake_redis, 
 
 
 async def test_tier_max_caps_output_tokens(session, monkeypatch):
-    user = await _seed(session, _model(code="big", tier=ModelTier.ultra))
+    user = await _seed(session, _model(code="big", tier=ModelTier.ultra), purchased=1)
     provider = FakeProvider(result=AIResult(answer="a", input_tokens=1, output_tokens=1))
     monkeypatch.setattr(tgs, "_provider", provider)
 
@@ -195,7 +242,10 @@ async def test_settle_failure_after_successful_call_refunds_and_reraises(session
 # --- подтверждение дорогого запроса ---
 
 async def test_expensive_estimate_without_confirm_raises_confirmation(session, fake_redis, monkeypatch):
-    user = await _seed(session, _model(code="exp", price=20, min_credits=20, recommended=30), balance=500)
+    user = await _seed(
+        session, _model(code="exp", price=20, min_credits=20, recommended=30),
+        balance=500, purchased=1,
+    )
     provider = FakeProvider(result=AIResult(answer="a", input_tokens=1, output_tokens=1))
     monkeypatch.setattr(tgs, "_provider", provider)
 
@@ -212,7 +262,10 @@ async def test_expensive_estimate_without_confirm_raises_confirmation(session, f
 
 
 async def test_expensive_estimate_with_confirm_proceeds(session, monkeypatch):
-    user = await _seed(session, _model(code="exp", price=20, min_credits=20, recommended=30), balance=500)
+    user = await _seed(
+        session, _model(code="exp", price=20, min_credits=20, recommended=30),
+        balance=500, purchased=1,
+    )
     provider = FakeProvider(result=AIResult(answer="a", input_tokens=500, output_tokens=200))
     monkeypatch.setattr(tgs, "_provider", provider)
 
@@ -319,3 +372,121 @@ async def test_busy_lock_raises_request_in_progress(session, monkeypatch):
 
     assert await _request_rows(session) == []
     assert await _tx_types(session) == []
+
+
+# --- antifraud (фаза 5) ---
+
+async def test_duplicate_prompt_within_cooldown_is_rejected(session, fake_redis, monkeypatch):
+    user = await _seed(session, _model())
+    provider = FakeProvider(result=AIResult(answer="a", input_tokens=1, output_tokens=1))
+    monkeypatch.setattr(tgs, "_provider", provider)
+
+    await generate_text(session, user, "cheap", "привет")
+    with pytest.raises(DuplicateRequestError):
+        await generate_text(session, user, "cheap", "привет")
+
+    assert len(provider.calls) == 1               # до провайдера дошёл только первый
+    assert len(await _request_rows(session)) == 1  # второй ничего не создал
+
+
+async def test_confirm_retry_is_not_blocked_by_dedup(session, monkeypatch):
+    # Повтор с confirm=True после 409 ConfirmationRequired приходит внутри
+    # cooldown-окна и НЕ должен блокироваться дедупом.
+    user = await _seed(
+        session, _model(code="exp", price=20, min_credits=20, recommended=30),
+        balance=500, purchased=1,
+    )
+    provider = FakeProvider(result=AIResult(answer="a", input_tokens=500, output_tokens=200))
+    monkeypatch.setattr(tgs, "_provider", provider)
+
+    with pytest.raises(ConfirmationRequiredError):
+        await generate_text(session, user, "exp", "hi")
+
+    result = await generate_text(session, user, "exp", "hi", confirm=True)
+    assert result.charged_credits == 33
+
+
+async def test_user_rate_limit_rejects_over_limit(session, fake_redis, monkeypatch):
+    user = await _seed(session, _model())
+    monkeypatch.setattr(tgs, "_provider", FakeProvider())
+    bucket = afs._minute_bucket()
+    fake_redis.store[f"rate_limit:user:{user.id}:{bucket}"] = "10"  # лимит уже выбран
+
+    with pytest.raises(RateLimitExceededError):
+        await generate_text(session, user, "cheap", "hi")
+
+    assert await _request_rows(session) == []
+    assert await _tx_types(session) == []
+
+
+async def test_model_rate_limit_rejects_over_limit(session, fake_redis, monkeypatch):
+    user = await _seed(session, _model())
+    monkeypatch.setattr(tgs, "_provider", FakeProvider())
+    bucket = afs._minute_bucket()
+    fake_redis.store[f"rate_limit:model:cheap:{bucket}"] = "60"
+
+    with pytest.raises(RateLimitExceededError):
+        await generate_text(session, user, "cheap", "hi")
+
+    assert await _request_rows(session) == []
+
+
+async def test_ultra_model_blocked_until_first_purchase(session, fake_redis, monkeypatch):
+    user = await _seed(session, _model(code="big", tier=ModelTier.ultra))  # purchased=0
+    provider = FakeProvider(result=AIResult(answer="a", input_tokens=1, output_tokens=1))
+    monkeypatch.setattr(tgs, "_provider", provider)
+
+    with pytest.raises(TierNotAllowedError):
+        await generate_text(session, user, "big", "hi")
+
+    assert provider.calls == []
+    assert await _request_rows(session) == []
+    assert fake_redis.deleted == []  # отказ ДО взятия лока
+
+
+async def test_free_tier_cap_blocks_when_estimate_exceeds_remaining(session, fake_redis, monkeypatch):
+    # cap=100, spent=95, оценка cheap-модели = 7 -> 95 + 7 > 100.
+    user = await _seed(session, _model(), purchased=0, spent=95)
+    monkeypatch.setattr(tgs, "_provider", FakeProvider())
+
+    with pytest.raises(FreeTierLimitExceededError):
+        await generate_text(session, user, "cheap", "hi")
+
+    assert await _request_rows(session) == []
+    assert await _tx_types(session) == []
+    assert fake_redis.deleted == [f"ai_lock:{user.id}"]  # лок был взят и снят в finally
+
+
+async def test_daily_spend_limit_blocks_request(session, fake_redis, monkeypatch):
+    user = await _seed(session, _model())
+    monkeypatch.setattr(tgs, "_provider", FakeProvider())
+    fake_redis.store[afs._daily_spend_key(user.id)] = "9998"  # 9998 + 7 > 10000
+
+    with pytest.raises(DailySpendLimitExceededError):
+        await generate_text(session, user, "cheap", "hi")
+
+    assert await _request_rows(session) == []
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "9998"  # счётчик не тронут
+
+
+async def test_success_records_daily_spend_adjusted_to_charged(session, fake_redis, monkeypatch):
+    user = await _seed(session, _model())  # оценка 7, факт 3
+    provider = FakeProvider(result=AIResult(answer="a", input_tokens=500, output_tokens=200))
+    monkeypatch.setattr(tgs, "_provider", provider)
+
+    result = await generate_text(session, user, "cheap", "привет")
+
+    assert result.charged_credits == 3
+    # +7 после reserve, затем -4 после settle (release) -> итог = фактическое списание
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "3"
+
+
+async def test_provider_error_decrements_daily_spend_fully(session, fake_redis, monkeypatch):
+    user = await _seed(session, _model())
+    monkeypatch.setattr(tgs, "_provider", FakeProvider(error=AIError("boom")))
+
+    with pytest.raises(AIError):
+        await generate_text(session, user, "cheap", "привет")
+
+    # +7 после reserve, -7 после refund
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "0"
