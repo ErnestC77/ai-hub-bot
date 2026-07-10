@@ -18,6 +18,17 @@ SETTINGS_ROWS = [
          description="Множитель целевой маржи"),
     dict(key="minimum_text_credits", value="3", type="int",
          description="Минимальное списание за любой текстовый запрос"),
+    # --- antifraud (фаза 5) ---
+    dict(key="daily_spend_limit_credits", value="10000", type="int",
+         description="Дневной лимит трат на пользователя"),
+    dict(key="rate_limit_per_user_per_minute", value="10", type="int",
+         description="Rate limit запросов на пользователя"),
+    dict(key="rate_limit_per_model_per_minute", value="60", type="int",
+         description="Rate limit запросов на модель (глобально)"),
+    dict(key="duplicate_cooldown_seconds", value="5", type="int",
+         description="Окно блокировки повторного идентичного запроса"),
+    dict(key="free_tier_credit_cap", value="100", type="int",
+         description="Максимум бесплатных кредитов для непокупавших пользователей"),
 ]
 
 CREDIT_PACKAGES = [

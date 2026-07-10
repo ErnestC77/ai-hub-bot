@@ -19,15 +19,26 @@ async def session():
     await engine.dispose()
 
 
-def test_five_settings_rows_with_spec_values():
+def test_settings_rows_with_spec_values():
     values = {row["key"]: row["value"] for row in SETTINGS_ROWS}
     assert values == {
+        # pricing (фазы 1-4)
         "usd_to_rub_rate": "80",
         "rub_per_credit": "0.10",
         "provider_fee_multiplier": "1.15",
         "margin_multiplier": "2.5",
         "minimum_text_credits": "3",
+        # antifraud (фаза 5)
+        "daily_spend_limit_credits": "10000",
+        "rate_limit_per_user_per_minute": "10",
+        "rate_limit_per_model_per_minute": "60",
+        "duplicate_cooldown_seconds": "5",
+        "free_tier_credit_cap": "100",
     }
+    assert all(row["type"] == "int" for row in SETTINGS_ROWS
+               if row["key"] in {"daily_spend_limit_credits", "rate_limit_per_user_per_minute",
+                                 "rate_limit_per_model_per_minute", "duplicate_cooldown_seconds",
+                                 "free_tier_credit_cap"})
 
 
 def test_five_packages_from_tz():
@@ -99,7 +110,7 @@ async def test_apply_seed_inserts_and_is_idempotent(session):
     settings_count = (await session.execute(select(func.count()).select_from(Setting))).scalar_one()
     assert models == 20
     assert packages == 5
-    assert settings_count == 5
+    assert settings_count == 10
 
 
 def test_fallback_pairs_from_phase2_spec():
