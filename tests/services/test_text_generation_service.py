@@ -1,7 +1,7 @@
 import os
 from unittest.mock import AsyncMock
 
-os.environ.setdefault("BOT_TOKEN", "test-token")
+os.environ.setdefault("BOT_TOKEN", "123456:TEST-token")
 os.environ.setdefault("DATABASE_URL", "postgresql://test")
 
 import pytest

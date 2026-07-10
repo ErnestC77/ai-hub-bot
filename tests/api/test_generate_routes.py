@@ -1,6 +1,6 @@
 import os
 
-os.environ.setdefault("BOT_TOKEN", "test-token")
+os.environ.setdefault("BOT_TOKEN", "123456:TEST-token")
 # postgresql+asyncpg:// (не голый postgresql://): app.api.deps -> app.db.session
 # строит create_async_engine при импорте модуля -- см. комментарий в
 # tests/api/test_chat_routes.py.
