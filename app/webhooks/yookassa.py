@@ -4,9 +4,9 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
 from app.db.enums import PaymentProvider, PaymentStatus
-from app.db.models import Payment, Tariff, User
+from app.db.models import Payment, User
 from app.db.session import get_session
-from app.services.notification_service import notify_credits_purchase, notify_payment_success
+from app.services.notification_service import notify_credits_purchase
 from app.services.payments import GATEWAYS
 from app.services.payments.activation import activate_paid_payment
 
@@ -52,12 +52,7 @@ async def yookassa_webhook(request: Request) -> dict:
             )
             logger.info("yookassa payment %s activated -> result=%s", object_id, result)
 
-            if result and result.subscription:
-                user = await session.get(User, result.subscription.user_id)
-                tariff = await session.get(Tariff, result.subscription.tariff_id)
-                if user and tariff:
-                    await notify_payment_success(user.telegram_id, tariff.name, result.subscription.expires_at)
-            elif result and result.credits_granted:
+            if result and result.credits_granted:
                 user = await session.get(User, payment.user_id)
                 if user:
                     await notify_credits_purchase(user.telegram_id, result.credits_granted)

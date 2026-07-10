@@ -1,6 +1,6 @@
 import os
 
-os.environ.setdefault("BOT_TOKEN", "test-token")
+os.environ.setdefault("BOT_TOKEN", "123456:TEST-token")
 # postgresql+asyncpg:// (not plain postgresql://): this test imports app.api.deps,
 # which imports app.db.session, which builds a real create_async_engine(settings.database_url)
 # at *module import time*. A driverless "postgresql://" URL makes SQLAlchemy pick the sync

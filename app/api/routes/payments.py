@@ -7,10 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_user, get_db
 from app.db.enums import PaymentProvider
-from app.db.models import Payment, User
-from app.services.credit_packages import get_package, list_packages
+from app.db.models import CreditPackage, Payment, User
 from app.services.payments import GATEWAYS
-from app.services.subscription_service import get_tariff_by_code
 
 logger = logging.getLogger(__name__)
 
@@ -19,24 +17,10 @@ router = APIRouter(dependencies=[Depends(current_user)])
 
 class CreditPackageOut(BaseModel):
     code: str
-    name: str
+    title: str
     credits: int
     price_rub: float
     price_stars: int
-
-
-@router.get("/credits/packages", response_model=list[CreditPackageOut])
-async def get_credit_packages() -> list[CreditPackageOut]:
-    return [
-        CreditPackageOut(
-            code=p.code, name=p.name, credits=p.credits, price_rub=p.price_rub, price_stars=p.price_stars
-        )
-        for p in list_packages()
-    ]
-
-
-class CreatePaymentRequest(BaseModel):
-    tariff_code: str
 
 
 class CreateCreditPaymentRequest(BaseModel):
@@ -63,50 +47,52 @@ class PaymentHistoryItem(BaseModel):
     created_at: str
 
 
-async def _get_tariff_or_404(session: AsyncSession, tariff_code: str):
-    tariff = await get_tariff_by_code(session, tariff_code)
-    if tariff is None or tariff.code == "free":
-        raise HTTPException(status_code=404, detail="Тариф не найден")
-    return tariff
+@router.get("/credits/packages", response_model=list[CreditPackageOut])
+async def get_credit_packages(session: AsyncSession = Depends(get_db)) -> list[CreditPackageOut]:
+    packages = (
+        await session.execute(
+            select(CreditPackage)
+            .where(CreditPackage.is_active.is_(True))
+            .order_by(CreditPackage.price_rub)
+        )
+    ).scalars().all()
+    return [
+        CreditPackageOut(
+            code=p.code, title=p.title, credits=p.credits,
+            price_rub=float(p.price_rub), price_stars=p.price_stars,
+        )
+        for p in packages
+    ]
 
 
-@router.post("/payments/stars/create", response_model=CreatePaymentResponse)
-async def create_stars_payment(
-    body: CreatePaymentRequest,
-    user: User = Depends(current_user),
-    session: AsyncSession = Depends(get_db),
-) -> CreatePaymentResponse:
-    tariff = await _get_tariff_or_404(session, body.tariff_code)
-    try:
-        result = await GATEWAYS[PaymentProvider.telegram_stars].create_payment(session, user, tariff)
-    except Exception:
-        logger.exception("stars create_payment failed")
-        raise HTTPException(status_code=502, detail="Не удалось создать платёж, попробуйте позже")
-
-    return CreatePaymentResponse(payment_id=result.payment.id, invoice_link=result.invoice_link)
-
-
-@router.post("/payments/yookassa/create", response_model=CreatePaymentResponse)
-async def create_yookassa_payment(
-    body: CreatePaymentRequest,
-    user: User = Depends(current_user),
-    session: AsyncSession = Depends(get_db),
-) -> CreatePaymentResponse:
-    tariff = await _get_tariff_or_404(session, body.tariff_code)
-    try:
-        result = await GATEWAYS[PaymentProvider.yookassa].create_payment(session, user, tariff)
-    except Exception:
-        logger.exception("yookassa create_payment failed")
-        raise HTTPException(status_code=502, detail="Не удалось создать платёж, попробуйте позже")
-
-    return CreatePaymentResponse(payment_id=result.payment.id, confirmation_url=result.confirmation_url)
-
-
-def _get_credit_package_or_404(package_code: str):
-    package = get_package(package_code)
+async def _get_credit_package_or_404(session: AsyncSession, package_code: str) -> CreditPackage:
+    package = (
+        await session.execute(
+            select(CreditPackage).where(
+                CreditPackage.code == package_code, CreditPackage.is_active.is_(True)
+            )
+        )
+    ).scalar_one_or_none()
     if package is None:
         raise HTTPException(status_code=404, detail="Пакет кредитов не найден")
     return package
+
+
+async def _create_credit_payment(
+    provider: PaymentProvider, package_code: str, user: User, session: AsyncSession
+) -> CreatePaymentResponse:
+    package = await _get_credit_package_or_404(session, package_code)
+    try:
+        result = await GATEWAYS[provider].create_credit_payment(session, user, package)
+    except Exception:
+        logger.exception("%s create_credit_payment failed", provider.value)
+        raise HTTPException(status_code=502, detail="Не удалось создать платёж, попробуйте позже")
+
+    return CreatePaymentResponse(
+        payment_id=result.payment.id,
+        invoice_link=result.invoice_link,
+        confirmation_url=result.confirmation_url,
+    )
 
 
 @router.post("/payments/credits/stars/create", response_model=CreatePaymentResponse)
@@ -115,14 +101,7 @@ async def create_stars_credit_payment(
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_db),
 ) -> CreatePaymentResponse:
-    package = _get_credit_package_or_404(body.package_code)
-    try:
-        result = await GATEWAYS[PaymentProvider.telegram_stars].create_credit_payment(session, user, package)
-    except Exception:
-        logger.exception("stars create_credit_payment failed")
-        raise HTTPException(status_code=502, detail="Не удалось создать платёж, попробуйте позже")
-
-    return CreatePaymentResponse(payment_id=result.payment.id, invoice_link=result.invoice_link)
+    return await _create_credit_payment(PaymentProvider.telegram_stars, body.package_code, user, session)
 
 
 @router.post("/payments/credits/yookassa/create", response_model=CreatePaymentResponse)
@@ -131,14 +110,16 @@ async def create_yookassa_credit_payment(
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_db),
 ) -> CreatePaymentResponse:
-    package = _get_credit_package_or_404(body.package_code)
-    try:
-        result = await GATEWAYS[PaymentProvider.yookassa].create_credit_payment(session, user, package)
-    except Exception:
-        logger.exception("yookassa create_credit_payment failed")
-        raise HTTPException(status_code=502, detail="Не удалось создать платёж, попробуйте позже")
+    return await _create_credit_payment(PaymentProvider.yookassa, body.package_code, user, session)
 
-    return CreatePaymentResponse(payment_id=result.payment.id, confirmation_url=result.confirmation_url)
+
+@router.post("/payments/credits/crypto/create", response_model=CreatePaymentResponse)
+async def create_crypto_credit_payment(
+    body: CreateCreditPaymentRequest,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_db),
+) -> CreatePaymentResponse:
+    return await _create_credit_payment(PaymentProvider.crypto, body.package_code, user, session)
 
 
 @router.get("/payments/{payment_id}/status", response_model=PaymentStatusOut)

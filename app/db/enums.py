@@ -6,6 +6,7 @@ class PaymentProvider(str, enum.Enum):
     yookassa = "yookassa"
     manual = "manual"
     promo = "promo"
+    crypto = "crypto"
 
 
 class PaymentStatus(str, enum.Enum):

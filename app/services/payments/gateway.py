@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Literal
@@ -5,8 +7,7 @@ from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import PaymentProvider, PaymentStatus
-from app.db.models import Payment, Tariff, User
-from app.services.credit_packages import CreditPackage
+from app.db.models import CreditPackage, Payment, User
 
 
 @dataclass
@@ -19,9 +20,6 @@ class PaymentCreateResult:
 
 class PaymentGateway(ABC):
     provider: PaymentProvider
-
-    @abstractmethod
-    async def create_payment(self, session: AsyncSession, user: User, tariff: Tariff) -> PaymentCreateResult: ...
 
     @abstractmethod
     async def create_credit_payment(

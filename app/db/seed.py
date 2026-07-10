@@ -21,15 +21,15 @@ SETTINGS_ROWS = [
 ]
 
 CREDIT_PACKAGES = [
-    dict(code="start", title="START", credits=1000, price_rub=149,
+    dict(code="start", title="START", credits=1000, price_rub=149, price_stars=75,
          description="Для знакомства с ботом"),
-    dict(code="basic", title="BASIC", credits=5000, price_rub=599,
+    dict(code="basic", title="BASIC", credits=5000, price_rub=599, price_stars=300,
          description="Для обычного использования"),
-    dict(code="plus", title="PLUS", credits=12000, price_rub=1290,
+    dict(code="plus", title="PLUS", credits=12000, price_rub=1290, price_stars=645,
          description="Для активной работы с текстом и изображениями"),
-    dict(code="pro", title="PRO", credits=30000, price_rub=2990,
+    dict(code="pro", title="PRO", credits=30000, price_rub=2990, price_stars=1495,
          description="Для частой генерации изображений и видео"),
-    dict(code="business", title="BUSINESS", credits=70000, price_rub=5990,
+    dict(code="business", title="BUSINESS", credits=70000, price_rub=5990, price_stars=2995,
          description="Для агентств и heavy users"),
 ]
 

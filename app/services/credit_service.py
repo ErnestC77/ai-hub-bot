@@ -171,9 +171,11 @@ async def grant_credits(
     *,
     reason: str,
     tx_type: CreditTxType = CreditTxType.purchase,
+    metadata: dict | None = None,
 ) -> CreditTransaction:
     """Начисление кредитов: покупка пакета (фаза 4) или админ-корректировка (фаза 5).
-    В фазе 1 -- только функция + тесты, без вызывающего кода."""
+    metadata -- контекст начисления (например {"payment_id": ...} из activation.py),
+    сохраняется в credit_transactions.metadata_json."""
     if amount <= 0:
         raise ValueError(f"grant amount must be positive, got {amount}")
 
@@ -190,6 +192,7 @@ async def grant_credits(
         balance_before=balance_before,
         balance_after=user.credits_balance,
         description=reason,
+        metadata_json=metadata,
     )
     session.add(tx)
     await session.flush()

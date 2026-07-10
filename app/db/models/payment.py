@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -16,11 +16,8 @@ class Payment(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    # Ровно одно из двух: подписка на тариф (tariff_id) или разовая покупка
-    # пакета кредитов (credit_package_code) -- см. activate_paid_payment().
-    # Легаси-колонка: таблица tariffs удалена в фазе 1 (кредитная система v2),
-    # FK снят миграцией. Колонка и весь платёжный флоу переписываются в фазе 4.
-    tariff_id: Mapped[int | None] = mapped_column(Integer)
+    # Фаза 4: платёж всегда про пакет кредитов. tariff_id/подписки удалены
+    # (tariffs снесены в фазе 1, колонка -- миграцией фазы 4).
     credit_package_code: Mapped[str | None] = mapped_column(String(32))
 
     provider: Mapped[PaymentProvider] = mapped_column()

@@ -268,6 +268,29 @@ async def test_grant_rejects_non_positive_amount(session):
         await grant_credits(session, user.id, -5, reason="nope")
 
 
+async def test_grant_credits_stores_metadata_json(session):
+    user = await _make_user(session, balance=0)
+
+    tx = await grant_credits(
+        session, user.id, 500, reason="credit package start", metadata={"payment_id": 42}
+    )
+    await session.commit()
+
+    assert tx.metadata_json == {"payment_id": 42}
+    assert tx.type == CreditTxType.purchase
+    assert user.credits_balance == 500
+    assert user.total_credits_purchased == 500
+
+
+async def test_grant_credits_metadata_defaults_to_none(session):
+    user = await _make_user(session, balance=0)
+
+    tx = await grant_credits(session, user.id, 500, reason="no metadata")
+    await session.commit()
+
+    assert tx.metadata_json is None
+
+
 # --- Конкурентный reserve: интеграционный тест с реальным Postgres ---
 # SQLite игнорирует FOR UPDATE, поэтому блокировку строки можно проверить только
 # на настоящей БД. Задайте TEST_DATABASE_URL на ОДНОРАЗОВУЮ базу, например:
