@@ -170,3 +170,59 @@ async def test_stars_refund_calls_refund_star_payment(session, user_and_package,
     fake_bot.refund_star_payment.assert_awaited_once_with(
         user_id=111, telegram_payment_charge_id="chg-1"
     )
+
+
+# --- Crypto (заглушка) ---
+
+from app.services.payments.crypto_service import CRYPTO_PAYMENT_INSTRUCTION, CryptoPaymentGateway
+
+
+async def test_crypto_create_credit_payment_creates_manual_payment(session, user_and_package):
+    user, package = user_and_package
+
+    service = CryptoPaymentGateway()
+    result = await service.create_credit_payment(session, user, package)
+
+    payment = result.payment
+    assert result.kind == "external_url"
+    assert result.confirmation_url == CRYPTO_PAYMENT_INSTRUCTION
+    assert payment.provider == PaymentProvider.crypto
+    assert payment.credit_package_code == "start"
+    assert float(payment.amount) == 149
+    assert payment.currency == "RUB"
+    assert payment.status == PaymentStatus.created
+    assert payment.payload == {"credits": 1000}
+    assert payment.payment_url == CRYPTO_PAYMENT_INSTRUCTION
+
+
+async def test_crypto_check_payment_status_reads_db_status(session, user_and_package):
+    user, package = user_and_package
+    service = CryptoPaymentGateway()
+    result = await service.create_credit_payment(session, user, package)
+
+    assert await service.check_payment_status(session, result.payment) == PaymentStatus.created
+
+    result.payment.status = PaymentStatus.succeeded
+    await session.commit()
+    assert await service.check_payment_status(session, result.payment) == PaymentStatus.succeeded
+
+
+async def test_crypto_refund_raises_not_implemented(session, user_and_package):
+    user, package = user_and_package
+    service = CryptoPaymentGateway()
+    result = await service.create_credit_payment(session, user, package)
+
+    with pytest.raises(NotImplementedError):
+        await service.refund_payment(session, result.payment)
+
+
+def test_register_all_gateways_includes_all_three_providers():
+    from app.services.payments.gateway import GATEWAYS
+    from app.services.payments.setup import register_all_gateways
+
+    register_all_gateways()
+    assert {
+        PaymentProvider.telegram_stars,
+        PaymentProvider.yookassa,
+        PaymentProvider.crypto,
+    } <= set(GATEWAYS)
