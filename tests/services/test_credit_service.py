@@ -10,6 +10,7 @@ from app.db.enums import CreditTxType, ModelCategory, RequestStatus
 from app.db.models import AIRequest, CreditTransaction, User
 from app.services.credit_service import (
     InsufficientBalanceError,
+    adjust_credits_admin,
     grant_credits,
     refund_request,
     reserve_credits,
@@ -289,6 +290,61 @@ async def test_grant_credits_metadata_defaults_to_none(session):
     await session.commit()
 
     assert tx.metadata_json is None
+
+
+# --- adjust_credits_admin ---
+
+async def test_adjust_admin_positive_delta_credits_balance(session):
+    user = await _make_user(session, balance=10)
+
+    tx = await adjust_credits_admin(session, user.id, 40, reason="компенсация сбоя")
+    await session.commit()
+
+    assert tx.type == CreditTxType.admin_adjustment
+    assert tx.amount == 40
+    assert tx.balance_before == 10
+    assert tx.balance_after == 50
+    assert tx.description == "компенсация сбоя"
+    assert user.credits_balance == 50
+    assert user.total_credits_purchased == 0  # внебалансовая корректировка
+    assert user.total_credits_spent == 0
+
+
+async def test_adjust_admin_negative_delta_debits_balance(session):
+    user = await _make_user(session, balance=100)
+
+    tx = await adjust_credits_admin(session, user.id, -30, reason="списание за абьюз")
+    await session.commit()
+
+    assert tx.type == CreditTxType.admin_adjustment
+    assert tx.amount == -30
+    assert tx.balance_before == 100
+    assert tx.balance_after == 70
+    assert user.credits_balance == 70
+    assert user.total_credits_purchased == 0
+    assert user.total_credits_spent == 0
+
+
+async def test_adjust_admin_cannot_take_balance_below_zero(session):
+    user = await _make_user(session, balance=20)
+    await session.commit()
+    user_id = user.id  # захват ДО rollback (см. комментарий к test_reserve_insufficient...)
+
+    with pytest.raises(InsufficientBalanceError) as exc_info:
+        await adjust_credits_admin(session, user_id, -21, reason="слишком много")
+
+    assert exc_info.value.balance == 20
+    assert exc_info.value.required == 21
+    await session.rollback()
+    fetched = await session.get(User, user_id)
+    assert fetched.credits_balance == 20
+    assert await _tx_count(session) == 0
+
+
+async def test_adjust_admin_rejects_zero_delta(session):
+    user = await _make_user(session, balance=0)
+    with pytest.raises(ValueError):
+        await adjust_credits_admin(session, user.id, 0, reason="ноль")
 
 
 # --- Конкурентный reserve: интеграционный тест с реальным Postgres ---

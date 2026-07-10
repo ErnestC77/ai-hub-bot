@@ -197,3 +197,34 @@ async def grant_credits(
     session.add(tx)
     await session.flush()
     return tx
+
+
+async def adjust_credits_admin(
+    session: AsyncSession, user_id: int, delta: int, *, reason: str
+) -> CreditTransaction:
+    """Ручная корректировка баланса админом: delta может быть отрицательной
+    (списание) или положительной (начисление). В отличие от grant_credits/
+    refund_request НЕ трогает total_credits_purchased/total_credits_spent --
+    это внебалансовая корректировка, а не покупка или трата по запросу.
+    Списание ниже нуля запрещено (InsufficientBalanceError), начисление
+    ограничений не имеет."""
+    if delta == 0:
+        raise ValueError("adjust delta must be non-zero")
+
+    user = await _lock_user(session, user_id)
+    if delta < 0 and user.credits_balance + delta < 0:
+        raise InsufficientBalanceError(balance=user.credits_balance, required=-delta)
+
+    balance_before = user.credits_balance
+    user.credits_balance = balance_before + delta
+    tx = CreditTransaction(
+        user_id=user_id,
+        type=CreditTxType.admin_adjustment,
+        amount=delta,
+        balance_before=balance_before,
+        balance_after=user.credits_balance,
+        description=reason,
+    )
+    session.add(tx)
+    await session.flush()
+    return tx
