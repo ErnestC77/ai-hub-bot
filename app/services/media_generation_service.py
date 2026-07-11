@@ -203,7 +203,9 @@ async def start_media_generation(
     except Exception as exc:
         # Резерв уже закоммичен -- возвращаем его и снимаем лок.
         request.error_message = str(exc)
-        await refund_request(session, request, reason=f"fal submit failed: {exc}")
+        await refund_request(
+            session, request, reason=f"fal submit failed: {exc}", final_status=RequestStatus.failed
+        )
         await session.commit()
         await record_daily_spend(user.id, -estimated)
         await redis_client.delete(lock_key)
@@ -266,7 +268,9 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
                 # продакшн-запуском.
                 request.error_message = "fal webhook: could not extract result url"
                 await refund_request(
-                    session, request, reason="fal webhook: could not extract result url"
+                    session, request,
+                    reason="fal webhook: could not extract result url",
+                    final_status=RequestStatus.failed,
                 )
                 await record_daily_spend(request.user_id, -request.reserved_credits)
             else:
@@ -291,7 +295,9 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
         if claimed.rowcount == 0:
             return  # повторная доставка -- идемпотентный no-op
         try:
-            await refund_request(session, request, reason=f"fal error: {error_message}")
+            await refund_request(
+                session, request, reason=f"fal error: {error_message}", final_status=RequestStatus.failed
+            )
             await record_daily_spend(request.user_id, -request.reserved_credits)
             await session.commit()
         finally:

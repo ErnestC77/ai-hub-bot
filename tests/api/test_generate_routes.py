@@ -414,8 +414,10 @@ async def test_full_flow_error_webhook_visible_in_status(
     assert hook.status_code == 200
 
     status = await client.get(f"/api/generate/{request_id}")
+    # Post-review fix (Phase 6, Finding 2): fal явно сообщил об ошибке ->
+    # confirmed provider error -> final_status=failed, а не refunded.
     assert status.json() == {
-        "status": "refunded",
+        "status": "failed",
         "result_url": None,
         "error_message": "nsfw content",
         "charged_credits": 0,

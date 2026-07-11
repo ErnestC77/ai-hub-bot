@@ -192,6 +192,10 @@ async def test_refund_after_reserve_returns_reserved_credits(session):
     user = await _make_user(session, balance=100)
     request = await _make_reserved_request(session, user, reserved=40)
     user.credits_balance = 60
+    # Имитируем media-flow, где provider_cost_usd проставляется на reserve,
+    # ДО вызова провайдера -- после refund ничего не было доставлено, поэтому
+    # он должен обнулиться (Finding 1).
+    request.provider_cost_usd = 5
 
     tx = await refund_request(session, request, reason="provider error")
     await session.commit()
@@ -204,6 +208,39 @@ async def test_refund_after_reserve_returns_reserved_credits(session):
     assert user.credits_balance == 100
     assert request.status == RequestStatus.refunded
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0
+
+
+async def test_refund_with_final_status_failed_marks_request_failed(session):
+    # Finding 2: подтверждённая ошибка провайдера -> final_status=failed вместо
+    # дефолтного refunded, чтобы today_errors в /admin/stats был живой метрикой.
+    user = await _make_user(session, balance=100)
+    request = await _make_reserved_request(session, user, reserved=40)
+    user.credits_balance = 60
+    request.provider_cost_usd = 5
+
+    tx = await refund_request(
+        session, request, reason="provider error", final_status=RequestStatus.failed
+    )
+    await session.commit()
+
+    assert tx.type == CreditTxType.refund
+    assert request.status == RequestStatus.failed
+    assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0  # not-already-settled -> всё ещё зануляется
+
+
+async def test_refund_without_final_status_defaults_to_refunded(session):
+    # Неоднозначный случай (например, "вебхук так и не пришёл") -- вызывающий
+    # код НЕ передаёт final_status, поведение должно остаться прежним.
+    user = await _make_user(session, balance=100)
+    request = await _make_reserved_request(session, user, reserved=40)
+    user.credits_balance = 60
+
+    await refund_request(session, request, reason="reconciliation: webhook never arrived")
+    await session.commit()
+
+    assert request.status == RequestStatus.refunded
 
 
 async def test_refund_after_settle_returns_charged_credits(session):
@@ -211,6 +248,9 @@ async def test_refund_after_settle_returns_charged_credits(session):
     request = await _make_reserved_request(session, user, reserved=40)
     user.credits_balance = 60
     await settle_request(session, request, actual_credits=55)  # balance 45, spent 55
+    # Расход был реальным (запрос settled) -- already_settled-ветка refund
+    # НЕ должна зануляять уже понесённую стоимость (Finding 1).
+    request.provider_cost_usd = 7
 
     tx = await refund_request(session, request, reason="late provider failure")
     await session.commit()
@@ -219,6 +259,7 @@ async def test_refund_after_settle_returns_charged_credits(session):
     assert user.credits_balance == 100
     assert user.total_credits_spent == 0  # возврат снимает учтённое списание
     assert request.status == RequestStatus.refunded
+    assert request.provider_cost_usd == 7  # реальная стоимость сохраняется
 
 
 async def test_refund_rejects_already_refunded_request(session):

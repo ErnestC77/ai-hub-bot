@@ -191,7 +191,9 @@ async def generate_text(
             await settle_request(session, request, actual)
         except Exception as exc:
             request.error_message = str(exc)
-            await refund_request(session, request, reason=f"provider error: {exc}")
+            await refund_request(
+                session, request, reason=f"provider error: {exc}", final_status=RequestStatus.failed
+            )
             await session.commit()
             await record_daily_spend(user.id, -estimated)
             raise

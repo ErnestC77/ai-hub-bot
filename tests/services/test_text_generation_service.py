@@ -218,8 +218,9 @@ async def test_provider_error_refunds_and_reraises(session, fake_redis, monkeypa
         await generate_text(session, user, "cheap", "привет")
 
     [request] = await _request_rows(session)
-    assert request.status == RequestStatus.refunded
+    assert request.status == RequestStatus.failed  # подтверждённая ошибка провайдера (Finding 2)
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0  # ничего не доставлено (Finding 1)
     assert request.error_message == "boom"
 
     fetched = await session.get(User, user.id)
@@ -241,8 +242,10 @@ async def test_settle_failure_after_successful_call_refunds_and_reraises(session
         await generate_text(session, user, "cheap", "привет")
 
     [request] = await _request_rows(session)
-    assert request.status == RequestStatus.refunded
+    # Тот же except-блок, что и у provider-ошибки -> final_status=failed (Finding 2).
+    assert request.status == RequestStatus.failed
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0  # Finding 1: ничего не доставлено
     assert request.error_message == "boom"
 
     fetched = await session.get(User, user.id)
