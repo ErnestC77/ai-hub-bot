@@ -10,22 +10,20 @@ import { Sheet } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { ApiError, api, type ImageAspect, type ImageResolution, type ModelOut } from "@/api/client";
-import AspectRatioSheet from "@/components/AspectRatioSheet";
+import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
 import { useMe } from "@/context/MeContext";
-import { computeImageCreditCost } from "@/lib/imageCost";
 import { haptic } from "@/lib/telegram";
 import { cn } from "@/lib/cn";
 
-const RESOLUTIONS: ImageResolution[] = ["1k", "2k", "4k"];
-const RESOLUTION_LABELS: Record<ImageResolution, string> = { "1k": "1K", "2k": "2K", "4k": "4K" };
+const POLL_INTERVAL_MS = 2000;
+const POLL_ATTEMPTS = 60;
 
-function chipClass(active: boolean): string {
-  return cn(
-    "press-scale flex-1 rounded-full border border-border-soft px-3 py-2.5 text-[13px] font-semibold text-white",
-    active ? "bg-[image:var(--brand-gradient)]" : "bg-surface",
-  );
+interface PendingConfirmation {
+  prompt: string;
+  modelCode: string;
+  imageUrl: string | undefined;
+  estimatedCredits: number;
 }
 
 export default function GenerateImage() {
@@ -37,61 +35,80 @@ export default function GenerateImage() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [prompt, setPrompt] = useState("");
   const [expanded, setExpanded] = useState(false);
-  const [aspect, setAspect] = useState<ImageAspect>("auto");
-  const [aspectSheetOpen, setAspectSheetOpen] = useState(false);
-  const [resolution, setResolution] = useState<ImageResolution>("1k");
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
 
   useEffect(() => {
     api
-      .models()
-      .then((all) => {
-        // /api/models (credit-system v2) отдаёт только text-модели, у ModelOut
-        // больше нет category. Экран переписывается на новый generate-flow в
-        // будущей под-фазе; до неё список пуст -- компилируемая заглушка, не логика.
-        const images = all.filter(() => false);
-        setModels(images);
-        setModel((prev) => prev ?? images[0] ?? null);
+      .models("image")
+      .then((list) => {
+        setModels(list);
+        setModel((prev) => prev ?? list[0] ?? null);
       })
       .catch(() => setModels([]));
   }, []);
 
-  const isDalle3 = model?.code === "dall-e-3";
-  const cost = model ? (isDalle3 ? computeImageCreditCost(model.min_credits, aspect, resolution) : model.min_credits) : 0;
+  const cost = model?.recommended_credits ?? 0;
 
-  const POLL_INTERVAL_MS = 2000;
-  const POLL_ATTEMPTS = 60;
+  async function generate(confirm = false) {
+    let question: string;
+    let modelCode: string;
+    let imageUrl: string | undefined;
 
-  async function generate() {
-    if (!model || !prompt.trim() || generating) return;
+    if (confirm) {
+      // Повторная отправка после баннера: фото уже загружено при первой
+      // попытке (файл лежит на бэкенде), повторный upload не нужен --
+      // переиспользуем сохранённый url.
+      if (!pendingConfirmation || generating) return;
+      question = pendingConfirmation.prompt;
+      modelCode = pendingConfirmation.modelCode;
+      imageUrl = pendingConfirmation.imageUrl;
+      setPendingConfirmation(null);
+    } else {
+      if (!model || !prompt.trim() || generating) return;
+      question = prompt.trim();
+      modelCode = model.code;
+      // Новый запуск отменяет неподтверждённый предыдущий.
+      setPendingConfirmation(null);
+    }
+
     setGenerating(true);
     setError("");
     setResultUrl(null);
+
     try {
-      const { request_id } = await api.generate(
-        model.code,
-        prompt.trim(),
-        isDalle3 ? { aspect, resolution } : undefined,
-      );
+      if (!confirm && photos.length > 0) {
+        // Бэкенд принимает один image_url -- используется только ПЕРВОЕ фото
+        // (известное упрощение спеки; PhotoUploadBox не трогаем).
+        imageUrl = (await api.uploadImage(photos[0])).url;
+      }
+
+      const { request_id } = await api.generate(modelCode, question, imageUrl, undefined, confirm);
 
       for (let i = 0; i < POLL_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         const status = await api.generationStatus(request_id);
-        if (status.status === "success") {
+        if (status.status === "completed") {
           setResultUrl(status.result_url);
           haptic("medium");
           return;
         }
-        if (status.status === "error") {
+        if (status.status === "failed" || status.status === "refunded") {
           setError(status.error_message ?? "Не удалось сгенерировать изображение");
           return;
         }
+        // pending / reserved / processing -- продолжаем поллинг.
       }
       setError("Генерация занимает дольше обычного, попробуйте позже");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сгенерировать изображение");
+      if (err instanceof ConfirmationRequiredError) {
+        // Не ошибка: показываем баннер, повторный вызов уйдёт с confirm=true.
+        setPendingConfirmation({ prompt: question, modelCode, imageUrl, estimatedCredits: err.estimatedCredits });
+      } else {
+        setError(err instanceof ApiError ? err.message : "Не удалось сгенерировать изображение");
+      }
     } finally {
       setGenerating(false);
     }
@@ -152,26 +169,10 @@ export default function GenerateImage() {
               <div className="text-xs text-foreground-muted">Генерация изображений</div>
             </div>
             <div className="flex shrink-0 items-center gap-1 text-[13px] text-foreground-muted">
-              от {computeImageCreditCost(model.min_credits, "auto", "1k")} 💎
+              от {model.min_credits} 💎
               {models && models.length > 1 && <span className="ml-0.5">›</span>}
             </div>
           </div>
-        )}
-
-        {isDalle3 && (
-          <div className="flex gap-2.5">
-            {RESOLUTIONS.map((r) => (
-              <button key={r} className={chipClass(resolution === r)} onClick={() => setResolution(r)}>
-                {RESOLUTION_LABELS[r]}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {isDalle3 && (
-          <button className={cn(chipClass(false), "w-full")} onClick={() => setAspectSheetOpen(true)}>
-            ▦ {aspect === "auto" ? "Auto" : aspect}
-          </button>
         )}
 
         {generating && (
@@ -181,6 +182,23 @@ export default function GenerateImage() {
         )}
 
         {error && <div className="text-center text-[13px] text-red-400">{error}</div>}
+
+        {pendingConfirmation && (
+          <div className="relative overflow-hidden rounded-lg border border-border-soft bg-surface p-[14px]">
+            <div className="absolute inset-x-0 top-0 h-[3px] bg-[image:var(--brand-gradient)]" />
+            <div className="text-[13px]">
+              Примерная стоимость: {pendingConfirmation.estimatedCredits} кредитов. Продолжить?
+            </div>
+            <div className="mt-2.5 flex gap-2">
+              <Button size="s" stretched onClick={() => generate(true)}>
+                Отправить
+              </Button>
+              <Button size="s" stretched mode="gray" onClick={() => setPendingConfirmation(null)}>
+                Отмена
+              </Button>
+            </div>
+          </div>
+        )}
 
         {resultUrl && (
           <div className="rounded-lg border border-border-soft bg-surface p-3">
@@ -195,7 +213,7 @@ export default function GenerateImage() {
           mode="filled"
           stretched
           disabled={!prompt.trim() || generating || !model}
-          onClick={generate}
+          onClick={() => generate()}
           className="py-3.5 text-base"
           style={{ opacity: prompt.trim() && model ? 1 : 0.4 }}
         >
@@ -221,13 +239,6 @@ export default function GenerateImage() {
           </Section>
         </List>
       </Sheet>
-
-      <AspectRatioSheet
-        open={aspectSheetOpen}
-        value={aspect}
-        onOpenChange={setAspectSheetOpen}
-        onSelect={setAspect}
-      />
     </div>
   );
 }

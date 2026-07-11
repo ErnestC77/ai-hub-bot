@@ -7,6 +7,7 @@ __pycache__/
 venv/
 node_modules/
 frontend/dist/
+uploads/
 *.log
 *.stackdump
 .claude/
