@@ -31,28 +31,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type ModelCategory = "fast" | "medium" | "premium" | "image" | "video";
 
-export interface CategoryLimitOut {
-  used: number;
-  limit: number;
-}
-
-export interface LimitsOut {
-  daily_used: number;
-  daily_limit: number;
-  categories: Record<ModelCategory, CategoryLimitOut>;
-}
-
 export interface MeOut {
   telegram_id: number;
   username: string | null;
   first_name: string | null;
   is_admin: boolean;
-  active_model: string | null;
-  tariff_code: string;
-  tariff_name: string;
-  subscription_expires_at: string | null;
-  limits: LimitsOut;
+  default_model_code: string;
   credits_balance: number;
+  total_credits_purchased: number;
+  total_credits_spent: number;
 }
 
 export interface ModelOut {

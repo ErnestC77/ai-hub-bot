@@ -33,7 +33,11 @@ export default function PaymentMethodSheet({ tariff, onClose }: Props) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       try {
         const me = await api.me();
-        if (me.tariff_code === tariff.code) {
+        // Тарифная система заменена кредитными пакетами (фазы 1-4) -- tariff_code
+        // в MeOut больше нет, как и эндпойнтов createStars/YookassaPayment(tariff.code)
+        // чуть ниже в этом файле. Экран целиком переписывается в под-фазе 2 фронтенд-
+        // интеграции; здесь только компилируемая заглушка условия, не рабочая проверка.
+        if (me.total_credits_purchased > 0) {
           await refresh();
           setStage("success");
           haptic("medium");
