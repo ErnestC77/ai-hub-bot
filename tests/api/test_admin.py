@@ -87,6 +87,12 @@ async def test_stats_returns_v2_shape(client):
         "today_ai_requests": 0,
         "today_api_cost_usd": 0.0,
         "today_errors": 0,
+        "today_revenue_credits": 0,
+        "today_revenue_rub_estimated": 0.0,
+        "today_margin_rub": 0.0,
+        "today_avg_cost_credits": 0.0,
+        "model_usage": [],
+        "top_users_by_spend": [],
         "month_revenue_rub": 0.0,
         "month_credits_purchases_count": 0,
     }
