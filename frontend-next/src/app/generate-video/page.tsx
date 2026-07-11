@@ -10,10 +10,17 @@ import { Sheet } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { ApiError, api, type ModelOut } from "@/api/client";
+import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import { haptic } from "@/lib/telegram";
 
 const POLL_INTERVAL_MS = 2000;
+const POLL_ATTEMPTS = Math.max(60, 20 * 15); // generous ceiling; video can take minutes
+
+interface PendingConfirmation {
+  prompt: string;
+  modelCode: string;
+  estimatedCredits: number;
+}
 
 export default function GenerateVideo() {
   const router = useRouter();
@@ -24,46 +31,66 @@ export default function GenerateVideo() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
 
   useEffect(() => {
     api
-      .models()
-      .then((all) => {
-        // /api/models (credit-system v2) отдаёт только text-модели, у ModelOut
-        // больше нет category. Экран переписывается на новый generate-flow в
-        // будущей под-фазе; до неё список пуст -- компилируемая заглушка, не логика.
-        const videos = all.filter(() => false);
-        setModels(videos);
-        setModel((prev) => prev ?? videos[0] ?? null);
+      .models("video")
+      .then((list) => {
+        setModels(list);
+        setModel((prev) => prev ?? list[0] ?? null);
       })
       .catch(() => setModels([]));
   }, []);
 
-  async function generate() {
-    if (!model || !prompt.trim() || generating) return;
+  async function generate(confirm = false) {
+    let question: string;
+    let modelCode: string;
+
+    if (confirm) {
+      // Повторная отправка после баннера: берём сохранённые prompt/modelCode.
+      if (!pendingConfirmation || generating) return;
+      question = pendingConfirmation.prompt;
+      modelCode = pendingConfirmation.modelCode;
+      setPendingConfirmation(null);
+    } else {
+      if (!model || !prompt.trim() || generating) return;
+      question = prompt.trim();
+      modelCode = model.code;
+      // Новый запуск отменяет неподтверждённый предыдущий.
+      setPendingConfirmation(null);
+    }
+
     setGenerating(true);
     setError("");
     setResultUrl(null);
     try {
-      const { request_id } = await api.generate(model.code, prompt.trim());
-      const pollAttempts = Math.max(60, 20 * 15); // generous ceiling; video can take minutes
+      // duration_seconds в UI этой под-фазы не собирается (слайдера
+      // длительности на экране нет и не было) -- бэкенд применит дефолт модели.
+      const { request_id } = await api.generate(modelCode, question, undefined, undefined, confirm);
 
-      for (let i = 0; i < pollAttempts; i++) {
+      for (let i = 0; i < POLL_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         const status = await api.generationStatus(request_id);
-        if (status.status === "success") {
+        if (status.status === "completed") {
           setResultUrl(status.result_url);
           haptic("medium");
           return;
         }
-        if (status.status === "error") {
+        if (status.status === "failed" || status.status === "refunded") {
           setError(status.error_message ?? "Не удалось сгенерировать видео");
           return;
         }
+        // pending / reserved / processing -- продолжаем поллинг.
       }
       setError("Генерация занимает дольше обычного, попробуйте позже");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сгенерировать видео");
+      if (err instanceof ConfirmationRequiredError) {
+        // Не ошибка: показываем баннер, повторный вызов уйдёт с confirm=true.
+        setPendingConfirmation({ prompt: question, modelCode, estimatedCredits: err.estimatedCredits });
+      } else {
+        setError(err instanceof ApiError ? err.message : "Не удалось сгенерировать видео");
+      }
     } finally {
       setGenerating(false);
     }
@@ -97,7 +124,24 @@ export default function GenerateVideo() {
           {model ? model.display_name : "Выберите модель"}
         </Cell>
 
-        <Button stretched disabled={!model || !prompt.trim() || generating} onClick={generate}>
+        {pendingConfirmation && (
+          <div className="relative overflow-hidden rounded-lg border border-border-soft bg-surface p-[14px]">
+            <div className="absolute inset-x-0 top-0 h-[3px] bg-[image:var(--brand-gradient)]" />
+            <div className="text-[13px]">
+              Примерная стоимость: {pendingConfirmation.estimatedCredits} кредитов. Продолжить?
+            </div>
+            <div className="mt-2.5 flex gap-2">
+              <Button size="s" stretched onClick={() => generate(true)}>
+                Отправить
+              </Button>
+              <Button size="s" stretched mode="gray" onClick={() => setPendingConfirmation(null)}>
+                Отмена
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <Button stretched disabled={!model || !prompt.trim() || generating} onClick={() => generate()}>
           {generating ? <Spinner size="s" /> : "Создать видео"}
         </Button>
 
