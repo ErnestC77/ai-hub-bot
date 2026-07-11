@@ -10,12 +10,15 @@ import { Sheet } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type ModelOut } from "@/api/client";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  fast: "Быстрые",
-  medium: "Средние",
+const TIER_LABEL: Record<string, string> = {
+  economy: "Эконом",
+  standard: "Стандарт",
   premium: "Премиум",
-  image: "Картинки",
+  pro: "Pro",
+  ultra: "Ultra",
 };
+
+const STARRED_TIERS = new Set(["pro", "ultra"]);
 
 interface Props {
   selectedModel: ModelOut | null;
@@ -32,8 +35,11 @@ export default function ModelPicker({ selectedModel, onSelect }: Props) {
     }
   }, [open, models]);
 
+  // Бэкенд отдаёт список уже отсортированным по sort_order (эконом -> ultra),
+  // поэтому порядок секций -- порядок первого появления tier в ответе;
+  // второй сортировки на фронте не требуется.
   const grouped = (models ?? []).reduce<Record<string, ModelOut[]>>((acc, model) => {
-    (acc[model.category] ??= []).push(model);
+    (acc[model.tier] ??= []).push(model);
     return acc;
   }, {});
 
@@ -50,16 +56,16 @@ export default function ModelPicker({ selectedModel, onSelect }: Props) {
           </div>
         ) : (
           <List>
-            {Object.entries(grouped).map(([category, items]) => (
-              <Section key={category} header={CATEGORY_LABEL[category] ?? category}>
+            {Object.entries(grouped).map(([tier, items]) => (
+              <Section key={tier} header={TIER_LABEL[tier] ?? tier}>
                 {items.map((model) => (
                   <Cell
-                    key={model.model_code}
+                    key={model.code}
                     onClick={() => {
                       onSelect(model);
                       setOpen(false);
                     }}
-                    after={model.is_premium ? "⭐" : undefined}
+                    after={STARRED_TIERS.has(model.tier) ? "⭐" : undefined}
                   >
                     {model.display_name}
                   </Cell>
