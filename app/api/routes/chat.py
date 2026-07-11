@@ -48,13 +48,16 @@ class ModelOut(BaseModel):
 
 
 @router.get("/models", response_model=list[ModelOut])
-async def list_models(session: AsyncSession = Depends(get_db)) -> list[ModelOut]:
+async def list_models(
+    category: ModelCategory = ModelCategory.text,
+    session: AsyncSession = Depends(get_db),
+) -> list[ModelOut]:
     models = (
         (
             await session.execute(
                 select(AiModel)
                 .where(
-                    AiModel.category == ModelCategory.text,
+                    AiModel.category == category,
                     AiModel.is_active.is_(True),
                     AiModel.is_visible.is_(True),
                 )

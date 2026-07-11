@@ -118,6 +118,38 @@ async def test_models_returns_visible_active_text_models_sorted(client, db_sessi
     assert "provider_model_id" not in response.text
 
 
+async def test_models_category_image_returns_only_visible_active_image_models(client, db_sessionmaker):
+    async with db_sessionmaker() as s:
+        s.add_all([
+            _text_model("txt", sort_order=10),
+            _text_model("img_b", sort_order=30, category=ModelCategory.image),
+            _text_model("img_a", sort_order=20, category=ModelCategory.image, tier=ModelTier.standard),
+            _text_model("img_hidden", sort_order=40, category=ModelCategory.image, is_visible=False),
+            _text_model("vid", sort_order=50, category=ModelCategory.video),
+        ])
+        await s.commit()
+
+    response = await client.get("/api/models", params={"category": "image"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [m["code"] for m in payload] == ["img_a", "img_b"]  # sort_order, text/video/hidden отфильтрованы
+    assert payload[0] == {
+        "code": "img_a",
+        "display_name": "IMG_A",
+        "tier": "standard",
+        "min_credits": 3,
+        "recommended_credits": 5,
+    }
+
+
+async def test_models_invalid_category_is_422(client):
+    # FastAPI валидирует enum-query сам: невалидное значение -> 422
+    # (спека в скобках говорит "400", фактическое поведение FastAPI -- 422).
+    response = await client.get("/api/models", params={"category": "audio"})
+    assert response.status_code == 422
+
+
 # --- POST /api/chat ---
 
 async def test_chat_success_returns_answer_and_billing(client, monkeypatch):
