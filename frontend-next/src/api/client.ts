@@ -72,25 +72,11 @@ export interface ChatResponse {
   balance_after: number;
 }
 
-export type ImageAspect =
-  | "auto"
-  | "1:1"
-  | "3:2"
-  | "2:3"
-  | "4:3"
-  | "3:4"
-  | "4:5"
-  | "5:4"
-  | "9:16"
-  | "16:9"
-  | "21:9";
-export type ImageResolution = "1k" | "2k" | "4k";
-
 export interface GenerationStatus {
-  status: "processing" | "success" | "error";
+  status: "pending" | "reserved" | "processing" | "completed" | "failed" | "refunded";
   result_url: string | null;
   error_message: string | null;
-  credit_cost: number;
+  charged_credits: number;
 }
 
 export interface ToolOut {
@@ -153,24 +139,43 @@ export interface CreditPackageOut {
 
 export const api = {
   me: () => request<MeOut>("/api/me"),
-  models: () => request<ModelOut[]>("/api/models"),
+  models: (category: "text" | "image" | "video" = "text") =>
+    request<ModelOut[]>(`/api/models?category=${category}`),
   chat: (modelCode: string, prompt: string, confirm = false) =>
     request<ChatResponse>("/api/chat", {
       method: "POST",
       body: JSON.stringify({ model_code: modelCode, prompt, confirm }),
     }),
   tools: () => request<ToolOut[]>("/api/tools"),
-  generate: (modelCode: string, prompt: string, extra?: Record<string, unknown>, creditCostOverride?: number) =>
-    request<{ request_id: number }>("/api/generate", {
+  generate: (modelCode: string, prompt: string, imageUrl?: string, durationSeconds?: number, confirm = false) =>
+    request<{ request_id: number; estimated_credits: number }>("/api/generate", {
       method: "POST",
       body: JSON.stringify({
         model_code: modelCode,
         prompt,
-        extra: extra ?? null,
-        credit_cost_override: creditCostOverride ?? null,
+        image_url: imageUrl ?? null,
+        duration_seconds: durationSeconds ?? null,
+        confirm,
       }),
     }),
   generationStatus: (requestId: number) => request<GenerationStatus>(`/api/generate/${requestId}`),
+  uploadImage: async (file: File): Promise<{ url: string }> => {
+    // НЕ через общий request(): для FormData браузер сам проставляет
+    // Content-Type с правильным boundary, а общий хелпер жёстко шлёт
+    // application/json.
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE_URL}/api/upload/image`, {
+      method: "POST",
+      headers: { "X-Telegram-Init-Data": getInitData() },
+      body: form,
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      throw new ApiError(res.status, typeof body.detail === "string" ? body.detail : res.statusText);
+    }
+    return res.json() as Promise<{ url: string }>;
+  },
   banners: () => request<BannerOut[]>("/api/banners"),
   referral: () => request<ReferralOut>("/api/referral/me"),
   tariffs: () => request<TariffOut[]>("/api/tariffs"),
