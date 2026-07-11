@@ -6,10 +6,10 @@ os.environ.setdefault("BOT_TOKEN", "123456:TEST-token")
 # tests/api/test_chat_routes.py.
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test")
 
-import fastapi
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.api.deps import current_user
 from app.api.routes import upload
@@ -93,10 +93,17 @@ async def test_upload_image_rejects_oversized_file_before_reading_body(client, m
     # даже не вызвав file.read(). Патчим read() так, чтобы он падал --
     # если бы старый путь (read-then-check) всё ещё существовал, тест упал
     # бы с AssertionError вместо 413.
+    #
+    # Патчим именно starlette.datastructures.UploadFile, а не fastapi.UploadFile:
+    # fastapi.UploadFile -- это ре-экспорт для type hints, но объект, который
+    # ASGI/Starlette реально передаёт в хендлер как file, -- это экземпляр
+    # starlette-класса напрямую. Патч fastapi.UploadFile.read никогда не
+    # затрагивает вызываемый метод (доказано ре-ревьюером: тест проходил
+    # даже с откаченной production-правкой).
     async def _read_should_not_be_called(self, size=-1):
         raise AssertionError("file.read() не должен вызываться: file.size уже больше лимита")
 
-    monkeypatch.setattr(fastapi.UploadFile, "read", _read_should_not_be_called)
+    monkeypatch.setattr(StarletteUploadFile, "read", _read_should_not_be_called)
 
     big = b"x" * (30 * 1024 * 1024 + 1)
     response = await client.post(
