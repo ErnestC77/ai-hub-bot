@@ -40,7 +40,12 @@ from app.services.credit_service import (
 )
 from app.services.keys.api_key_manager import get_key_manager
 from app.services.keys.enums import KeyPurpose, Provider
-from app.services.pricing import calculate_image_credits, calculate_video_credits
+from app.services.pricing import (
+    calculate_image_api_cost_usd,
+    calculate_image_credits,
+    calculate_video_api_cost_usd,
+    calculate_video_credits,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +123,13 @@ async def start_media_generation(
         estimated = calculate_image_credits(
             model, quantity=1, megapixels=1.0, is_edit=image_url is not None
         )
+        provider_cost_usd = calculate_image_api_cost_usd(model, quantity=1, megapixels=1.0)
         threshold = IMAGE_CONFIRM_THRESHOLD_CREDITS
     else:
         estimated = calculate_video_credits(
+            model, duration_seconds or VIDEO_DEFAULT_DURATION_SECONDS
+        )
+        provider_cost_usd = calculate_video_api_cost_usd(
             model, duration_seconds or VIDEO_DEFAULT_DURATION_SECONDS
         )
         threshold = VIDEO_CONFIRM_THRESHOLD_CREDITS
@@ -149,6 +158,7 @@ async def start_media_generation(
             prompt_preview=prompt[:200],
             estimated_credits=estimated,
             reserved_credits=estimated,
+            provider_cost_usd=provider_cost_usd,
         )
         session.add(request)
         await session.flush()
@@ -193,7 +203,9 @@ async def start_media_generation(
     except Exception as exc:
         # Резерв уже закоммичен -- возвращаем его и снимаем лок.
         request.error_message = str(exc)
-        await refund_request(session, request, reason=f"fal submit failed: {exc}")
+        await refund_request(
+            session, request, reason=f"fal submit failed: {exc}", final_status=RequestStatus.failed
+        )
         await session.commit()
         await record_daily_spend(user.id, -estimated)
         await redis_client.delete(lock_key)
@@ -256,7 +268,9 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
                 # продакшн-запуском.
                 request.error_message = "fal webhook: could not extract result url"
                 await refund_request(
-                    session, request, reason="fal webhook: could not extract result url"
+                    session, request,
+                    reason="fal webhook: could not extract result url",
+                    final_status=RequestStatus.failed,
                 )
                 await record_daily_spend(request.user_id, -request.reserved_credits)
             else:
@@ -281,7 +295,9 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
         if claimed.rowcount == 0:
             return  # повторная доставка -- идемпотентный no-op
         try:
-            await refund_request(session, request, reason=f"fal error: {error_message}")
+            await refund_request(
+                session, request, reason=f"fal error: {error_message}", final_status=RequestStatus.failed
+            )
             await record_daily_spend(request.user_id, -request.reserved_credits)
             await session.commit()
         finally:

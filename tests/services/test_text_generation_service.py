@@ -186,6 +186,18 @@ async def test_success_reserves_settles_and_returns_result(session, fake_redis, 
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]
 
 
+async def test_success_fills_provider_cost_usd(session, monkeypatch):
+    user = await _seed(session, _model())  # price=1 -> input/output = 1 USD за 1M токенов
+    provider = FakeProvider(result=AIResult(answer="ответ", input_tokens=500, output_tokens=200))
+    monkeypatch.setattr(tgs, "_provider", provider)
+
+    await generate_text(session, user, "cheap", "привет")
+
+    [request] = await _request_rows(session)
+    # По ФАКТУ usage (500/200), не по оценке (2000/1000): 500/1e6*1 + 200/1e6*1 = 0.0007
+    assert float(request.provider_cost_usd) == pytest.approx(0.0007)
+
+
 async def test_tier_max_caps_output_tokens(session, monkeypatch):
     user = await _seed(session, _model(code="big", tier=ModelTier.ultra), purchased=1)
     provider = FakeProvider(result=AIResult(answer="a", input_tokens=1, output_tokens=1))
@@ -206,8 +218,9 @@ async def test_provider_error_refunds_and_reraises(session, fake_redis, monkeypa
         await generate_text(session, user, "cheap", "привет")
 
     [request] = await _request_rows(session)
-    assert request.status == RequestStatus.refunded
+    assert request.status == RequestStatus.failed  # подтверждённая ошибка провайдера (Finding 2)
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0  # ничего не доставлено (Finding 1)
     assert request.error_message == "boom"
 
     fetched = await session.get(User, user.id)
@@ -229,8 +242,10 @@ async def test_settle_failure_after_successful_call_refunds_and_reraises(session
         await generate_text(session, user, "cheap", "привет")
 
     [request] = await _request_rows(session)
-    assert request.status == RequestStatus.refunded
+    # Тот же except-блок, что и у provider-ошибки -> final_status=failed (Finding 2).
+    assert request.status == RequestStatus.failed
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0  # Finding 1: ничего не доставлено
     assert request.error_message == "boom"
 
     fetched = await session.get(User, user.id)

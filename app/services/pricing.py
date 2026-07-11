@@ -62,3 +62,33 @@ def calculate_video_credits(model: AiModel, duration_seconds: int) -> int:
     else:
         raise ValueError(f"model {model.code}: cost_unit {model.cost_unit!r} не поддерживается для video")
     return max(credits, model.min_credits, VIDEO_MIN_CREDITS)
+
+
+def calculate_api_cost_usd(model: AiModel, input_tokens: int, output_tokens: int) -> float:
+    """Реальная себестоимость запроса в USD -- те же цены модели, что и в
+    calculate_text_credits (шаги 1-2 ТЗ), но без конвертации в рубли/кредиты
+    и без применения provider_fee_multiplier/margin_multiplier (это НАША
+    внутренняя себестоимость, не то, что платит пользователь)."""
+    input_cost_usd = input_tokens / 1_000_000 * float(model.input_price_usd_per_1m_tokens)
+    output_cost_usd = output_tokens / 1_000_000 * float(model.output_price_usd_per_1m_tokens)
+    return input_cost_usd + output_cost_usd
+
+
+def calculate_image_api_cost_usd(model: AiModel, quantity: int, megapixels: float) -> float:
+    """Себестоимость image-генерации в USD -- структура 1:1 с
+    calculate_image_credits, но fixed_cost_usd вместо recommended_credits."""
+    if model.cost_unit == CostUnit.image:
+        return quantity * float(model.fixed_cost_usd)
+    if model.cost_unit == CostUnit.megapixel:
+        return quantity * megapixels * float(model.fixed_cost_usd)
+    raise ValueError(f"model {model.code}: cost_unit {model.cost_unit!r} не поддерживается для image")
+
+
+def calculate_video_api_cost_usd(model: AiModel, duration_seconds: int) -> float:
+    """Себестоимость video-генерации в USD -- структура 1:1 с
+    calculate_video_credits, но fixed_cost_usd вместо recommended_credits."""
+    if model.cost_unit == CostUnit.second:
+        return duration_seconds / VIDEO_BASE_SECONDS * float(model.fixed_cost_usd)
+    if model.cost_unit == CostUnit.video:
+        return float(model.fixed_cost_usd)
+    raise ValueError(f"model {model.code}: cost_unit {model.cost_unit!r} не поддерживается для video")

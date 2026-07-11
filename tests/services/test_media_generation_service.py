@@ -160,20 +160,22 @@ EXPECTED_WEBHOOK_URL = "https://backend.example.com/api/fal/webhook?secret=whsec
 
 
 def _image_model(code="img", *, cost_unit=CostUnit.image, recommended=100,
-                 min_credits=0) -> AiModel:
+                 min_credits=0, fixed_cost_usd=0.0) -> AiModel:
     return AiModel(
         provider=ModelProvider.fal, category=ModelCategory.image, code=code,
         display_name=code, provider_model_id=f"fal-ai/{code}", tier=ModelTier.standard,
         cost_unit=cost_unit, min_credits=min_credits, recommended_credits=recommended,
+        fixed_cost_usd=fixed_cost_usd,
     )
 
 
 def _video_model(code="vid", *, cost_unit=CostUnit.second, recommended=600,
-                 min_credits=0) -> AiModel:
+                 min_credits=0, fixed_cost_usd=0.0) -> AiModel:
     return AiModel(
         provider=ModelProvider.fal, category=ModelCategory.video, code=code,
         display_name=code, provider_model_id=f"fal-ai/{code}", tier=ModelTier.premium,
         cost_unit=cost_unit, min_credits=min_credits, recommended_credits=recommended,
+        fixed_cost_usd=fixed_cost_usd,
     )
 
 
@@ -267,6 +269,41 @@ async def test_video_duration_scales_credits_and_is_passed_to_fal(session, fal):
     assert fal.video_calls[0]["duration_seconds"] == 10
 
 
+# --- provider_cost_usd (фаза 6) ---
+
+async def test_image_start_fills_provider_cost_usd(session, fal):
+    user = await _seed(session, _image_model(fixed_cost_usd=0.04))
+
+    request = await start_media_generation(session, user, "img", "a bear")
+
+    # cost_unit=image: 1 * fixed_cost_usd = 0.04, считается на reserve
+    assert float(request.provider_cost_usd) == pytest.approx(0.04)
+
+
+async def test_image_edit_does_not_multiply_provider_cost_usd(session, fal):
+    user = await _seed(session, _image_model(fixed_cost_usd=0.04))
+
+    request = await start_media_generation(
+        session, user, "img", "make it night",
+        image_url="https://cdn.example.com/in.png",
+    )
+
+    # Кредиты с edit-множителем (150), себестоимость -- без него (fal берёт столько же)
+    assert request.estimated_credits == 150
+    assert float(request.provider_cost_usd) == pytest.approx(0.04)
+
+
+async def test_video_start_fills_provider_cost_usd(session, fal):
+    user = await _seed(session, _video_model(fixed_cost_usd=0.5), balance=2000)
+
+    request = await start_media_generation(
+        session, user, "vid", "a bear runs", duration_seconds=10, confirm=True
+    )
+
+    # cost_unit=second: 10/5 * 0.5 = 1.0 (та же длительность, что и в кредитах)
+    assert float(request.provider_cost_usd) == pytest.approx(1.0)
+
+
 # --- подтверждение дорогого запроса ---
 
 async def test_expensive_image_without_confirm_raises(session, fake_redis, fal):
@@ -333,7 +370,9 @@ async def test_busy_lock_raises_request_in_progress(session, monkeypatch, fal):
 # --- ошибка submit -> refund ---
 
 async def test_submit_failure_refunds_and_releases_lock(session, fake_redis, monkeypatch):
-    user = await _seed(session, _image_model())
+    # fixed_cost_usd>0 -- provider_cost_usd проставляется на reserve (ДО submit),
+    # проверяем, что refund его зануляет (Finding 1), т.к. submit не прошёл.
+    user = await _seed(session, _image_model(fixed_cost_usd=0.04))
     broken = FakeFalClient(error=RuntimeError("fal down"))
     monkeypatch.setattr(mgs, "FalClient", broken)
 
@@ -341,8 +380,10 @@ async def test_submit_failure_refunds_and_releases_lock(session, fake_redis, mon
         await start_media_generation(session, user, "img", "a bear")
 
     [request] = await _request_rows(session)
-    assert request.status == RequestStatus.refunded
+    # Синхронная ошибка submit -- подтверждённая ошибка провайдера (Finding 2).
+    assert request.status == RequestStatus.failed
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0
     assert "fal down" in request.error_message
     fetched = await session.get(User, user.id)
     assert fetched.credits_balance == 1000  # резерв возвращён полностью
@@ -433,7 +474,7 @@ async def test_webhook_ok_extracts_video_url(session, fal):
 
 
 async def test_webhook_error_refunds_and_releases_lock(session, fake_redis, fal):
-    user = await _seed(session, _image_model())
+    user = await _seed(session, _image_model(fixed_cost_usd=0.04))
     request = await start_media_generation(session, user, "img", "a bear")
 
     await handle_fal_webhook(
@@ -441,8 +482,10 @@ async def test_webhook_error_refunds_and_releases_lock(session, fake_redis, fal)
     )
 
     await session.refresh(request)
-    assert request.status == RequestStatus.refunded
+    # fal явно сообщил об ошибке -- подтверждённый provider error (Finding 2).
+    assert request.status == RequestStatus.failed
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0  # Finding 1: ничего не доставлено
     assert request.error_message == "nsfw content"
     assert request.result_url is None
     fetched = await session.get(User, user.id)
@@ -488,7 +531,7 @@ async def test_webhook_missing_request_id_is_noop(session, fal):
 
 
 async def test_webhook_ok_without_extractable_url_refunds(session, fake_redis, fal):
-    user = await _seed(session, _image_model())
+    user = await _seed(session, _image_model(fixed_cost_usd=0.04))
     request = await start_media_generation(session, user, "img", "a bear")
 
     await handle_fal_webhook(
@@ -497,9 +540,11 @@ async def test_webhook_ok_without_extractable_url_refunds(session, fake_redis, f
     )
 
     await session.refresh(request)
-    # URL извлечь не удалось -> кредиты за недоставленный результат не списываем
-    assert request.status == RequestStatus.refunded
+    # URL извлечь не удалось -> кредиты за недоставленный результат не списываем.
+    # Малформленный success-ответ -- подтверждённая provider-side ошибка (Finding 2).
+    assert request.status == RequestStatus.failed
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0  # Finding 1: ничего не доставлено
     assert request.result_url is None
     assert request.error_message == "fal webhook: could not extract result url"
     fetched = await session.get(User, user.id)
@@ -554,16 +599,26 @@ async def _seed_reserved_request(
 
 
 async def test_refund_stale_reserved_requests_refunds_old_reserves(session, fake_redis):
-    model = _image_model()
+    # fixed_cost_usd>0 -- provider_cost_usd был проставлен на reserve; здесь
+    # проверяем, что даже для 5-го (нетронутого) call site refund_request
+    # по-прежнему зануляет provider_cost_usd (Finding 1 применяется независимо
+    # от того, какой final_status используется -- это неоднозначный случай,
+    # поэтому final_status остаётся дефолтным refunded, см. Finding 2).
+    model = _image_model(fixed_cost_usd=0.04)
     user = await _seed(session, model)
     request = await _seed_reserved_request(session, user, model, age_minutes=30)
+    request.provider_cost_usd = 0.04
+    await session.commit()
 
     count = await refund_stale_reserved_requests(session, older_than_minutes=20)
 
     assert count == 1
     await session.refresh(request)
+    # Неоднозначный случай (вебхук так и не пришёл) -- final_status остаётся
+    # дефолтным refunded, НЕ failed (5-й call site умышленно не тронут).
     assert request.status == RequestStatus.refunded
     assert request.charged_credits == 0
+    assert request.provider_cost_usd == 0
     fetched = await session.get(User, user.id)
     assert fetched.credits_balance == 1000  # резерв (100) возвращён полностью
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]

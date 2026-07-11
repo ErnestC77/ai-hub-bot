@@ -27,6 +27,18 @@ router = APIRouter(prefix="/admin", dependencies=[Depends(current_admin)])
 
 # --- stats -------------------------------------------------------------
 
+class ModelUsageOut(BaseModel):
+    model_code: str
+    requests: int
+    credits_spent: int
+    cost_usd: float
+
+
+class UserSpendOut(BaseModel):
+    telegram_id: int
+    credits_spent: int
+
+
 class StatsOut(BaseModel):
     today_new_users: int
     today_payments_count: int
@@ -34,6 +46,12 @@ class StatsOut(BaseModel):
     today_ai_requests: int
     today_api_cost_usd: float
     today_errors: int
+    today_revenue_credits: int
+    today_revenue_rub_estimated: float
+    today_margin_rub: float
+    today_avg_cost_credits: float
+    model_usage: list[ModelUsageOut]
+    top_users_by_spend: list[UserSpendOut]
     month_revenue_rub: float
     month_credits_purchases_count: int
 
@@ -49,6 +67,23 @@ async def stats(session: AsyncSession = Depends(get_db)) -> StatsOut:
         today_ai_requests=daily.ai_requests,
         today_api_cost_usd=daily.api_cost_usd,
         today_errors=daily.errors,
+        today_revenue_credits=daily.revenue_credits,
+        today_revenue_rub_estimated=daily.revenue_rub_estimated,
+        today_margin_rub=daily.margin_rub,
+        today_avg_cost_credits=daily.avg_cost_credits,
+        model_usage=[
+            ModelUsageOut(
+                model_code=m.model_code,
+                requests=m.requests,
+                credits_spent=m.credits_spent,
+                cost_usd=m.cost_usd,
+            )
+            for m in daily.model_usage
+        ],
+        top_users_by_spend=[
+            UserSpendOut(telegram_id=u.telegram_id, credits_spent=u.credits_spent)
+            for u in daily.top_users_by_spend
+        ],
         month_revenue_rub=monthly.revenue_rub,
         month_credits_purchases_count=monthly.credits_purchases_count,
     )

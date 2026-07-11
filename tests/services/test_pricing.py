@@ -4,8 +4,11 @@ from app.db.enums import CostUnit, ModelCategory, ModelProvider, ModelTier
 from app.db.models import AiModel
 from app.services.pricing import (
     PricingSettings,
+    calculate_api_cost_usd,
+    calculate_image_api_cost_usd,
     calculate_image_credits,
     calculate_text_credits,
+    calculate_video_api_cost_usd,
     calculate_video_credits,
 )
 
@@ -22,12 +25,14 @@ def _text_model(input_price: float, output_price: float, min_credits: int) -> Ai
 
 
 def _media_model(cost_unit: CostUnit, recommended: int, min_credits: int,
-                 category: ModelCategory = ModelCategory.image) -> AiModel:
+                 category: ModelCategory = ModelCategory.image,
+                 fixed_cost_usd: float = 0.0) -> AiModel:
     return AiModel(
         provider=ModelProvider.fal, category=category, code="m",
         display_name="M", provider_model_id="fal-ai/m", tier=ModelTier.standard,
         input_price_usd_per_1m_tokens=0, output_price_usd_per_1m_tokens=0,
         cost_unit=cost_unit, min_credits=min_credits, recommended_credits=recommended,
+        fixed_cost_usd=fixed_cost_usd,
     )
 
 
@@ -132,3 +137,69 @@ def test_video_rejects_non_video_cost_unit():
     model = _media_model(CostUnit.image, recommended=500, min_credits=500, category=ModelCategory.video)
     with pytest.raises(ValueError):
         calculate_video_credits(model, duration_seconds=5)
+
+
+# --- calculate_api_cost_usd (text, фаза 6) ---
+
+def test_api_cost_usd_sums_input_and_output():
+    # 2000/1e6*3 + 1000/1e6*15 = 0.006 + 0.015 = 0.021 -- шаги 1-2 ТЗ, без RUB/кредитов.
+    model = _text_model(input_price=3.0, output_price=15.0, min_credits=5)
+    assert calculate_api_cost_usd(model, 2000, 1000) == pytest.approx(0.021)
+
+
+def test_api_cost_usd_zero_tokens_is_zero():
+    model = _text_model(input_price=3.0, output_price=15.0, min_credits=5)
+    assert calculate_api_cost_usd(model, 0, 0) == 0.0
+
+
+def test_api_cost_usd_ignores_min_credits_and_multipliers():
+    # min_credits=50 НЕ влияет: это НАША себестоимость, не цена пользователя.
+    model = _text_model(input_price=0.1, output_price=0.0, min_credits=50)
+    assert calculate_api_cost_usd(model, 100, 0) == pytest.approx(0.00001)
+
+
+# --- calculate_image_api_cost_usd (фаза 6) ---
+
+def test_image_api_cost_unit_image_multiplies_quantity():
+    model = _media_model(CostUnit.image, recommended=75, min_credits=75, fixed_cost_usd=0.04)
+    assert calculate_image_api_cost_usd(model, quantity=2, megapixels=1.0) == pytest.approx(0.08)
+
+
+def test_image_api_cost_unit_megapixel_scales_without_ceil():
+    # 1 * 1.25 MP * 0.05 = 0.0625 -- себестоимость не округляется (в отличие от кредитов).
+    model = _media_model(CostUnit.megapixel, recommended=50, min_credits=50, fixed_cost_usd=0.05)
+    assert calculate_image_api_cost_usd(model, quantity=1, megapixels=1.25) == pytest.approx(0.0625)
+
+
+def test_image_api_cost_ignores_min_credits():
+    # min_credits-пол существует только для кредитов, не для USD-себестоимости.
+    model = _media_model(CostUnit.megapixel, recommended=50, min_credits=50, fixed_cost_usd=0.05)
+    assert calculate_image_api_cost_usd(model, quantity=1, megapixels=0.5) == pytest.approx(0.025)
+
+
+def test_image_api_cost_rejects_non_image_cost_unit():
+    model = _media_model(CostUnit.tokens, recommended=50, min_credits=50, fixed_cost_usd=0.05)
+    with pytest.raises(ValueError):
+        calculate_image_api_cost_usd(model, quantity=1, megapixels=1.0)
+
+
+# --- calculate_video_api_cost_usd (фаза 6) ---
+
+def test_video_api_cost_unit_second_scales_by_duration():
+    # 7/5 * 0.5 = 0.7 -- fixed_cost_usd задан "за VIDEO_BASE_SECONDS", как recommended_credits.
+    model = _media_model(CostUnit.second, recommended=600, min_credits=600,
+                         category=ModelCategory.video, fixed_cost_usd=0.5)
+    assert calculate_video_api_cost_usd(model, duration_seconds=7) == pytest.approx(0.7)
+
+
+def test_video_api_cost_unit_video_is_flat():
+    model = _media_model(CostUnit.video, recommended=500, min_credits=500,
+                         category=ModelCategory.video, fixed_cost_usd=1.2)
+    assert calculate_video_api_cost_usd(model, duration_seconds=30) == pytest.approx(1.2)
+
+
+def test_video_api_cost_rejects_non_video_cost_unit():
+    model = _media_model(CostUnit.image, recommended=500, min_credits=500,
+                         category=ModelCategory.video, fixed_cost_usd=1.2)
+    with pytest.raises(ValueError):
+        calculate_video_api_cost_usd(model, duration_seconds=5)

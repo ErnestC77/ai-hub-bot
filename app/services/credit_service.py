@@ -130,10 +130,19 @@ async def settle_request(
 
 
 async def refund_request(
-    session: AsyncSession, request: AIRequest, *, reason: str
+    session: AsyncSession,
+    request: AIRequest,
+    *,
+    reason: str,
+    final_status: RequestStatus = RequestStatus.refunded,
 ) -> CreditTransaction:
     """Полный возврат при ошибке провайдера: reserved_credits, либо
-    charged_credits, если запрос уже был рассчитан (settle)."""
+    charged_credits, если запрос уже был рассчитан (settle).
+
+    final_status -- каким статусом закрыть запрос: RequestStatus.refunded
+    (по умолчанию, для неоднозначных случаев вроде "вебхук так и не пришёл")
+    или RequestStatus.failed (подтверждённая ошибка на стороне провайдера) --
+    выбор делает вызывающий код, см. call sites в text_/media_generation_service.py."""
     if request.status not in (RequestStatus.reserved, RequestStatus.completed):
         raise ValueError(f"cannot refund request {request.id} with status {request.status}")
 
@@ -158,8 +167,17 @@ async def refund_request(
         description=reason,
     )
     session.add(tx)
-    request.status = RequestStatus.refunded
+    request.status = final_status
     request.charged_credits = 0  # итоговое списание по запросу -- ноль
+    if not already_settled:
+        # reserved -> refunded/failed: ничего не было реально доставлено,
+        # поэтому и реальной стоимости у провайдера не возникло -- зануляем
+        # provider_cost_usd (для media он проставляется заранее, в момент
+        # reserve, ДО вызова провайдера). Это выравнивает семантику "cost"
+        # с текстовым flow, где provider_cost_usd и так остаётся 0 при ошибке
+        # (там он проставляется только на success-пути, перед settle_request).
+        # completed -> refunded ветку НЕ трогаем: там расход был реальным.
+        request.provider_cost_usd = 0
     await session.flush()
     return tx
 
