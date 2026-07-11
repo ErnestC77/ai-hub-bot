@@ -10,6 +10,7 @@ import { api, type BannerOut } from "@/api/client";
 import HeroCarousel from "@/components/HeroCarousel";
 import ImageStack from "@/components/ImageStack";
 import { useMe } from "@/context/MeContext";
+import CreditPurchaseSheet from "@/components/account/CreditPurchaseSheet";
 
 const GENERATE_IMAGE_STACK = [
   "https://picsum.photos/seed/ai-hub-generate-1/300/400",
@@ -21,6 +22,7 @@ export default function Home() {
   const { me, loading } = useMe();
   const router = useRouter();
   const [banners, setBanners] = useState<BannerOut[] | null>(null);
+  const [buyingCredits, setBuyingCredits] = useState(false);
 
   useEffect(() => {
     api.banners().then(setBanners).catch(() => setBanners([]));
@@ -61,7 +63,7 @@ export default function Home() {
       </div>
 
       <div className="flex flex-wrap gap-2.5 px-4">
-        <Button size="s" mode="bezeled" onClick={() => router.push("/tariffs")}>
+        <Button size="s" mode="bezeled" onClick={() => setBuyingCredits(true)}>
           💳 Тарифы
         </Button>
         <Button size="s" mode="bezeled" onClick={() => router.push("/referral")}>
@@ -73,6 +75,8 @@ export default function Home() {
           </Button>
         )}
       </div>
+
+      {buyingCredits && <CreditPurchaseSheet onClose={() => setBuyingCredits(false)} />}
     </div>
   );
 }
