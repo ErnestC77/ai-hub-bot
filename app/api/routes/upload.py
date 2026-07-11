@@ -24,8 +24,18 @@ async def upload_image(file: UploadFile) -> UploadResponse:
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=422, detail="Поддерживаются только JPEG/PNG/WEBP")
 
+    # Проверяем размер ДО чтения тела в память: Content-Type клиент
+    # контролирует сам, поэтому большой файл с валидным Content-Type мог бы
+    # быть целиком прочитан в RAM раньше проверки лимита (DoS). Starlette
+    # заполняет file.size из Content-Length/размера multipart-части, когда
+    # он известен -- если None, полагаемся на пост-чтение проверку ниже.
+    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Файл больше 30 МБ")
+
     # Чтение целиком в память приемлемо при лимите 30 МБ (спека) --
-    # стриминговая проверка для этого объёма не нужна.
+    # стриминговая проверка для этого объёма не нужна. Проверка выше уже
+    # отсекает большинство случаев до чтения; эта -- запасной вариант на
+    # случай, если file.size недоступен или ненадёжен.
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Файл больше 30 МБ")

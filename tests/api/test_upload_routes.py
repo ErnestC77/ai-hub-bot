@@ -6,6 +6,7 @@ os.environ.setdefault("BOT_TOKEN", "123456:TEST-token")
 # tests/api/test_chat_routes.py.
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test")
 
+import fastapi
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -76,6 +77,28 @@ async def test_upload_image_generates_unique_filenames(client):
 
 async def test_upload_image_rejects_oversized_file_with_413(client):
     big = b"x" * (30 * 1024 * 1024 + 1)  # ровно на байт больше лимита PhotoUploadBox
+    response = await client.post(
+        "/api/upload/image", files={"file": ("big.png", big, "image/png")},
+    )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Файл больше 30 МБ"
+
+
+async def test_upload_image_rejects_oversized_file_before_reading_body(client, monkeypatch):
+    # Пин финального ревью: раньше лимит проверялся ПОСЛЕ await file.read(),
+    # т.е. весь body уже материализовался в память как bytes -- при
+    # клиент-контролируемом Content-Type это давало DoS на многогигабайтных
+    # телах. Теперь file.size (заполняется Starlette из multipart-заголовков
+    # ДО вызова route-хендлера) проверяется первым, и 413 должен вернуться,
+    # даже не вызвав file.read(). Патчим read() так, чтобы он падал --
+    # если бы старый путь (read-then-check) всё ещё существовал, тест упал
+    # бы с AssertionError вместо 413.
+    async def _read_should_not_be_called(self, size=-1):
+        raise AssertionError("file.read() не должен вызываться: file.size уже больше лимита")
+
+    monkeypatch.setattr(fastapi.UploadFile, "read", _read_should_not_be_called)
+
+    big = b"x" * (30 * 1024 * 1024 + 1)
     response = await client.post(
         "/api/upload/image", files={"file": ("big.png", big, "image/png")},
     )
