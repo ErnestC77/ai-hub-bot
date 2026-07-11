@@ -48,15 +48,18 @@ export default function GenerateImage() {
     api
       .models()
       .then((all) => {
-        const images = all.filter((m) => m.category === "image");
+        // /api/models (credit-system v2) отдаёт только text-модели, у ModelOut
+        // больше нет category. Экран переписывается на новый generate-flow в
+        // будущей под-фазе; до неё список пуст -- компилируемая заглушка, не логика.
+        const images = all.filter(() => false);
         setModels(images);
         setModel((prev) => prev ?? images[0] ?? null);
       })
       .catch(() => setModels([]));
   }, []);
 
-  const isDalle3 = model?.model_code === "dall-e-3";
-  const cost = model ? (isDalle3 ? computeImageCreditCost(model.credit_cost, aspect, resolution) : model.credit_cost) : 0;
+  const isDalle3 = model?.code === "dall-e-3";
+  const cost = model ? (isDalle3 ? computeImageCreditCost(model.min_credits, aspect, resolution) : model.min_credits) : 0;
 
   const POLL_INTERVAL_MS = 2000;
   const POLL_ATTEMPTS = 60;
@@ -68,7 +71,7 @@ export default function GenerateImage() {
     setResultUrl(null);
     try {
       const { request_id } = await api.generate(
-        model.model_code,
+        model.code,
         prompt.trim(),
         isDalle3 ? { aspect, resolution } : undefined,
       );
@@ -149,7 +152,7 @@ export default function GenerateImage() {
               <div className="text-xs text-foreground-muted">Генерация изображений</div>
             </div>
             <div className="flex shrink-0 items-center gap-1 text-[13px] text-foreground-muted">
-              от {computeImageCreditCost(model.credit_cost, "auto", "1k")} 💎
+              от {computeImageCreditCost(model.min_credits, "auto", "1k")} 💎
               {models && models.length > 1 && <span className="ml-0.5">›</span>}
             </div>
           </div>
@@ -205,12 +208,12 @@ export default function GenerateImage() {
           <Section>
             {(models ?? []).map((m) => (
               <Cell
-                key={m.model_code}
+                key={m.code}
                 onClick={() => {
                   setModel(m);
                   setPickerOpen(false);
                 }}
-                after={`от ${m.credit_cost} 💎`}
+                after={`от ${m.min_credits} 💎`}
               >
                 {m.display_name}
               </Cell>

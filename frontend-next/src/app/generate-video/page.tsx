@@ -29,7 +29,10 @@ export default function GenerateVideo() {
     api
       .models()
       .then((all) => {
-        const videos = all.filter((m) => m.category === "video");
+        // /api/models (credit-system v2) отдаёт только text-модели, у ModelOut
+        // больше нет category. Экран переписывается на новый generate-flow в
+        // будущей под-фазе; до неё список пуст -- компилируемая заглушка, не логика.
+        const videos = all.filter(() => false);
         setModels(videos);
         setModel((prev) => prev ?? videos[0] ?? null);
       })
@@ -42,7 +45,7 @@ export default function GenerateVideo() {
     setError("");
     setResultUrl(null);
     try {
-      const { request_id } = await api.generate(model.model_code, prompt.trim());
+      const { request_id } = await api.generate(model.code, prompt.trim());
       const pollAttempts = Math.max(60, 20 * 15); // generous ceiling; video can take minutes
 
       for (let i = 0; i < pollAttempts; i++) {
@@ -90,7 +93,7 @@ export default function GenerateVideo() {
           />
         </div>
 
-        <Cell subtitle={model ? `${model.credit_cost} кредитов` : undefined} onClick={() => setPickerOpen(true)}>
+        <Cell subtitle={model ? `${model.min_credits} кредитов` : undefined} onClick={() => setPickerOpen(true)}>
           {model ? model.display_name : "Выберите модель"}
         </Cell>
 
@@ -113,8 +116,8 @@ export default function GenerateVideo() {
               {models === null && <Cell before={<Spinner size="s" />}>Загрузка…</Cell>}
               {models?.map((m) => (
                 <Cell
-                  key={m.model_code}
-                  subtitle={`${m.credit_cost} кредитов`}
+                  key={m.code}
+                  subtitle={`${m.min_credits} кредитов`}
                   onClick={() => {
                     setModel(m);
                     setPickerOpen(false);
