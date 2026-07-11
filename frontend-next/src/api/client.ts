@@ -11,6 +11,15 @@ export class ApiError extends Error {
   }
 }
 
+export class ConfirmationRequiredError extends Error {
+  estimatedCredits: number;
+
+  constructor(estimatedCredits: number) {
+    super(`confirmation required: ${estimatedCredits} credits`);
+    this.estimatedCredits = estimatedCredits;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -22,8 +31,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    const detail = await res.json().catch(() => ({}) as { detail?: string });
-    throw new ApiError(res.status, detail.detail ?? res.statusText);
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.status === 409 && typeof body.estimated_credits === "number") {
+      // Confirmation-gate POST /api/chat (и будущего /api/generate): тело ровно
+      // {"estimated_credits": N} БЕЗ ключа "detail" -- в отличие от 409
+      // RequestInProgressError, у которого detail есть и который идёт ниже
+      // обычным ApiError-путём.
+      throw new ConfirmationRequiredError(body.estimated_credits);
+    }
+    throw new ApiError(res.status, typeof body.detail === "string" ? body.detail : res.statusText);
   }
 
   return res.json() as Promise<T>;
@@ -43,17 +59,17 @@ export interface MeOut {
 }
 
 export interface ModelOut {
-  model_code: string;
+  code: string;
   display_name: string;
-  category: ModelCategory;
-  is_premium: boolean;
-  credit_cost: number;
+  tier: "economy" | "standard" | "premium" | "pro" | "ultra";
+  min_credits: number;
+  recommended_credits: number;
 }
 
 export interface ChatResponse {
   answer: string;
-  input_tokens: number;
-  output_tokens: number;
+  charged_credits: number;
+  balance_after: number;
 }
 
 export type ImageAspect =
@@ -138,10 +154,10 @@ export interface CreditPackageOut {
 export const api = {
   me: () => request<MeOut>("/api/me"),
   models: () => request<ModelOut[]>("/api/models"),
-  chat: (modelCode: string, prompt: string) =>
+  chat: (modelCode: string, prompt: string, confirm = false) =>
     request<ChatResponse>("/api/chat", {
       method: "POST",
-      body: JSON.stringify({ model_code: modelCode, prompt }),
+      body: JSON.stringify({ model_code: modelCode, prompt, confirm }),
     }),
   tools: () => request<ToolOut[]>("/api/tools"),
   generate: (modelCode: string, prompt: string, extra?: Record<string, unknown>, creditCostOverride?: number) =>
