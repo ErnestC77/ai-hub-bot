@@ -5,8 +5,9 @@ from aiogram.types import MenuButtonWebApp, Update, WebAppInfo
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import admin, banners, chat, generate, me, payments, referral, tools
+from app.api.routes import admin, banners, chat, generate, me, payments, referral, tools, upload
 from app.bot.instance import bot
 from app.bot.setup import create_dispatcher
 from app.config import settings
@@ -72,6 +73,8 @@ app.include_router(referral.router, prefix="/api")
 app.include_router(payments.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(generate.router, prefix="/api")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.include_router(upload.router, prefix="/api")
 app.include_router(yookassa_webhook.router)
 app.include_router(fal_webhook.router)
 
