@@ -93,20 +93,6 @@ export interface ReferralOut {
   bonus_count: number;
 }
 
-export interface TariffOut {
-  code: string;
-  name: string;
-  description: string | null;
-  price_rub: number;
-  price_stars: number;
-  period_days: number;
-  fast_limit: number;
-  medium_limit: number;
-  premium_limit: number;
-  image_limit: number;
-  is_current: boolean;
-}
-
 export interface CreatePaymentResponse {
   payment_id: number;
   invoice_link?: string | null;
@@ -178,17 +164,6 @@ export const api = {
   },
   banners: () => request<BannerOut[]>("/api/banners"),
   referral: () => request<ReferralOut>("/api/referral/me"),
-  tariffs: () => request<TariffOut[]>("/api/tariffs"),
-  createStarsPayment: (tariffCode: string) =>
-    request<CreatePaymentResponse>("/api/payments/stars/create", {
-      method: "POST",
-      body: JSON.stringify({ tariff_code: tariffCode }),
-    }),
-  createYookassaPayment: (tariffCode: string) =>
-    request<CreatePaymentResponse>("/api/payments/yookassa/create", {
-      method: "POST",
-      body: JSON.stringify({ tariff_code: tariffCode }),
-    }),
   paymentStatus: (paymentId: number) => request<PaymentStatusOut>(`/api/payments/${paymentId}/status`),
   creditPackages: () => request<CreditPackageOut[]>("/api/credits/packages"),
   createStarsCreditPayment: (packageCode: string) =>
