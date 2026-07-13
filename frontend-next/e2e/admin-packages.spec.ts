@@ -6,9 +6,9 @@ test.beforeEach(async ({ page }) => {
   await mockTelegramWebApp(page, process.env.TEST_BOT_TOKEN ?? "test-token", adminId);
 });
 
-test("admin tariffs tab renders the tariffs section", async ({ page }) => {
+test("admin packages tab renders the packages section", async ({ page }) => {
   await page.goto("/admin");
-  await expect(page.getByText("Тарифы")).toHaveCount(1); // only the tab label
-  await page.getByRole("button", { name: "Тарифы" }).click();
-  await expect(page.getByText("Тарифы")).toHaveCount(2); // tab label + Section header
+  await expect(page.getByText("Пакеты")).toHaveCount(1); // only the tab label
+  await page.getByRole("button", { name: "Пакеты" }).click();
+  await expect(page.getByText("Пакеты")).toHaveCount(2); // tab label + Section header
 });
