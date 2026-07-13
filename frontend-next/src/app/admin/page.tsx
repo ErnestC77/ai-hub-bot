@@ -9,7 +9,6 @@ import AdminBanners from "@/screens/admin/AdminBanners";
 import AdminModels from "@/screens/admin/AdminModels";
 import AdminPayments from "@/screens/admin/AdminPayments";
 import AdminStats from "@/screens/admin/AdminStats";
-import AdminTariffs from "@/screens/admin/AdminTariffs";
 import AdminUsers from "@/screens/admin/AdminUsers";
 
 const TABS = [
@@ -17,7 +16,6 @@ const TABS = [
   { key: "users", label: "Пользователи" },
   { key: "payments", label: "Платежи" },
   { key: "models", label: "Модели" },
-  { key: "tariffs", label: "Тарифы" },
   { key: "banners", label: "Карусель" },
 ] as const;
 
@@ -48,7 +46,6 @@ export default function AdminPanel() {
       {tab === "users" && <AdminUsers />}
       {tab === "payments" && <AdminPayments />}
       {tab === "models" && <AdminModels />}
-      {tab === "tariffs" && <AdminTariffs />}
       {tab === "banners" && <AdminBanners />}
     </div>
   );

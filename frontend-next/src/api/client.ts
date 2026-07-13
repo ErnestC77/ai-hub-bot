@@ -222,19 +222,6 @@ export interface AdminModelOut {
   is_premium: boolean;
 }
 
-export interface AdminTariffOut {
-  code: string;
-  name: string;
-  price_rub: number;
-  price_stars: number;
-  fast_limit: number;
-  medium_limit: number;
-  premium_limit: number;
-  image_limit: number;
-  daily_limit: number;
-  is_active: boolean;
-}
-
 export interface AdminBannerOut {
   id: number;
   title: string;
@@ -249,6 +236,23 @@ export interface AdminBannerOut {
 }
 
 export type BannerWriteFields = Omit<AdminBannerOut, "id">;
+
+export interface AdminPackageOut {
+  code: string;
+  title: string;
+  credits: number;
+  price_rub: number;
+  price_stars: number;
+  description: string | null;
+  is_active: boolean;
+}
+
+export interface AdminSettingOut {
+  key: string;
+  value: string;
+  type: "int" | "float" | "bool" | "str";
+  description: string | null;
+}
 
 export const adminApi = {
   stats: () => request<AdminStatsOut>("/api/admin/stats"),
@@ -283,9 +287,12 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ credit_cost: creditCost }),
     }),
-  tariffsAdmin: () => request<AdminTariffOut[]>("/api/admin/tariffs"),
-  updateTariff: (code: string, patch: Partial<AdminTariffOut>) =>
-    request<AdminTariffOut>(`/api/admin/tariffs/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  packages: () => request<AdminPackageOut[]>("/api/admin/packages"),
+  updatePackage: (code: string, patch: Partial<Pick<AdminPackageOut, "credits" | "price_rub" | "price_stars" | "is_active">>) =>
+    request<AdminPackageOut>(`/api/admin/packages/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  settings: () => request<AdminSettingOut[]>("/api/admin/settings"),
+  updateSetting: (key: string, value: string) =>
+    request<AdminSettingOut>(`/api/admin/settings/${key}`, { method: "PATCH", body: JSON.stringify({ value }) }),
   banners: () => request<AdminBannerOut[]>("/api/admin/banners"),
   createBanner: (body: BannerWriteFields) =>
     request<AdminBannerOut>("/api/admin/banners", { method: "POST", body: JSON.stringify(body) }),
