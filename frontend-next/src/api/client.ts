@@ -197,9 +197,22 @@ export interface AdminUserOut {
   first_name: string | null;
   is_admin: boolean;
   is_blocked: boolean;
-  tariff_code: string | null;
-  subscription_expires_at: string | null;
   credits_balance: number;
+  total_credits_purchased: number;
+  total_credits_spent: number;
+}
+
+export interface AdminTransactionOut {
+  id: number;
+  type: "purchase" | "spend" | "refund" | "reserve" | "release" | "admin_adjustment";
+  amount: number;
+  balance_before: number;
+  balance_after: number;
+  provider: string | null;
+  model_code: string | null;
+  request_id: number | null;
+  description: string | null;
+  created_at: string;
 }
 
 export interface AdminPaymentOut {
@@ -262,18 +275,13 @@ export const adminApi = {
     request<AdminUserOut>(`/api/admin/users/${telegramId}/block`, { method: "POST" }),
   unblockUser: (telegramId: number) =>
     request<AdminUserOut>(`/api/admin/users/${telegramId}/unblock`, { method: "POST" }),
-  grantSubscription: (telegramId: number, tariffCode: string) =>
-    request<AdminUserOut>(`/api/admin/users/${telegramId}/grant`, {
+  adjustCredits: (telegramId: number, amount: number, reason?: string) =>
+    request<AdminUserOut>(`/api/admin/users/${telegramId}/credits`, {
       method: "POST",
-      body: JSON.stringify({ tariff_code: tariffCode }),
+      body: JSON.stringify({ amount, reason }),
     }),
-  cancelSubscription: (telegramId: number) =>
-    request<AdminUserOut>(`/api/admin/users/${telegramId}/cancel-subscription`, { method: "POST" }),
-  grantCredits: (telegramId: number, amount: number) =>
-    request<AdminUserOut>(`/api/admin/users/${telegramId}/grant-credits`, {
-      method: "POST",
-      body: JSON.stringify({ amount }),
-    }),
+  userTransactions: (telegramId: number) =>
+    request<AdminTransactionOut[]>(`/api/admin/users/${telegramId}/transactions`),
   payments: () => request<AdminPaymentOut[]>("/api/admin/payments"),
   refundPayment: (id: number) => request<AdminPaymentOut>(`/api/admin/payments/${id}/refund`, { method: "POST" }),
   models: () => request<AdminModelOut[]>("/api/admin/models"),
