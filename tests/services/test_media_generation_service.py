@@ -920,6 +920,7 @@ async def test_reconcile_refund_decrements_daily_spend(session, fake_redis):
     count = await refund_stale_reserved_requests(session, older_than_minutes=20)
 
     assert count == 1
+    assert fake_redis.store[afs._daily_spend_key(user.id)] == "0"
 
 
 async def test_worker_rejection_body_refunds_credits(session, fal, fake_redis):
@@ -962,4 +963,3 @@ async def test_worker_validation_error_body_refunds_credits(session, fal, fake_r
 
     assert (await session.get(User, user.id)).credits_balance == 1000
     assert await _tx_types(session) == [CreditTxType.reserve, CreditTxType.refund]
-    assert fake_redis.store[afs._daily_spend_key(user.id)] == "0"
