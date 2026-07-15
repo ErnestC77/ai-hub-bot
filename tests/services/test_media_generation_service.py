@@ -111,9 +111,18 @@ class FakeFalClient:
     async def submit_image(self, model, prompt, *, image_url=None, webhook_url):
         if self.error is not None:
             raise self.error
+        # Зеркалит выбор маршрута в реальном FalClient.submit_image
+        # (app/services/ai/fal_client.py, Fix 1): при наличии image_url --
+        # provider_model_id_edit, если он задан, иначе всегда provider_model_id.
+        endpoint = (
+            (model.provider_model_id_edit or model.provider_model_id)
+            if image_url is not None
+            else model.provider_model_id
+        )
         self.image_calls.append({
             "model": model.code, "prompt": prompt,
             "image_url": image_url, "webhook_url": webhook_url,
+            "endpoint": endpoint,
         })
         return self.request_id
 
@@ -160,12 +169,12 @@ EXPECTED_WEBHOOK_URL = "https://backend.example.com/api/fal/webhook?secret=whsec
 
 
 def _image_model(code="img", *, cost_unit=CostUnit.image, recommended=100,
-                 min_credits=0, fixed_cost_usd=0.0) -> AiModel:
+                 min_credits=0, fixed_cost_usd=0.0, provider_model_id_edit=None) -> AiModel:
     return AiModel(
         provider=ModelProvider.fal, category=ModelCategory.image, code=code,
         display_name=code, provider_model_id=f"fal-ai/{code}", tier=ModelTier.standard,
         cost_unit=cost_unit, min_credits=min_credits, recommended_credits=recommended,
-        fixed_cost_usd=fixed_cost_usd,
+        fixed_cost_usd=fixed_cost_usd, provider_model_id_edit=provider_model_id_edit,
     )
 
 
@@ -226,6 +235,7 @@ async def test_image_success_reserves_and_submits(session, fake_redis, fal):
     assert fal.image_calls == [{
         "model": "img", "prompt": "a bear",
         "image_url": None, "webhook_url": EXPECTED_WEBHOOK_URL,
+        "endpoint": "fal-ai/img",
     }]
     fetched = await session.get(User, user.id)
     assert fetched.credits_balance == 900
@@ -244,6 +254,44 @@ async def test_image_edit_multiplier_applied_when_image_url_given(session, fal):
     # calculate_image_credits(..., is_edit=True): max(ceil(100 * 1.5), 100) = 150
     assert request.estimated_credits == 150
     assert fal.image_calls[0]["image_url"] == "https://cdn.example.com/in.png"
+
+
+# --- Fix 1: маршрут i2i/t2i выбирается по provider_model_id_edit ---
+# Регрессия: до фикса submit_image всегда слал provider_model_id, даже когда
+# у модели был отдельный i2i-маршрут (flux_kontext_pro/nano_banana) -- пользователь
+# платил edit-наценку (x1.5), но фактически получал t2i-результат по прежнему PN.
+
+async def test_image_url_with_edit_endpoint_set_uses_edit_route(session, fal):
+    model = _image_model(code="kontext", provider_model_id_edit="fal-ai/kontext/edit")
+    user = await _seed(session, model)
+
+    await start_media_generation(
+        session, user, "kontext", "make it night",
+        image_url="https://cdn.example.com/in.png",
+    )
+
+    assert fal.image_calls[0]["endpoint"] == "fal-ai/kontext/edit"
+
+
+async def test_image_url_without_edit_endpoint_falls_back_to_provider_model_id(session, fal):
+    user = await _seed(session, _image_model(code="img"))  # provider_model_id_edit не задан
+
+    await start_media_generation(
+        session, user, "img", "make it night",
+        image_url="https://cdn.example.com/in.png",
+    )
+
+    assert fal.image_calls[0]["endpoint"] == "fal-ai/img"
+
+
+async def test_no_image_url_always_uses_provider_model_id_even_with_edit_route(session, fal):
+    model = _image_model(code="kontext", provider_model_id_edit="fal-ai/kontext/edit")
+    user = await _seed(session, model)
+
+    await start_media_generation(session, user, "kontext", "a bear")
+
+    assert fal.image_calls[0]["endpoint"] == "fal-ai/kontext"
+    assert fal.image_calls[0]["image_url"] is None
 
 
 async def test_video_uses_default_duration_of_five_seconds(session, fal):

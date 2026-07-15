@@ -94,7 +94,7 @@ AI_MODELS = [
          provider_model_id="anthropic/claude-3-opus",  # PLACEHOLDER
          min_credits=70, recommended_credits=90, sort_order=120,
          fallback_model_code="claude_sonnet"),
-    # --- IMAGE (fal.ai), 4 модели из ТЗ ---
+    # --- IMAGE (fal.ai), 4 модели ---
     dict(**_MEDIA, category=ModelCategory.image, code="qwen_image", display_name="Qwen Image",
          tier=ModelTier.economy, cost_unit=CostUnit.megapixel,
          provider_model_id="fal-ai/qwen-image",
@@ -116,7 +116,7 @@ AI_MODELS = [
          provider_model_id="fal-ai/nano-banana",
          provider_model_id_edit="fal-ai/nano-banana/edit",
          min_credits=100, recommended_credits=100, sort_order=160),
-    # --- VIDEO (fal.ai), 4 модели из ТЗ (recommended_credits -- цена за 5 секунд) ---
+    # --- VIDEO (fal.ai), 4 модели (recommended_credits -- цена за дефолтную комбинацию модели) ---
     dict(**_MEDIA, category=ModelCategory.video, code="ovi_video", display_name="Ovi Video",
          tier=ModelTier.economy, cost_unit=CostUnit.video,
          provider_model_id="fal-ai/ovi",

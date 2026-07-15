@@ -39,7 +39,7 @@ _FIXES = [
 
 # Прежние значения -- для downgrade.
 _ROLLBACK = [
-    ("seedream", "fal-ai/bytedance/seedream/v3/text-to-image", None, None),
+    ("seedream", "fal-ai/bytedance/seedream/v3", None, None),
     ("flux_kontext_pro", "fal-ai/flux-pro/kontext", None, None),
     ("wan_video", "fal-ai/wan/v2.2", 600, 600),
     ("kling_video", "fal-ai/kling-video/v2", 850, 850),

@@ -223,7 +223,6 @@ def test_migration_values_match_seed_constants():
     """Миграция чинит существующие строки, сид -- чистую БД. Если они разъедутся,
     прод и тесты будут жить в разных каталогах. Здесь ловим расхождение.
     """
-    import re
     from pathlib import Path
 
     path = Path("alembic/versions/a1b2c3d4e5f6_fix_fal_catalog_endpoints_and_prices.py")
