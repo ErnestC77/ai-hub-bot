@@ -109,10 +109,12 @@ AI_MODELS = [
     dict(**_MEDIA, category=ModelCategory.image, code="flux_kontext_pro", display_name="Flux Kontext Pro",
          tier=ModelTier.premium, cost_unit=CostUnit.image,
          provider_model_id="fal-ai/flux-pro/kontext/text-to-image",
+         provider_model_id_edit="fal-ai/flux-pro/kontext",
          min_credits=100, recommended_credits=100, sort_order=150),
     dict(**_MEDIA, category=ModelCategory.image, code="nano_banana", display_name="Nano Banana",
          tier=ModelTier.premium, cost_unit=CostUnit.image,
          provider_model_id="fal-ai/nano-banana",
+         provider_model_id_edit="fal-ai/nano-banana/edit",
          min_credits=100, recommended_credits=100, sort_order=160),
     # --- VIDEO (fal.ai), 4 модели из ТЗ (recommended_credits -- цена за 5 секунд) ---
     dict(**_MEDIA, category=ModelCategory.video, code="ovi_video", display_name="Ovi Video",

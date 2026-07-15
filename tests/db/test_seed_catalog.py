@@ -194,6 +194,31 @@ def test_no_deprecated_fal_endpoints():
     assert not any(i == "fal-ai/veo3" for i in ids)
 
 
+def test_edit_endpoints_for_image_models_that_have_them():
+    """У flux-pro/kontext и nano-banana t2i и i2i -- разные маршруты fal.
+    Голый fal-ai/flux-pro/kontext требует image_url (required по схеме),
+    поэтому как t2i он падает; а /text-to-image не принимает image_url.
+    """
+    by_code = {m["code"]: m for m in AI_MODELS}
+    assert by_code["flux_kontext_pro"]["provider_model_id_edit"] == "fal-ai/flux-pro/kontext"
+    assert by_code["nano_banana"]["provider_model_id_edit"] == "fal-ai/nano-banana/edit"
+    # у остальных развилки нет
+    assert by_code["qwen_image"].get("provider_model_id_edit") is None
+    assert by_code["seedream"].get("provider_model_id_edit") is None
+
+
+async def test_edit_column_roundtrips_through_orm(session):
+    await apply_seed(session)
+    row = (
+        await session.execute(select(AiModel).where(AiModel.code == "flux_kontext_pro"))
+    ).scalar_one()
+    assert row.provider_model_id_edit == "fal-ai/flux-pro/kontext"
+    qwen = (
+        await session.execute(select(AiModel).where(AiModel.code == "qwen_image"))
+    ).scalar_one()
+    assert qwen.provider_model_id_edit is None
+
+
 def test_migration_values_match_seed_constants():
     """Миграция чинит существующие строки, сид -- чистую БД. Если они разъедутся,
     прод и тесты будут жить в разных каталогах. Здесь ловим расхождение.
