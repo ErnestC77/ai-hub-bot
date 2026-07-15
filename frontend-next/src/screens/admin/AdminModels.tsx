@@ -18,14 +18,19 @@ export default function AdminModels() {
     adminApi.models().then(setModels).catch(() => setModels([]));
   }, []);
 
-  async function toggle(modelCode: string, isActive: boolean) {
-    const updated = await adminApi.toggleModel(modelCode, isActive);
-    setModels((prev) => prev?.map((m) => (m.model_code === modelCode ? updated : m)) ?? null);
+  function applyUpdate(updated: AdminModelOut) {
+    setModels((prev) => prev?.map((m) => (m.code === updated.code ? updated : m)) ?? null);
   }
 
-  async function updateCreditCost(modelCode: string, creditCost: number) {
-    const updated = await adminApi.updateModelCreditCost(modelCode, creditCost);
-    setModels((prev) => prev?.map((m) => (m.model_code === modelCode ? updated : m)) ?? null);
+  async function updateField(
+    code: string,
+    patch: Partial<Pick<AdminModelOut, "min_credits" | "recommended_credits" | "sort_order">>,
+  ) {
+    applyUpdate(await adminApi.updateModel(code, patch));
+  }
+
+  async function toggle(code: string, field: "is_active" | "is_visible", value: boolean) {
+    applyUpdate(await adminApi.updateModel(code, { [field]: value }));
   }
 
   if (models === null) {
@@ -41,23 +46,57 @@ export default function AdminModels() {
       <Section header="Модели">
         {models.map((m) => (
           <Cell
-            key={m.model_code}
+            key={m.code}
             multiline
-            subtitle={`${m.provider} · ${m.category}${m.is_premium ? " · premium" : ""}`}
-            after={<Switch checked={m.is_active} onChange={(e) => toggle(m.model_code, e.target.checked)} />}
+            subtitle={`${m.provider} · ${m.category} · ${m.tier}`}
+            after={
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-foreground-muted">Активна</span>
+                  <Switch checked={m.is_active} onChange={(e) => toggle(m.code, "is_active", e.target.checked)} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-foreground-muted">Видима</span>
+                  <Switch checked={m.is_visible} onChange={(e) => toggle(m.code, "is_visible", e.target.checked)} />
+                </div>
+              </div>
+            }
           >
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-1.5">
               <span>{m.display_name}</span>
-              <Input
-                type="number"
-                header="Кредитов"
-                className="w-[70px]"
-                defaultValue={m.credit_cost}
-                onBlur={(e) => {
-                  const value = Number(e.target.value);
-                  if (value !== m.credit_cost && value > 0) updateCreditCost(m.model_code, value);
-                }}
-              />
+              <div className="flex flex-wrap gap-1.5">
+                <Input
+                  header="Мин. кредитов"
+                  type="number"
+                  className="w-[90px]"
+                  defaultValue={m.min_credits}
+                  onBlur={(e) => {
+                    const value = Number(e.target.value);
+                    if (value !== m.min_credits && value > 0) updateField(m.code, { min_credits: value });
+                  }}
+                />
+                <Input
+                  header="Реком. кредитов"
+                  type="number"
+                  className="w-[90px]"
+                  defaultValue={m.recommended_credits}
+                  onBlur={(e) => {
+                    const value = Number(e.target.value);
+                    if (value !== m.recommended_credits && value > 0)
+                      updateField(m.code, { recommended_credits: value });
+                  }}
+                />
+                <Input
+                  header="Порядок"
+                  type="number"
+                  className="w-[70px]"
+                  defaultValue={m.sort_order}
+                  onBlur={(e) => {
+                    const value = Number(e.target.value);
+                    if (value !== m.sort_order) updateField(m.code, { sort_order: value });
+                  }}
+                />
+              </div>
             </div>
           </Cell>
         ))}
