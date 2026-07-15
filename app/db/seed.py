@@ -116,6 +116,15 @@ AI_MODELS = [
          provider_model_id="fal-ai/nano-banana",
          provider_model_id_edit="fal-ai/nano-banana/edit",
          min_credits=100, recommended_credits=100, sort_order=160),
+    # Gemini 3 Pro Image. Единственная модель каталога с настоящим селектором
+    # 1K/2K/4K (resolution в схеме) -- тем самым, что рисовал дизайн-макет.
+    # Измерено 2026-07-15: 1K=$0.15, 2K=$0.15 (бесплатно!), 4K=$0.30.
+    # $0.15 * 2300 = 345. Вчетверо дороже обычной nano_banana ($0.0398).
+    dict(**_MEDIA, category=ModelCategory.image, code="nano_banana_pro",
+         display_name="Nano Banana Pro", tier=ModelTier.pro, cost_unit=CostUnit.image,
+         provider_model_id="fal-ai/nano-banana-pro",
+         provider_model_id_edit="fal-ai/nano-banana-pro/edit",
+         min_credits=345, recommended_credits=345, sort_order=165),
     # --- VIDEO (fal.ai), 4 модели (recommended_credits -- цена за дефолтную комбинацию модели) ---
     dict(**_MEDIA, category=ModelCategory.video, code="ovi_video", display_name="Ovi Video",
          tier=ModelTier.economy, cost_unit=CostUnit.video,

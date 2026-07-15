@@ -57,13 +57,13 @@ def test_five_packages_from_tz():
     assert by_code["business"]["price_stars"] == 2995
 
 
-def test_twenty_models_split_12_text_4_image_4_video():
-    assert len(AI_MODELS) == 20
+def test_catalog_split_12_text_5_image_4_video():
+    assert len(AI_MODELS) == 21
     by_category = {}
     for row in AI_MODELS:
         by_category.setdefault(row["category"], []).append(row)
     assert len(by_category[ModelCategory.text]) == 12
-    assert len(by_category[ModelCategory.image]) == 4
+    assert len(by_category[ModelCategory.image]) == 5
     assert len(by_category[ModelCategory.video]) == 4
 
     for row in by_category[ModelCategory.text]:
@@ -89,6 +89,7 @@ def test_model_codes_and_credit_floors_match_tz():
         "gpt_premium": (20, 30), "gemini_flash": (20, 30), "gemini_pro": (30, 40),
         "claude_sonnet": (40, 50), "claude_opus": (70, 90),
         "qwen_image": (50, 50), "seedream": (75, 75), "flux_kontext_pro": (100, 100), "nano_banana": (100, 100),
+        "nano_banana_pro": (345, 345),
         # ovi: $0.20 плоско -> 460, в сиде 500 (округление вверх, сходится)
         "ovi_video": (500, 500),
         # wan: 480p $0.04/с * 5.0625с ($0.2025 измерено) -> 466 = пол;
@@ -113,6 +114,7 @@ def test_media_prices_follow_the_project_formula():
     by_code = {m["code"]: m for m in AI_MODELS}
     measured_usd = {          # измерено списанием с баланса fal 2026-07-15
         "qwen_image": 0.02,   # за 1.05 МП
+        "nano_banana_pro": 0.15,  # дефолт 1K (2K по той же цене, 4K -- $0.30)
         "ovi_video": 0.20,    # плоско за видео (по докам, не мерили)
         "wan_video": 0.405,   # 720p: $0.08/с * 5.0625с (480p измерен как $0.2025)
         "kling_video": 1.40,  # 5с
@@ -124,6 +126,21 @@ def test_media_prices_follow_the_project_formula():
         # ovi/qwen округлены вверх до круглого числа при первичном сиде -- допускаем +10%
         assert actual >= expected, f"{code}: {actual} < {expected} -- продаём ниже формулы"
         assert actual <= expected * 1.1, f"{code}: {actual} сильно выше {expected}"
+
+
+def test_nano_banana_pro_in_catalog():
+    """Модель из дизайн-макета: у неё resolution=["1K","2K","4K"] -- ровно тот
+    селектор, который рисовал дизайнер. Цена измерена живым fal 2026-07-15:
+    1K=$0.15 -> 345 кредитов по формуле usd*2300."""
+    by_code = {m["code"]: m for m in AI_MODELS}
+    pro = by_code["nano_banana_pro"]
+    assert pro["provider_model_id"] == "fal-ai/nano-banana-pro"
+    assert pro["provider_model_id_edit"] == "fal-ai/nano-banana-pro/edit"
+    assert pro["category"] == ModelCategory.image
+    assert pro["cost_unit"] == CostUnit.image
+    assert (pro["min_credits"], pro["recommended_credits"]) == (345, 345)
+    # вчетверо дороже обычной ($0.15 против $0.0398) -- цена, а не вкус
+    assert pro["recommended_credits"] > by_code["nano_banana"]["recommended_credits"] * 3
 
 
 def test_media_cost_units_match_tz():
@@ -145,7 +162,7 @@ async def test_apply_seed_inserts_and_is_idempotent(session):
     models = (await session.execute(select(func.count()).select_from(AiModel))).scalar_one()
     packages = (await session.execute(select(func.count()).select_from(CreditPackage))).scalar_one()
     settings_count = (await session.execute(select(func.count()).select_from(Setting))).scalar_one()
-    assert models == 20
+    assert models == 21
     assert packages == 5
     assert settings_count == 10
 
