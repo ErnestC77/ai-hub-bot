@@ -8,5 +8,11 @@ test.beforeEach(async ({ page }) => {
 
 test("chat screen renders input and model picker", async ({ page }) => {
   await page.goto("/chat");
-  await expect(page.getByPlaceholder("Сообщение...")).toBeVisible();
+  const input = page.getByTestId("chat-input");
+  await expect(input).toBeVisible();
+  // Redesign copy: real ellipsis character, not three dots.
+  await expect(input).toHaveAttribute("placeholder", "Сообщение…");
+  // The «Выбрать модель» button was replaced by an always-visible segmented control.
+  await expect(page.getByTestId("chat-model-picker")).toBeVisible();
+  await expect(page.getByTestId("chat-send")).toBeVisible();
 });

@@ -2,79 +2,77 @@
 
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Cell } from "@/components/ui/cell";
-import { List } from "@/components/ui/list";
-import { Section } from "@/components/ui/section";
-import { Sheet } from "@/components/ui/sheet";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type ModelOut } from "@/api/client";
-
-const TIER_LABEL: Record<string, string> = {
-  economy: "Эконом",
-  standard: "Стандарт",
-  premium: "Премиум",
-  pro: "Pro",
-  ultra: "Ultra",
-};
-
-const STARRED_TIERS = new Set(["pro", "ultra"]);
+import { useMe } from "@/context/MeContext";
+import { resolveModel } from "@/lib/resolveModel";
 
 interface Props {
   selectedModel: ModelOut | null;
   onSelect: (model: ModelOut) => void;
+  /** Код из ?model= -- юзер тапнул конкретную карточку модели на Home. */
+  preferredCode?: string | null;
 }
 
-export default function ModelPicker({ selectedModel, onSelect }: Props) {
-  const [open, setOpen] = useState(false);
+/**
+ * Сегмент-переключатель текстовых моделей (дизайн Aurora Glass, chat sheet).
+ * Модели приходят из api.models("text") и управляются админкой — ничего не хардкодим.
+ * Если моделей больше, чем помещается, ряд скроллится по горизонтали.
+ */
+export default function ModelPicker({ selectedModel, onSelect, preferredCode }: Props) {
+  const { me } = useMe();
   const [models, setModels] = useState<ModelOut[] | null>(null);
 
   useEffect(() => {
-    if (open && models === null) {
-      api.models().then(setModels).catch(() => setModels([]));
-    }
-  }, [open, models]);
+    let cancelled = false;
+    api
+      .models("text")
+      .then((list) => {
+        if (!cancelled) setModels(list);
+      })
+      .catch(() => {
+        if (!cancelled) setModels([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // Бэкенд отдаёт список уже отсортированным по sort_order (эконом -> ultra),
-  // поэтому порядок секций -- порядок первого появления tier в ответе;
-  // второй сортировки на фронте не требуется.
-  const grouped = (models ?? []).reduce<Record<string, ModelOut[]>>((acc, model) => {
-    (acc[model.tier] ??= []).push(model);
-    return acc;
-  }, {});
+  // Авто-выбор: ?model= с Home > default_model_code из /api/me > первая из списка
+  // (бэкенд отдаёт список отсортированным по sort_order). См. lib/resolveModel.
+  useEffect(() => {
+    if (selectedModel || !models || models.length === 0) return;
+    const picked = resolveModel(models, preferredCode ?? null, me?.default_model_code);
+    if (picked) onSelect(picked);
+  }, [models, me, selectedModel, onSelect, preferredCode]);
+
+  if (models === null) {
+    return (
+      <div className="glass flex justify-center rounded-[16px] p-2" data-testid="chat-model-picker">
+        <Spinner size="s" />
+      </div>
+    );
+  }
+
+  // Нет доступных моделей — не рисуем ничего (данных нет, не выдумываем).
+  if (models.length === 0) return null;
 
   return (
-    <>
-      <Button size="s" mode="bezeled" onClick={() => setOpen(true)}>
-        {selectedModel ? selectedModel.display_name : "Выбрать модель"}
-      </Button>
-
-      <Sheet open={open} onOpenChange={setOpen} header={<Sheet.Header>Выберите модель</Sheet.Header>}>
-        {models === null ? (
-          <div className="flex justify-center p-6">
-            <Spinner size="m" />
-          </div>
-        ) : (
-          <List>
-            {Object.entries(grouped).map(([tier, items]) => (
-              <Section key={tier} header={TIER_LABEL[tier] ?? tier}>
-                {items.map((model) => (
-                  <Cell
-                    key={model.code}
-                    onClick={() => {
-                      onSelect(model);
-                      setOpen(false);
-                    }}
-                    after={STARRED_TIERS.has(model.tier) ? "⭐" : undefined}
-                  >
-                    {model.display_name}
-                  </Cell>
-                ))}
-              </Section>
-            ))}
-          </List>
-        )}
-      </Sheet>
-    </>
+    <div className="overflow-x-auto" data-testid="chat-model-picker">
+      <div className="w-max min-w-full">
+        <SegmentedControl>
+          {models.map((m) => (
+            <SegmentedControl.Item
+              key={m.code}
+              selected={selectedModel?.code === m.code}
+              onClick={() => onSelect(m)}
+            >
+              <span className="whitespace-nowrap">{m.display_name}</span>
+            </SegmentedControl.Item>
+          ))}
+        </SegmentedControl>
+      </div>
+    </div>
   );
 }

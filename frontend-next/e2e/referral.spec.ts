@@ -8,7 +8,13 @@ test.beforeEach(async ({ page }) => {
 
 test("referral screen shows invite stats and actions", async ({ page }) => {
   await page.goto("/referral");
-  await expect(page.getByText("Реферальная программа")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Поделиться" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Скопировать" })).toBeVisible();
+  // Redesign: header «Реферальная программа» → H1 «Приглашай друзей»;
+  // «Скопировать» is now an icon-only row (testid referral-copy);
+  // «Поделиться» → «Поделиться ссылкой».
+  await expect(page.getByText("Приглашай друзей")).toBeVisible();
+  await expect(page.getByTestId("referral-invited")).toBeVisible();
+  await expect(page.getByTestId("referral-earned")).toBeVisible();
+  await expect(page.getByTestId("referral-link")).toBeVisible();
+  await expect(page.getByTestId("referral-copy")).toBeVisible();
+  await expect(page.getByTestId("referral-share")).toBeVisible();
 });

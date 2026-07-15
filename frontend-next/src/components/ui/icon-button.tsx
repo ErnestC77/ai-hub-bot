@@ -7,7 +7,7 @@ export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
       <button
         ref={ref}
         className={cn(
-          "press-scale inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface text-foreground border border-border-soft",
+          "press-scale inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.08] text-foreground border border-transparent",
           className,
         )}
         {...rest}

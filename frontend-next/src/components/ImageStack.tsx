@@ -1,42 +1,45 @@
-import { cn } from "@/lib/cn";
+/**
+ * Aurora Glass overlapping tile stack (design 3a, «Сгенерировать фото» card):
+ * small rounded tiles with a dark seam border, each next tile tucked under
+ * the previous one. Renders gradient tiles by default; pass `images` to show
+ * photo previews instead.
+ */
 
-interface Props {
-  images: string[];
-  width?: number;
-  height?: number;
-}
-
-const ROTATIONS = [-10, 7, 0];
-const OFFSETS = [
-  { x: -10, y: 4 },
-  { x: 6, y: -2 },
-  { x: 0, y: 0 },
+const DEFAULT_GRADIENTS = [
+  "linear-gradient(160deg,#7c5cff,#3b2b8f)",
+  "linear-gradient(160deg,#35e0e6,#1b7f9c)",
 ];
 
-export default function ImageStack({ images, width = 104, height = 132 }: Props) {
+interface Props {
+  /** Optional photo URLs; when omitted, the design's gradient duo is shown. */
+  images?: string[];
+  tileWidth?: number;
+  tileHeight?: number;
+}
+
+export default function ImageStack({ images, tileWidth = 38, tileHeight = 48 }: Props) {
+  const tiles: Array<{ key: string; image?: string; gradient?: string }> = images?.length
+    ? images.map((src) => ({ key: src, image: src }))
+    : DEFAULT_GRADIENTS.map((gradient) => ({ key: gradient, gradient }));
+
   return (
-    <div className="relative" style={{ width, height }}>
-      {images.map((src, i) => {
-        const rotate = ROTATIONS[i] ?? 0;
-        const offset = OFFSETS[i] ?? { x: 0, y: 0 };
-        const isFront = i === images.length - 1;
-        return (
-          <img
-            key={src}
-            src={src}
-            alt=""
-            loading="lazy"
-            className={cn(
-              "absolute inset-0 h-full w-full rounded-[16px] border-[3px] border-bg-deep object-cover",
-              isFront ? "shadow-[0_10px_24px_rgba(0,0,0,0.45)]" : "shadow-[0_4px_12px_rgba(0,0,0,0.3)]",
-            )}
-            style={{
-              transform: `translate(${offset.x}px, ${offset.y}px) rotate(${rotate}deg)`,
-              zIndex: i,
-            }}
-          />
-        );
-      })}
+    <div className="flex" aria-hidden>
+      {tiles.map((tile, i) => (
+        <div
+          key={tile.key}
+          className="overflow-hidden rounded-[11px] border-2 border-[#140c26]"
+          style={{
+            width: tileWidth,
+            height: tileHeight,
+            marginLeft: i === 0 ? 0 : -16,
+            background: tile.gradient,
+          }}
+        >
+          {tile.image && (
+            <img src={tile.image} alt="" loading="lazy" className="h-full w-full object-cover" />
+          )}
+        </div>
+      ))}
     </div>
   );
 }

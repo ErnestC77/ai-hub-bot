@@ -10,9 +10,9 @@ export function Switch({ checked, onChange }: SwitchProps) {
     <RadixSwitch.Root
       checked={checked}
       onCheckedChange={(next) => onChange({ target: { checked: next } })}
-      className="relative h-6 w-10 shrink-0 rounded-full bg-surface-strong outline-none data-[state=checked]:bg-[image:var(--brand-gradient)]"
+      className="relative h-5 w-[34px] shrink-0 rounded-full bg-surface-strong outline-none data-[state=checked]:bg-[image:var(--brand-gradient)]"
     >
-      <RadixSwitch.Thumb className="block h-4 w-4 translate-x-1 rounded-full bg-white transition-transform data-[state=checked]:translate-x-5" />
+      <RadixSwitch.Thumb className="block h-4 w-4 translate-x-[2px] rounded-full bg-white transition-transform data-[state=checked]:translate-x-[16px]" />
     </RadixSwitch.Root>
   );
 }

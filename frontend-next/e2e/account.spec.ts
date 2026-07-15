@@ -8,7 +8,11 @@ test.beforeEach(async ({ page }) => {
 
 test("account screen shows balance and credits", async ({ page }) => {
   await page.goto("/account");
-  await expect(page.getByText("Баланс")).toBeVisible();
-  await expect(page.getByText("Credits")).toBeVisible();
-  await expect(page.getByText(/кредитов/).first()).toBeVisible();
+  // Redesign: the english «Credits» section label was removed; the balance card
+  // now shows «Баланс» + «💎 N кредитов».
+  await expect(page.getByText("Баланс", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("account-balance")).toContainText("кредитов");
+  await expect(page.getByTestId("account-purchased")).toBeVisible();
+  await expect(page.getByTestId("account-spent")).toBeVisible();
+  await expect(page.getByTestId("account-buy-credits")).toBeVisible();
 });

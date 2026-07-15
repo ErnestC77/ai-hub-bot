@@ -17,7 +17,7 @@ export function Cell({ before, after, subtitle, multiline, onClick, children, cl
     <Tag
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 border-b border-border-soft px-4 py-3 text-left last:border-b-0",
+        "flex w-full items-center gap-3 border-b border-white/[0.07] px-4 py-3 text-left last:border-b-0",
         onClick && "press-scale",
         className,
       )}

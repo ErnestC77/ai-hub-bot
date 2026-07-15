@@ -1,20 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { Cell } from "@/components/ui/cell";
-import { List } from "@/components/ui/list";
-import { Section } from "@/components/ui/section";
-import { Sheet } from "@/components/ui/sheet";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
 import { useMe } from "@/context/MeContext";
+import { resolveModel } from "@/lib/resolveModel";
 import { haptic } from "@/lib/telegram";
-import { cn } from "@/lib/cn";
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_ATTEMPTS = 60;
@@ -26,12 +23,13 @@ interface PendingConfirmation {
   estimatedCredits: number;
 }
 
-export default function GenerateImage() {
+function GenerateImageScreen() {
   const router = useRouter();
   const { me } = useMe();
+  // ?model= ставят карточки моделей на Home; резолв приоритетов -- в lib/resolveModel.
+  const preferredModelCode = useSearchParams().get("model");
   const [models, setModels] = useState<ModelOut[] | null>(null);
   const [model, setModel] = useState<ModelOut | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
   const [prompt, setPrompt] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -45,11 +43,14 @@ export default function GenerateImage() {
       .models("image")
       .then((list) => {
         setModels(list);
-        setModel((prev) => prev ?? list[0] ?? null);
+        setModel((prev) => prev ?? resolveModel(list, preferredModelCode, me?.default_model_code));
       })
       .catch(() => setModels([]));
-  }, []);
+  }, [preferredModelCode, me?.default_model_code]);
 
+  // Единственный источник отображаемых цен -- выбранная модель с бэкенда
+  // (ModelOut.recommended_credits / min_credits). Точную сумму списания даёт
+  // 409-гейт (ConfirmationRequiredError.estimatedCredits). Никаких формул.
   const cost = model?.recommended_credits ?? 0;
 
   async function generate(confirm = false) {
@@ -81,7 +82,7 @@ export default function GenerateImage() {
     try {
       if (!confirm && photos.length > 0) {
         // Бэкенд принимает один image_url -- используется только ПЕРВОЕ фото
-        // (известное упрощение спеки; PhotoUploadBox не трогаем).
+        // (известное упрощение спеки).
         imageUrl = (await api.uploadImage(photos[0])).url;
       }
 
@@ -115,130 +116,143 @@ export default function GenerateImage() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col pb-[90px]">
-      <div className="flex items-center gap-3 p-4">
-        <button
-          onClick={() => router.back()}
-          aria-label="Назад"
-          className="press-scale border-none bg-none p-0 text-[22px] text-white"
-        >
-          ←
-        </button>
-        <h2 className="heading-font mr-[22px] flex-1 text-center text-lg font-bold">Generate Image</h2>
-      </div>
+    <div className="flex min-h-[100dvh] flex-col">
+      {/* Роут, одетый шторкой (spec §1.4): хват-полоска, шапка с ✕=router.back(),
+          верхний радиус 26, sheetUp-вход. Подложка полупрозрачная -- аврора-фон
+          body остаётся виден. */}
+      <div className="sheet-up mt-3 flex flex-1 flex-col rounded-t-[26px] border-t border-white/[0.12] bg-[linear-gradient(180deg,rgba(27,17,64,0.7),rgba(10,7,22,0.28)_50%,rgba(10,7,22,0)_100%)] px-4 pt-2.5 pb-[112px]">
+        <div aria-hidden className="mx-auto mb-3.5 h-1 w-[38px] rounded-full bg-white/20" />
 
-      <div className="flex flex-col gap-3.5 px-4">
-        <div className="rounded-lg border border-border-soft bg-surface p-3.5">
-          <PhotoUploadBox photos={photos} onChange={setPhotos} />
-        </div>
-
-        <div className="relative rounded-lg border border-border-soft bg-surface p-3.5">
-          <Textarea
-            placeholder="Опишите, что хотите создать"
-            rows={expanded ? 10 : 4}
-            maxLength={6000}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="resize-none"
-          />
-          <div className="mt-1.5 flex items-center justify-end gap-2">
-            <span className="text-xs text-foreground-muted">{prompt.length}/6000</span>
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              aria-label={expanded ? "Свернуть поле" : "Развернуть поле"}
-              className="press-scale border-none bg-none p-0 text-base text-foreground-muted"
-            >
-              ⤢
-            </button>
+        <div className="mb-3.5 flex items-center gap-2.5">
+          <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-[image:var(--brand-gradient)] text-[16px] shadow-glow">
+            🎨
           </div>
-        </div>
-
-        {model && (
-          <div
-            onClick={() => models && models.length > 1 && setPickerOpen(true)}
-            className={cn(
-              "press-scale flex items-center gap-3 rounded-lg border border-border-soft bg-surface p-3.5",
-              models && models.length > 1 ? "cursor-pointer" : "cursor-default",
-            )}
+          <div className="min-w-0 flex-1">
+            <div className="heading-font truncate text-[15px] font-semibold">
+              {model?.display_name ?? "Генерация фото"}
+            </div>
+            <div className="text-[11px] text-foreground-dim">Генерация фото</div>
+          </div>
+          <button
+            onClick={() => router.back()}
+            aria-label="Закрыть"
+            className="press-scale flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border-none bg-white/[0.08] text-[13px] text-foreground"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[image:var(--brand-gradient)] text-lg">
-              🎨
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[15px] font-semibold">{model.display_name}</div>
-              <div className="text-xs text-foreground-muted">Генерация изображений</div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1 text-[13px] text-foreground-muted">
-              от {model.min_credits} 💎
-              {models && models.length > 1 && <span className="ml-0.5">›</span>}
+            ✕
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3.5">
+          <PhotoUploadBox photos={photos} onChange={setPhotos} />
+
+          <div className="flex flex-col gap-1.5">
+            <Textarea
+              data-testid="generate-prompt"
+              placeholder="Опишите, что хотите создать"
+              rows={expanded ? 10 : 4}
+              maxLength={6000}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="resize-none"
+            />
+            <div className="flex items-center justify-end gap-2 px-1">
+              <span className="text-[11px] text-foreground-dim">{prompt.length}/6000</span>
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                aria-label={expanded ? "Свернуть поле" : "Развернуть поле"}
+                className="press-scale border-none bg-none p-0 text-base text-foreground-muted"
+              >
+                ⤢
+              </button>
             </div>
           </div>
-        )}
 
-        {generating && (
-          <div className="flex justify-center p-6">
-            <Spinner size="m" />
-          </div>
-        )}
-
-        {error && <div className="text-center text-[13px] text-red-400">{error}</div>}
-
-        {pendingConfirmation && (
-          <div className="relative overflow-hidden rounded-lg border border-border-soft bg-surface p-[14px]">
-            <div className="absolute inset-x-0 top-0 h-[3px] bg-[image:var(--brand-gradient)]" />
-            <div className="text-[13px]">
-              Примерная стоимость: {pendingConfirmation.estimatedCredits} кредитов. Продолжить?
+          <div>
+            <div className="mb-2 flex items-baseline justify-between px-1">
+              <span className="text-[10px] font-semibold tracking-[.08em] text-foreground-dim uppercase">Модель</span>
+              {model && (
+                <span data-testid="generate-price" className="glass rounded-full px-2.5 py-1 text-[10.5px] font-semibold">
+                  от {model.min_credits} 💎
+                </span>
+              )}
             </div>
-            <div className="mt-2.5 flex gap-2">
-              <Button size="s" stretched onClick={() => generate(true)}>
-                Отправить
-              </Button>
-              <Button size="s" stretched mode="gray" onClick={() => setPendingConfirmation(null)}>
-                Отмена
-              </Button>
-            </div>
+            {models === null ? (
+              <div className="flex justify-center p-3">
+                <Spinner size="s" />
+              </div>
+            ) : models.length > 0 ? (
+              <div data-testid="generate-model">
+                <SegmentedControl>
+                  {models.map((m) => (
+                    <SegmentedControl.Item key={m.code} selected={m.code === model?.code} onClick={() => setModel(m)}>
+                      {m.display_name}
+                    </SegmentedControl.Item>
+                  ))}
+                </SegmentedControl>
+              </div>
+            ) : null}
           </div>
-        )}
 
-        {resultUrl && (
-          <div className="rounded-lg border border-border-soft bg-surface p-3">
-            <img src={resultUrl} alt="" className="block w-full rounded-[14px]" />
-          </div>
-        )}
+          {generating && (
+            <div className="flex justify-center p-6">
+              <Spinner size="m" />
+            </div>
+          )}
+
+          {error && (
+            <div data-testid="generate-error" className="text-center text-[13px] text-red-400">
+              {error}
+            </div>
+          )}
+
+          {pendingConfirmation && (
+            <div data-testid="generate-confirm" className="glass relative overflow-hidden rounded-[16px] p-[14px]">
+              <div className="absolute inset-x-0 top-0 h-[3px] bg-[image:var(--brand-gradient)]" />
+              <div className="text-[13px]">
+                Примерная стоимость: {pendingConfirmation.estimatedCredits} кредитов. Продолжить?
+              </div>
+              <div className="mt-2.5 flex gap-2">
+                <Button size="s" stretched onClick={() => generate(true)}>
+                  Отправить
+                </Button>
+                <Button size="s" stretched mode="gray" onClick={() => setPendingConfirmation(null)}>
+                  Отмена
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {resultUrl && (
+            <div data-testid="generate-result" className="glass rounded-[18px] p-3">
+              <img src={resultUrl} alt="" className="block w-full rounded-[14px]" />
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 bg-[rgba(10,10,12,0.85)] p-4 backdrop-blur-xl">
-        <div className="mb-2 text-center text-xs text-foreground-muted">Баланс: {me?.credits_balance ?? 0} 💎</div>
+      <div className="fixed inset-x-0 bottom-0 z-[3] border-t border-white/[0.08] bg-[rgba(10,7,22,0.85)] p-4 backdrop-blur-xl">
+        <div className="mb-2 text-center text-[11px] text-foreground-dim">Баланс: {me?.credits_balance ?? 0} 💎</div>
         <Button
+          data-testid="generate-submit"
           mode="filled"
+          size="l"
           stretched
           disabled={!prompt.trim() || generating || !model}
           onClick={() => generate()}
-          className="py-3.5 text-base"
-          style={{ opacity: prompt.trim() && model ? 1 : 0.4 }}
         >
-          ✨ Generate {model && <span>· {cost} 💎</span>}
+          ✨ Создать{model ? ` · ${cost} 💎` : ""}
         </Button>
       </div>
-
-      <Sheet open={pickerOpen} onOpenChange={setPickerOpen} header={<Sheet.Header>Выберите модель</Sheet.Header>}>
-        <List>
-          <Section>
-            {(models ?? []).map((m) => (
-              <Cell
-                key={m.code}
-                onClick={() => {
-                  setModel(m);
-                  setPickerOpen(false);
-                }}
-                after={`от ${m.min_credits} 💎`}
-              >
-                {m.display_name}
-              </Cell>
-            ))}
-          </Section>
-        </List>
-      </Sheet>
     </div>
+  );
+}
+
+// useSearchParams требует Suspense-границы при статическом пререндере
+// (тот же приём, что в app/chat/page.tsx).
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <GenerateImageScreen />
+    </Suspense>
   );
 }

@@ -8,8 +8,11 @@ test.beforeEach(async ({ page }) => {
 
 test("trends screen lists tool cards and opens chat with a prefilled prompt", async ({ page }) => {
   await page.goto("/trends");
-  await expect(page.getByText("✨ Photo & Text Trends")).toBeVisible();
-  const firstCard = page.locator("button", { hasText: /.+/ }).first();
-  await firstCard.click();
+  await expect(page.getByTestId("trends-page")).toBeVisible();
+  // Redesign copy: «✨ Photo & Text Trends» → «✨ Тренды».
+  await expect(page.getByText("✨ Тренды")).toBeVisible();
+  // Cards are now explicit trend-card buttons (the old "first button on the page"
+  // locator could hit the bottom navigation).
+  await page.getByTestId("trend-card").first().click();
   await expect(page).toHaveURL(/\/chat\?prefill=/);
 });

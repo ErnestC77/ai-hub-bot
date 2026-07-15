@@ -1,25 +1,39 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg-deep: #050506;
-  --color-bg-elevated: #0e0e12;
+  --color-bg-deep: #0a0716;
+  --color-bg-elevated: #0d0d12;
   --color-surface: rgba(255, 255, 255, 0.06);
   --color-surface-strong: rgba(255, 255, 255, 0.1);
-  --color-border-soft: rgba(255, 255, 255, 0.09);
-  --color-foreground: #f5f5f7;
-  --color-foreground-muted: #96979f;
-  --color-brand-1: #ff5f6d;
-  --color-brand-2: #ff2d78;
-  --color-brand-3: #b721ff;
+  --color-border-soft: rgba(255, 255, 255, 0.1);
+  --color-foreground: #eef0ff;
+  --color-foreground-muted: rgba(238, 240, 255, 0.6);
+  --color-foreground-dim: rgba(238, 240, 255, 0.45);
+  --color-brand-1: #8b5cff;
+  --color-brand-2: #35e0e6;
+  --color-accent-violet: #8b5cff;
+  --color-accent-cyan: #35e0e6;
   --color-success: #2ecc71;
+  --radius-screen: 38px;
+  --radius-sheet: 24px;
   --radius-lg: 20px;
   --radius-md: 14px;
-  --shadow-glow: 0 8px 24px rgba(255, 45, 120, 0.35);
+  --shadow-glow: 0 10px 24px rgba(139, 92, 255, 0.5);
+  --shadow-glow-cyan: 0 10px 24px rgba(53, 224, 230, 0.45);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Onest is loaded via next/font in layout.tsx, which defines --font-onest on <body>.
+   `inline` so font-sans utilities resolve the var at use-site. */
+@theme inline {
+  --font-sans: var(--font-onest), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 :root {
-  --brand-gradient: linear-gradient(135deg, var(--color-brand-1), var(--color-brand-2) 55%, var(--color-brand-3));
+  --brand-gradient: linear-gradient(135deg, var(--color-brand-1), var(--color-brand-2));
+  --app-bg:
+    radial-gradient(120% 80% at 15% 0%, #1b1140 0%, #0a0716 55%),
+    radial-gradient(90% 70% at 100% 30%, #0b2a3a 0%, rgba(10, 7, 22, 0) 60%);
 }
 
 *,
@@ -28,24 +42,39 @@
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   background: var(--color-bg-deep);
-  color: var(--color-foreground);
 }
 
 body {
+  background: var(--app-bg);
+  background-attachment: fixed;
+  color: var(--color-foreground);
   font-family:
+    var(--font-onest),
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
-    Inter,
     sans-serif;
 }
 
 .heading-font {
-  font-family: "Space Grotesk", -apple-system, sans-serif;
+  font-family:
+    var(--font-onest),
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+/* Aurora Glass surface: matte glass card/sheet/tabbar background. */
+@utility glass {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .press-scale {
@@ -55,12 +84,43 @@ body {
   cursor: pointer;
 }
 .press-scale:active {
-  transform: scale(0.97);
+  transform: scale(0.95);
+}
+
+/* Bottom-sheet entrance (used by ui/sheet.tsx and by routed pages dressed as sheets). */
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sheet-up {
+  animation: sheetUp 0.34s var(--ease-out);
+}
+
+.fade-in {
+  animation: fadeIn 0.25s ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .press-scale {
     transition: none;
+  }
+  .sheet-up,
+  .fade-in {
+    animation: none;
   }
 }
 

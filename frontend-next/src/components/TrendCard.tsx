@@ -6,28 +6,47 @@ interface Props {
   slug: string;
   title: string;
   description?: string;
-  width?: number | string;
-  height?: number | string;
+  /** Small pill top-right (recommended category / model). */
+  badge?: string;
   onClick: () => void;
 }
 
-export default function TrendCard({ slug, title, description, width = 140, height = 180, onClick }: Props) {
+/**
+ * Aurora Glass trend card: 132×172, radius 18, bottom scrim, badge top-right,
+ * title + subtitle at the bottom. All overlays are pointer-events:none so the
+ * tap always reaches the button itself.
+ */
+export default function TrendCard({ slug, title, description, badge, onClick }: Props) {
   const style = getTrendStyle(slug);
 
   return (
     <button
+      data-testid="trend-card"
       onClick={onClick}
-      className="press-scale relative flex shrink-0 overflow-hidden rounded-lg border border-white/12 p-0 text-left text-white shadow-[0_10px_24px_rgba(0,0,0,0.3)] hover:shadow-[0_14px_32px_rgba(0,0,0,0.4)]"
-      style={{ width, height, background: style.gradient }}
+      className="press-scale relative h-[172px] w-[132px] shrink-0 snap-start overflow-hidden rounded-[18px] border border-white/10 p-0 text-left text-white shadow-[0_10px_24px_rgba(0,0,0,0.3)]"
+      style={{ background: style.gradient }}
     >
-      <div className="absolute inset-0 bg-[image:linear-gradient(180deg,rgba(0,0,0,0)_40%,rgba(0,0,0,0.55)_100%)]" />
-      <div className="relative flex w-full flex-col items-start justify-end p-3.5">
-        <span className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-[12px] border border-white/25 bg-white/[0.18] text-xl">
-          {style.emoji}
+      {/* Placeholder art: no preview_url from the backend yet */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-[42px] flex justify-center text-[30px] drop-shadow-[0_4px_14px_rgba(5,3,12,0.45)]"
+      >
+        {style.emoji}
+      </span>
+
+      {/* Bottom scrim */}
+      <div className="pointer-events-none absolute inset-0 bg-[image:linear-gradient(to_top,rgba(5,3,12,0.88),rgba(5,3,12,0.05)_55%,transparent)]" />
+
+      {badge && (
+        <span className="pointer-events-none absolute top-[11px] right-[11px] rounded-full bg-black/45 px-[7px] py-[3px] text-[9px] leading-none font-semibold">
+          {badge}
         </span>
-        <span className="heading-font text-[15px] leading-[1.2] font-semibold">{title}</span>
+      )}
+
+      <div className="pointer-events-none absolute right-3 bottom-[11px] left-3">
+        <div className="heading-font text-[12.5px] leading-[1.2] font-semibold">{title}</div>
         {description && (
-          <span className="mt-1 text-xs leading-[1.3] opacity-[0.85]">{description}</span>
+          <div className="mt-0.5 text-[10px] leading-[1.3] text-white/80">{description}</div>
         )}
       </div>
     </button>
