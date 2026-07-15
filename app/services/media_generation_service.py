@@ -262,10 +262,12 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
             return  # повторная доставка -- идемпотентный no-op
         try:
             if result_url is None:
-                # Форму ответа извлечь не удалось: кредиты за недоставленный
-                # результат не списываем. PLACEHOLDER: дополнить
-                # fal_client.extract_result_url новой формой и уточнить перед
-                # продакшн-запуском.
+                # Формы успешного ответа fal подтверждены живыми вызовами 2026-07-15:
+                # image -> {"images":[{"url":...}]}, video -> {"video":{"url":...}}
+                # (обе уже разбирает fal_client.extract_result_url).
+                # Сюда попадаем, когда воркер вернул не результат, а отказ:
+                # {"detail":"Path /v2.2 not found"} или {"detail":[{...pydantic...}]}.
+                # Кредиты за недоставленный результат не списываем.
                 request.error_message = "fal webhook: could not extract result url"
                 await refund_request(
                     session, request,
@@ -282,8 +284,10 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
         finally:
             await redis_client.delete(lock_key)
     elif status == "ERROR":
-        # PLACEHOLDER: точная форма тела ошибки fal не подтверждена (уточнить
-        # перед продакшн-запуском); перебираем известных кандидатов.
+        # Тело ошибки fal наблюдалось в двух формах (2026-07-15):
+        # строкой {"detail":"Path /v2.2 not found"} и списком pydantic-ошибок
+        # {"detail":[{"type":"missing","loc":["body","prompt"],...}]}.
+        # str() покрывает обе; отдельный ключ "error" оставляем как запасной.
         error_message = str(
             payload.get("error") or result_payload.get("detail") or "generation failed"
         )

@@ -920,4 +920,46 @@ async def test_reconcile_refund_decrements_daily_spend(session, fake_redis):
     count = await refund_stale_reserved_requests(session, older_than_minutes=20)
 
     assert count == 1
+
+
+async def test_worker_rejection_body_refunds_credits(session, fal, fake_redis):
+    """Наблюдалось вживую 2026-07-15: сломанный эндпоинт fal-ai/wan/v2.2 --
+    очередь приняла запрос (кредиты зарезервированы), а воркер вернул
+    {"detail": "Path /v2.2 not found"} вместо результата.
+
+    extract_result_url не найдёт ни images, ни video -> вернёт None ->
+    кредиты обязаны вернуться, иначе пользователь платит за 404.
+    """
+    user = await _seed(session, _image_model())
+    await start_media_generation(session, user, "img", "a bear")
+    assert (await session.get(User, user.id)).credits_balance == 900  # 100 зарезервировано
+
+    await handle_fal_webhook(session, {
+        "request_id": "fal-req-1",
+        "status": "OK",
+        "payload": {"detail": "Path /v2.2 not found"},
+    })
+
+    assert (await session.get(User, user.id)).credits_balance == 1000  # вернулись
+    rows = await _request_rows(session)
+    assert rows[0].status == RequestStatus.failed
+    assert await _tx_types(session) == [CreditTxType.reserve, CreditTxType.refund]
+
+
+async def test_worker_validation_error_body_refunds_credits(session, fal, fake_redis):
+    """Вторая наблюдённая форма отказа: pydantic-ошибка воркера списком.
+    fal при этом отдаёт status=ERROR."""
+    user = await _seed(session, _image_model())
+    await start_media_generation(session, user, "img", "a bear")
+
+    await handle_fal_webhook(session, {
+        "request_id": "fal-req-1",
+        "status": "ERROR",
+        "payload": {"detail": [
+            {"type": "missing", "loc": ["body", "prompt"], "msg": "Field required"}
+        ]},
+    })
+
+    assert (await session.get(User, user.id)).credits_balance == 1000
+    assert await _tx_types(session) == [CreditTxType.reserve, CreditTxType.refund]
     assert fake_redis.store[afs._daily_spend_key(user.id)] == "0"
