@@ -192,3 +192,20 @@ def test_no_deprecated_fal_endpoints():
     ids = {m.get("provider_model_id", "") for m in AI_MODELS}
     assert not any("seedream/v3" in i for i in ids)
     assert not any(i == "fal-ai/veo3" for i in ids)
+
+
+def test_migration_values_match_seed_constants():
+    """Миграция чинит существующие строки, сид -- чистую БД. Если они разъедутся,
+    прод и тесты будут жить в разных каталогах. Здесь ловим расхождение.
+    """
+    import re
+    from pathlib import Path
+
+    path = Path("alembic/versions/a1b2c3d4e5f6_fix_fal_catalog_endpoints_and_prices.py")
+    text = path.read_text(encoding="utf-8")
+    by_code = {m["code"]: m for m in AI_MODELS}
+
+    for code in ("wan_video", "kling_video", "veo_video", "seedream", "flux_kontext_pro"):
+        assert by_code[code]["provider_model_id"] in text, f"{code}: эндпоинт из сида не найден в миграции"
+    for code in ("wan_video", "kling_video", "veo_video"):
+        assert str(by_code[code]["recommended_credits"]) in text, f"{code}: цена из сида не найдена в миграции"
