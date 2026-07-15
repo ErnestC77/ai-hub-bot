@@ -131,3 +131,27 @@ async def test_fallback_column_roundtrips_through_orm(session):
         await session.execute(select(AiModel).where(AiModel.code == "deepseek_v3"))
     ).scalar_one()
     assert deepseek.fallback_model_code is None
+
+
+def test_media_provider_model_ids_are_real_fal_endpoints():
+    """Проверено 2026-07-15 запросом схемы fal (openapi.json?endpoint_id=...):
+    200 = эндпоинт есть, 404 = нет. Старые id (wan/v2.2, kling-video/v2) очередь
+    принимает, но воркер роняет с 'Path /v2.2 not found' -- это хуже честного 404.
+    """
+    by_code = {m["code"]: m for m in AI_MODELS}
+    assert by_code["qwen_image"]["provider_model_id"] == "fal-ai/qwen-image"
+    assert by_code["seedream"]["provider_model_id"] == "fal-ai/bytedance/seedream/v4/text-to-image"
+    assert by_code["flux_kontext_pro"]["provider_model_id"] == "fal-ai/flux-pro/kontext/text-to-image"
+    assert by_code["nano_banana"]["provider_model_id"] == "fal-ai/nano-banana"
+    assert by_code["ovi_video"]["provider_model_id"] == "fal-ai/ovi"
+    assert by_code["wan_video"]["provider_model_id"] == "fal-ai/wan/v2.2-a14b/text-to-video"
+    assert by_code["kling_video"]["provider_model_id"] == "fal-ai/kling-video/v2/master/text-to-video"
+    assert by_code["veo_video"]["provider_model_id"] == "fal-ai/veo3.1"
+
+
+def test_no_deprecated_fal_endpoints():
+    """fal пометил seedream/v3 и veo3 как 'no longer supported'. Оба ещё отвечают,
+    но 2K/4K есть только у преемников -- см. спек, раздел 'Разрешения'."""
+    ids = {m.get("provider_model_id", "") for m in AI_MODELS}
+    assert not any("seedream/v3" in i for i in ids)
+    assert not any(i == "fal-ai/veo3" for i in ids)

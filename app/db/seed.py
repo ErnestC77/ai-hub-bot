@@ -44,9 +44,10 @@ CREDIT_PACKAGES = [
          description="Для агентств и heavy users"),
 ]
 
-# ВНИМАНИЕ (по ТЗ): provider_model_id и input/output-цены ниже -- ПЛЕЙСХОЛДЕРЫ.
-# Уточнить реальные ID и цены OpenRouter/fal.ai перед продакшн-запуском (фазы 2-3).
-# Пока цены = 0 -> списание текстовых моделей идёт по min_credits (защитный минимум).
+# provider_model_id медиа-моделей проверены по схемам fal 2026-07-15 (см. спек
+# docs/superpowers/specs/2026-07-15-generation-quality-design.md).
+# Текстовые (OpenRouter) -- ВСЁ ЕЩЁ ПЛЕЙСХОЛДЕРЫ, не проверялись; цены = 0,
+# поэтому списание текста идёт по min_credits (защитный минимум).
 _TEXT = dict(provider=ModelProvider.openrouter, category=ModelCategory.text, cost_unit=CostUnit.tokens,
              input_price_usd_per_1m_tokens=0, output_price_usd_per_1m_tokens=0, fixed_cost_usd=0,
              max_context_tokens=128000, is_active=True, is_visible=True)
@@ -96,36 +97,44 @@ AI_MODELS = [
     # --- IMAGE (fal.ai), 4 модели из ТЗ ---
     dict(**_MEDIA, category=ModelCategory.image, code="qwen_image", display_name="Qwen Image",
          tier=ModelTier.economy, cost_unit=CostUnit.megapixel,
-         provider_model_id="fal-ai/qwen-image",  # PLACEHOLDER
+         provider_model_id="fal-ai/qwen-image",
          min_credits=50, recommended_credits=50, sort_order=130),
+    # v3 депрецирован fal; 2K/4K (image_size=auto_2K/auto_4K) есть только у v4.
     dict(**_MEDIA, category=ModelCategory.image, code="seedream", display_name="Seedream",
          tier=ModelTier.standard, cost_unit=CostUnit.image,
-         provider_model_id="fal-ai/bytedance/seedream/v3",  # PLACEHOLDER
+         provider_model_id="fal-ai/bytedance/seedream/v4/text-to-image",
          min_credits=75, recommended_credits=75, sort_order=140),
+    # Голый fal-ai/flux-pro/kontext -- это image-to-image, у него image_url обязателен
+    # (required: ["prompt","image_url"]). Для text-to-image нужен отдельный маршрут.
     dict(**_MEDIA, category=ModelCategory.image, code="flux_kontext_pro", display_name="Flux Kontext Pro",
          tier=ModelTier.premium, cost_unit=CostUnit.image,
-         provider_model_id="fal-ai/flux-pro/kontext",  # PLACEHOLDER
+         provider_model_id="fal-ai/flux-pro/kontext/text-to-image",
          min_credits=100, recommended_credits=100, sort_order=150),
     dict(**_MEDIA, category=ModelCategory.image, code="nano_banana", display_name="Nano Banana",
          tier=ModelTier.premium, cost_unit=CostUnit.image,
-         provider_model_id="fal-ai/nano-banana",  # PLACEHOLDER
+         provider_model_id="fal-ai/nano-banana",
          min_credits=100, recommended_credits=100, sort_order=160),
     # --- VIDEO (fal.ai), 4 модели из ТЗ (recommended_credits -- цена за 5 секунд) ---
     dict(**_MEDIA, category=ModelCategory.video, code="ovi_video", display_name="Ovi Video",
          tier=ModelTier.economy, cost_unit=CostUnit.video,
-         provider_model_id="fal-ai/ovi",  # PLACEHOLDER
+         provider_model_id="fal-ai/ovi",
          min_credits=500, recommended_credits=500, sort_order=170),
+    # Приложение -- fal-ai/wan, а v2.2-a14b/text-to-video -- маршрут внутри него.
+    # Заявленный ранее fal-ai/wan/v2.2 очередь принимает, но воркер отдаёт
+    # {"detail":"Path /v2.2 not found"} -- уже после резервирования кредитов.
     dict(**_MEDIA, category=ModelCategory.video, code="wan_video", display_name="Wan Video",
          tier=ModelTier.standard, cost_unit=CostUnit.second,
-         provider_model_id="fal-ai/wan/v2.2",  # PLACEHOLDER
+         provider_model_id="fal-ai/wan/v2.2-a14b/text-to-video",
          min_credits=600, recommended_credits=600, sort_order=180),
+    # Аналогично: приложение fal-ai/kling-video, маршрут v2/master/text-to-video.
     dict(**_MEDIA, category=ModelCategory.video, code="kling_video", display_name="Kling Video",
          tier=ModelTier.premium, cost_unit=CostUnit.second,
-         provider_model_id="fal-ai/kling-video/v2",  # PLACEHOLDER
+         provider_model_id="fal-ai/kling-video/v2/master/text-to-video",
          min_credits=850, recommended_credits=850, sort_order=190),
+    # veo3 депрецирован; resolution=4k есть только у veo3.1.
     dict(**_MEDIA, category=ModelCategory.video, code="veo_video", display_name="Veo Video",
          tier=ModelTier.ultra, cost_unit=CostUnit.second,
-         provider_model_id="fal-ai/veo3",  # PLACEHOLDER
+         provider_model_id="fal-ai/veo3.1",
          min_credits=4800, recommended_credits=4800, sort_order=200),
 ]
 
