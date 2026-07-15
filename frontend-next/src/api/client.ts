@@ -226,13 +226,19 @@ export interface AdminPaymentOut {
 }
 
 export interface AdminModelOut {
-  model_code: string;
+  code: string;
   provider: string;
+  category: "text" | "image" | "video";
+  tier: "economy" | "standard" | "premium" | "pro" | "ultra";
   display_name: string;
-  category: ModelCategory;
-  credit_cost: number;
+  provider_model_id: string;
+  input_price_usd_per_1m_tokens: number;
+  output_price_usd_per_1m_tokens: number;
+  min_credits: number;
+  recommended_credits: number;
   is_active: boolean;
-  is_premium: boolean;
+  is_visible: boolean;
+  sort_order: number;
 }
 
 export interface AdminBannerOut {
@@ -285,16 +291,10 @@ export const adminApi = {
   payments: () => request<AdminPaymentOut[]>("/api/admin/payments"),
   refundPayment: (id: number) => request<AdminPaymentOut>(`/api/admin/payments/${id}/refund`, { method: "POST" }),
   models: () => request<AdminModelOut[]>("/api/admin/models"),
-  toggleModel: (modelCode: string, isActive: boolean) =>
-    request<AdminModelOut>(`/api/admin/models/${modelCode}`, {
-      method: "PATCH",
-      body: JSON.stringify({ is_active: isActive }),
-    }),
-  updateModelCreditCost: (modelCode: string, creditCost: number) =>
-    request<AdminModelOut>(`/api/admin/models/${modelCode}`, {
-      method: "PATCH",
-      body: JSON.stringify({ credit_cost: creditCost }),
-    }),
+  updateModel: (
+    code: string,
+    patch: Partial<Pick<AdminModelOut, "is_active" | "is_visible" | "min_credits" | "recommended_credits" | "sort_order">>,
+  ) => request<AdminModelOut>(`/api/admin/models/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),
   packages: () => request<AdminPackageOut[]>("/api/admin/packages"),
   updatePackage: (code: string, patch: Partial<Pick<AdminPackageOut, "credits" | "price_rub" | "price_stars" | "is_active">>) =>
     request<AdminPackageOut>(`/api/admin/packages/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),
