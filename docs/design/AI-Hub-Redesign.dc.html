@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Sora:wght@300;400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#e7e4dd;font-family:system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .dv-turn{padding:44px 48px 40px;scroll-margin-top:16px}
+  .dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 26px}
+  .dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+  .dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}
+  .dv-opts{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start}
+  .dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}
+  .dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.4 system-ui,sans-serif;color:rgba(0,0,0,.5);max-width:300px}
+  .dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.09);color:#1a1a1a;border-radius:5px;text-decoration:none}
+  .dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+  .dv-next{margin:30px 0 0;font:12.5px/1.6 system-ui,sans-serif;color:rgba(0,0,0,.5)}
+  .dv-next a{color:#2a78d6;text-decoration:none}
+  .phone{width:300px;height:640px;border-radius:38px;overflow:hidden;position:relative;box-shadow:0 30px 60px -20px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.04)}
+  .sb{display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px;font-size:12px;font-weight:600}
+  .sb-dots{display:flex;gap:4px;align-items:center}
+  .sb-dots i{width:5px;height:5px;border-radius:50%;display:block}
+  .scr{width:300px;min-height:640px;border-radius:38px;overflow:hidden;position:relative;display:flex;flex-direction:column;background:radial-gradient(120% 80% at 15% 0%,#1b1140 0%,#0a0716 55%),radial-gradient(90% 70% at 100% 30%,#0b2a3a 0%,rgba(10,7,22,0) 60%);color:#eef0ff;font-family:'Sora',sans-serif;box-shadow:0 30px 60px -20px rgba(0,0,0,.45)}
+  .glass{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(20px)}
+  .g-grad{background:linear-gradient(135deg,#8b5cff,#35e0e6)}
+  .g-title{font-weight:600;letter-spacing:-.01em}
+  @keyframes floatOrb{0%,100%{transform:translate(0,0)}50%{transform:translate(-8px,10px)}}
+  @keyframes pulseFab{0%,100%{box-shadow:0 10px 30px rgba(139,92,255,.55)}50%{box-shadow:0 10px 40px rgba(53,224,230,.75)}}
+  .fab{animation:pulseFab 3.2s ease-in-out infinite}
+  .orb{animation:floatOrb 7s ease-in-out infinite}
+  @media (prefers-reduced-motion:reduce){.fab,.orb{animation:none}}
+  .press{transition:transform .15s cubic-bezier(.16,1,.3,1)}
+  .press:active{transform:scale(.95)}
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .sheet{animation:sheetUp .34s cubic-bezier(.16,1,.3,1)}
+  .nn-row{scrollbar-width:none}
+  .nn-row::-webkit-scrollbar{display:none}
+  image-slot{overflow:hidden}
+</style>
+<script src="image-slot.js"></script>
+</helmet>
+
+<section class="dv-turn" id="t3">
+  <div class="dv-thd"><a class="dv-tid" href="#t3">3</a><span class="dv-tname">Интерактивный прототип — таббар и переходы работают</span></div>
+  <div class="dv-opts">
+    <div class="dv-opt" id="3a">
+      <div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a><span><b>Кликабельно.</b> Жми таббар (Home / Trends / Account), карточки нейросетей, «Тарифы», «Пригласить», строки настроек — всё переключается.</span></div>
+      <div class="scr">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+
+        <!-- ===== HOME ===== -->
+        <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 18px 12px">
+              <div style="display:flex;align-items:center;gap:9px"><div class="g-grad" style="width:30px;height:30px;border-radius:10px;box-shadow:0 6px 18px rgba(139,92,255,.5)"></div><div class="g-title" style="font-size:17px">AI Hub</div></div>
+              <div class="glass" style="display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600">128 💎</div>
+            </div>
+            <div style="flex:1;overflow-y:auto" class="nn-row">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 18px 10px">
+                <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.78)">Нейросети</div>
+                <div style="font-size:10.5px;color:rgba(238,240,255,.45)">листай →</div>
+              </div>
+              <div class="nn-row" style="display:flex;gap:11px;overflow-x:auto;padding:0 16px 4px">
+                <div class="press" onClick="{{ openGPT }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#10a37f,#0d7a5f)"><div style="position:absolute;inset:0;background:radial-gradient(80% 60% at 30% 20%,rgba(255,255,255,.18),transparent)"></div><div style="position:absolute;left:11px;right:11px;bottom:11px"><div style="font-weight:600;font-size:13px;color:#fff">ChatGPT</div><div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.2);color:#fff">GPT-5 · Текст</div></div></div>
+                <div class="press" onClick="{{ openClaude }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#d97757,#b85c3f)"><div style="position:absolute;inset:0;background:radial-gradient(80% 60% at 30% 20%,rgba(255,255,255,.18),transparent)"></div><div style="position:absolute;left:11px;right:11px;bottom:11px"><div style="font-weight:600;font-size:13px;color:#fff">Claude</div><div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.2);color:#fff">Sonnet · Текст</div></div></div>
+                <div class="press" onClick="{{ openGemini }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#4285f4,#9b72f2)"><div style="position:absolute;inset:0;background:radial-gradient(80% 60% at 30% 20%,rgba(255,255,255,.18),transparent)"></div><div style="position:absolute;left:11px;right:11px;bottom:11px"><div style="font-weight:600;font-size:13px;color:#fff">Gemini</div><div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.2);color:#fff">2.5 Pro · Текст</div></div></div>
+                <div class="press" onClick="{{ openFlux }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#8b5cff,#5a34c9)"><div style="position:absolute;inset:0;background:radial-gradient(80% 60% at 30% 20%,rgba(255,255,255,.18),transparent)"></div><div style="position:absolute;left:11px;right:11px;bottom:11px"><div style="font-weight:600;font-size:13px;color:#fff">Flux</div><div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(139,92,255,.7);color:#fff">Фото</div></div></div>
+                <div class="press" onClick="{{ openMJ }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#a86bff,#6b3fd6)"><div style="position:absolute;inset:0;background:radial-gradient(80% 60% at 30% 20%,rgba(255,255,255,.18),transparent)"></div><div style="position:absolute;left:11px;right:11px;bottom:11px"><div style="font-weight:600;font-size:13px;color:#fff">Midjourney</div><div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(139,92,255,.7);color:#fff">Фото</div></div></div>
+                <div class="press" onClick="{{ openKling }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#35e0e6,#1b8fa0)"><div style="position:absolute;inset:0;background:radial-gradient(80% 60% at 30% 20%,rgba(255,255,255,.18),transparent)"></div><div style="position:absolute;left:11px;right:11px;bottom:11px"><div style="font-weight:600;font-size:13px;color:#fff">Kling</div><div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(53,224,230,.75);color:#04252a">Видео</div></div></div>
+                <div class="press" onClick="{{ openRunway }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0e7f96)"><div style="position:absolute;inset:0;background:radial-gradient(80% 60% at 30% 20%,rgba(255,255,255,.18),transparent)"></div><div style="position:absolute;left:11px;right:11px;bottom:11px"><div style="font-weight:600;font-size:13px;color:#fff">Runway</div><div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(53,224,230,.75);color:#04252a">Видео</div></div></div>
+              </div>
+              <div class="press glass" onClick="{{ openGPT }}" style="margin:14px 16px 0;border-radius:22px;padding:15px;display:flex;align-items:center;gap:12px;cursor:pointer">
+                <div class="g-grad" style="width:44px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex:none;box-shadow:0 8px 20px rgba(139,92,255,.45)">💬</div>
+                <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14.5px">Спросить нейросеть</div><div style="font-size:11.5px;color:rgba(238,240,255,.6);margin-top:2px">GPT-5, Claude, Gemini — ответят за секунды</div></div>
+                <div style="width:34px;height:34px;border-radius:11px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff">→</div>
+              </div>
+              <div class="press glass" onClick="{{ openFlux }}" style="margin:14px 16px 0;border-radius:22px;padding:15px;display:flex;align-items:center;gap:12px;cursor:pointer">
+                <div style="display:flex"><div style="width:38px;height:48px;border-radius:11px;background:linear-gradient(160deg,#7c5cff,#3b2b8f);border:2px solid #140c26"></div><div style="width:38px;height:48px;border-radius:11px;background:linear-gradient(160deg,#35e0e6,#1b7f9c);border:2px solid #140c26;margin-left:-16px"></div></div>
+                <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14.5px">Сгенерировать фото</div><div style="font-size:11.5px;color:rgba(238,240,255,.6);margin-top:2px">Flux и Midjourney — от 5 💎</div></div>
+                <div class="g-grad" style="width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 8px 20px rgba(139,92,255,.5)">✨</div>
+              </div>
+              <div class="press glass" onClick="{{ openKling }}" style="margin:10px 16px 0;border-radius:22px;padding:15px;display:flex;align-items:center;gap:12px;cursor:pointer">
+                <div style="display:flex"><div style="position:relative;width:56px;height:48px;border-radius:11px;background:linear-gradient(160deg,#35e0e6,#3b2b8f);border:2px solid #140c26;display:flex;align-items:center;justify-content:center"><span style="width:0;height:0;border-left:11px solid rgba(255,255,255,.95);border-top:7px solid transparent;border-bottom:7px solid transparent;margin-left:3px"></span></div></div>
+                <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14.5px">Сгенерировать видео</div><div style="font-size:11.5px;color:rgba(238,240,255,.6);margin-top:2px">Kling, Runway, Sora — оживи фото</div></div>
+                <div class="g-grad" style="width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 8px 20px rgba(139,92,255,.5)">🎬</div>
+              </div>
+              <div style="display:flex;gap:9px;padding:12px 16px 16px;font-size:12px;font-weight:500">
+                <div class="press glass" onClick="{{ toTariffs }}" style="flex:1;text-align:center;padding:10px 0;border-radius:14px;cursor:pointer">💳 Тарифы</div>
+                <div class="press glass" onClick="{{ toReferral }}" style="flex:1;text-align:center;padding:10px 0;border-radius:14px;cursor:pointer">🎁 Пригласить</div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ===== TRENDS ===== -->
+        <sc-if value="{{ isTrends }}">
+          <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+            <div style="padding:8px 18px 4px"><div class="g-title" style="font-size:22px">✨ Тренды</div><div style="font-size:12px;color:rgba(238,240,255,.6);margin-top:4px">Что сейчас вирусится — тапни и повтори</div></div>
+            <div style="flex:1;overflow-y:auto;padding-bottom:16px" class="nn-row">
+              <!-- PHOTO CAROUSEL -->
+              <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 18px 10px"><div style="font-size:12px;font-weight:600">🖼 Фото-тренды</div><div style="font-size:10.5px;color:rgba(238,240,255,.45)">листай →</div></div>
+              <div class="nn-row" style="display:flex;gap:11px;overflow-x:auto;padding:0 16px 4px">
+                <div class="press" onClick="{{ openFlux }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(150deg,#ff8fb1,#8b5cff)"><image-slot id="tr-toy" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.88),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;pointer-events:none">Flux</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Фигурка-игрушка</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Ты как коллекционная фигурка</div></div></div>
+                <div class="press" onClick="{{ openFlux }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(150deg,#c9a06a,#5c4326)"><image-slot id="tr-film" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.88),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;pointer-events:none">Flux</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Плёночный ретро</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">35 мм зерно и лайт-лики</div></div></div>
+                <div class="press" onClick="{{ openMJ }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(150deg,#7a5cff,#20123f)"><image-slot id="tr-time" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.88),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;pointer-events:none">Midjourney</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Машина времени</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Ты в 70-х или Y2K</div></div></div>
+                <div class="press" onClick="{{ openMJ }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(150deg,#f5f5f5,#9aa0b0)"><image-slot id="tr-mag" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.88),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;pointer-events:none">Midjourney</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Обложка журнала</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Vogue-style портрет</div></div></div>
+                <div class="press" onClick="{{ openFlux }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(150deg,#5fd0c5,#2a6f8f)"><image-slot id="tr-anime" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.88),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;pointer-events:none">Flux</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Аниме-портрет</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">В стиле Ghibli</div></div></div>
+                <div class="press" onClick="{{ openFlux }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(150deg,#3a3a44,#0d0d12)"><image-slot id="tr-shoot" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.88),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;pointer-events:none">Flux</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">AI-фотосессия</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Студийный свет без студии</div></div></div>
+              </div>
+              <!-- VIDEO CAROUSEL -->
+              <div style="display:flex;align-items:baseline;justify-content:space-between;padding:20px 18px 10px"><div style="font-size:12px;font-weight:600">🎬 Видео-тренды</div><div style="font-size:10.5px;color:rgba(238,240,255,.45)">листай →</div></div>
+              <div class="nn-row" style="display:flex;gap:11px;overflow-x:auto;padding:0 16px 4px">
+                <div class="press" onClick="{{ openKling }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:#0d0d12"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:rgba(238,240,255,.4);pointer-events:none"><span style="font-size:28px">🎬</span><span style="font-size:9.5px;font-weight:500;letter-spacing:.02em">Загрузите видео</span></div><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;left:11px;font-size:8.5px;font-weight:700;letter-spacing:.04em;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">▶ ВИДЕО</span><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">Kling</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Cakeify</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Разрежь предмет — внутри торт</div></div></div>
+                <div class="press" onClick="{{ openKling }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:#0d0d12"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:rgba(238,240,255,.4);pointer-events:none"><span style="font-size:28px">🎬</span><span style="font-size:9.5px;font-weight:500;letter-spacing:.02em">Загрузите видео</span></div><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;left:11px;font-size:8.5px;font-weight:700;letter-spacing:.04em;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">▶ ВИДЕО</span><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">Kling</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Оживить фото</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Фото → танец за секунды</div></div></div>
+                <div class="press" onClick="{{ openRunway }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:#0d0d12"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:rgba(238,240,255,.4);pointer-events:none"><span style="font-size:28px">🎬</span><span style="font-size:9.5px;font-weight:500;letter-spacing:.02em">Загрузите видео</span></div><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;left:11px;font-size:8.5px;font-weight:700;letter-spacing:.04em;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">▶ ВИДЕО</span><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">Runway</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Squish</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Сожми предмет как желе</div></div></div>
+                <div class="press" onClick="{{ openRunway }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:#0d0d12"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:rgba(238,240,255,.4);pointer-events:none"><span style="font-size:28px">🎬</span><span style="font-size:9.5px;font-weight:500;letter-spacing:.02em">Загрузите видео</span></div><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;left:11px;font-size:8.5px;font-weight:700;letter-spacing:.04em;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">▶ ВИДЕО</span><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">Runway</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Плавление</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Растеки кадр в переход</div></div></div>
+                <div class="press" onClick="{{ openKling }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:#0d0d12"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:rgba(238,240,255,.4);pointer-events:none"><span style="font-size:28px">🎬</span><span style="font-size:9.5px;font-weight:500;letter-spacing:.02em">Загрузите видео</span></div><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;left:11px;font-size:8.5px;font-weight:700;letter-spacing:.04em;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">▶ ВИДЕО</span><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">Kling</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Смена образа</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Переход по одежде</div></div></div>
+                <div class="press" onClick="{{ openSora }}" style="flex:none;width:132px;height:172px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:#0d0d12"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:rgba(238,240,255,.4);pointer-events:none"><span style="font-size:28px">🎬</span><span style="font-size:9.5px;font-weight:500;letter-spacing:.02em">Загрузите видео</span></div><div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.05) 55%,transparent);pointer-events:none"></div><span style="position:absolute;top:11px;left:11px;font-size:8.5px;font-weight:700;letter-spacing:.04em;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">▶ ВИДЕО</span><span style="position:absolute;top:11px;right:11px;font-size:9px;font-weight:600;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;pointer-events:none">Sora</span><div style="position:absolute;left:12px;right:12px;bottom:11px;pointer-events:none"><div style="font-weight:600;font-size:12.5px;color:#fff">Товар в полёте</div><div style="font-size:10px;color:rgba(255,255,255,.82);margin-top:2px">Продукт парит в кадре</div></div></div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ===== ACCOUNT ===== -->
+        <sc-if value="{{ isAccount }}">
+          <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+            <div class="g-title" style="text-align:center;font-size:17px;padding:8px 0 12px">@username</div>
+            <div style="flex:1;overflow-y:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:14px" class="nn-row">
+              <div class="glass" style="border-radius:20px;padding:17px;position:relative;overflow:hidden"><div class="g-grad" style="position:absolute;inset:0 0 auto 0;height:3px"></div>
+                <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(238,240,255,.6)">Текущий тариф</div>
+                <div class="g-title" style="font-size:21px;margin:4px 0 12px">Premium</div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px"><span style="color:rgba(238,240,255,.65)">Запросы сегодня</span><span>34 / 100</span></div>
+                <div style="height:7px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden"><div class="g-grad" style="width:34%;height:100%"></div></div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;font-size:10.5px">
+                  <span class="glass" style="padding:4px 9px;border-radius:999px">Быстрые 66/100</span>
+                  <span class="glass" style="padding:4px 9px;border-radius:999px">Премиум 12/20</span>
+                  <span class="glass" style="padding:4px 9px;border-radius:999px">Картинки 8/15</span>
+                </div>
+              </div>
+              <div class="glass" style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:12px"><div style="font-size:22px">💎</div><div style="flex:1"><div style="font-weight:600;font-size:14px">128 кредитов</div><div style="font-size:10.5px;color:rgba(238,240,255,.55);margin-top:2px">Спишутся, когда закончится дневной лимит</div></div><div class="press g-grad" onClick="{{ toTariffs }}" style="width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;cursor:pointer">+</div></div>
+              <div>
+                <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:2px 4px 8px">Рефералы</div>
+                <div style="display:flex;gap:10px">
+                  <div class="glass" style="flex:1;border-radius:16px;padding:14px;text-align:center"><div class="g-title" style="font-size:22px">7</div><div style="font-size:10px;color:rgba(238,240,255,.6);margin-top:3px">Приглашено</div></div>
+                  <div class="glass" style="flex:1;border-radius:16px;padding:14px;text-align:center"><div class="g-title" style="font-size:22px">140 💎</div><div style="font-size:10px;color:rgba(238,240,255,.6);margin-top:3px">Заработано</div></div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:2px 4px 8px">Ещё</div>
+                <div class="glass" style="border-radius:16px;overflow:hidden">
+                  <div class="press" onClick="{{ toReferral }}" style="padding:13px 15px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between;cursor:pointer"><span>🎁 Реферальная программа</span><span style="color:rgba(238,240,255,.4)">›</span></div>
+                  <div class="press" onClick="{{ toSettings }}" style="padding:13px 15px;font-size:13px;display:flex;align-items:center;justify-content:space-between;cursor:pointer"><span>⚙️ Настройки и поддержка</span><span style="color:rgba(238,240,255,.4)">›</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ===== TARIFFS (pushed) ===== -->
+        <sc-if value="{{ isTariffs }}">
+          <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+            <div style="display:flex;align-items:center;padding:8px 16px 14px"><span class="press" onClick="{{ back }}" style="font-size:20px;cursor:pointer">←</span><div class="g-title" style="flex:1;text-align:center;font-size:16px;margin-right:20px">Тарифы</div></div>
+            <div style="flex:1;overflow-y:auto;padding:0 16px 20px;display:flex;flex-direction:column;gap:12px" class="nn-row">
+              <div class="glass" style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:12px"><div style="flex:1"><div style="font-weight:600;font-size:14.5px">Free</div><div style="font-size:11px;color:rgba(238,240,255,.55);margin-top:2px">20 запросов в день, базовые модели</div></div><div style="background:rgba(255,255,255,.1);color:rgba(238,240,255,.7);font-size:12px;font-weight:600;padding:7px 14px;border-radius:999px">Активен</div></div>
+              <div style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(139,92,255,.25),rgba(53,224,230,.1));border:1px solid rgba(255,255,255,.16)"><div style="flex:1"><div style="display:flex;align-items:center;gap:7px"><span style="font-weight:600;font-size:14.5px">Pro</span><span style="font-size:9px;font-weight:700;letter-spacing:.05em;background:#8b5cff;color:#fff;padding:2px 6px;border-radius:5px">ХИТ</span></div><div style="font-size:11px;color:rgba(238,240,255,.6);margin-top:2px">100 запросов, GPT-5 и Claude без очереди</div></div><div class="press g-grad" style="font-size:12.5px;font-weight:700;color:#fff;padding:8px 15px;border-radius:999px;box-shadow:0 8px 18px rgba(139,92,255,.45);cursor:pointer">299₽/мес</div></div>
+              <div class="glass" style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:12px"><div style="flex:1"><div style="font-weight:600;font-size:14.5px">Premium</div><div style="font-size:11px;color:rgba(238,240,255,.55);margin-top:2px">Безлимит + видео и фото 4K</div></div><div class="press g-grad" style="font-size:12.5px;font-weight:700;color:#fff;padding:8px 15px;border-radius:999px;box-shadow:0 8px 18px rgba(139,92,255,.45);cursor:pointer">599₽/мес</div></div>
+              <div style="text-align:center;font-size:10.5px;color:rgba(238,240,255,.45);margin-top:4px;line-height:1.5">Оплата Telegram Stars или картой (ЮKassa)<br>Отмена в один тап, деньги за неиспользованные дни вернём</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ===== REFERRAL (pushed) ===== -->
+        <sc-if value="{{ isReferral }}">
+          <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+            <div style="display:flex;align-items:center;padding:8px 16px 12px"><span class="press" onClick="{{ back }}" style="font-size:20px;cursor:pointer">←</span><div class="g-title" style="flex:1;text-align:center;font-size:16px;margin-right:20px">Приглашай друзей</div></div>
+            <div style="flex:1;overflow-y:auto;padding:0 16px 20px;display:flex;flex-direction:column;gap:14px" class="nn-row">
+              <div style="border-radius:22px;padding:22px 18px;text-align:center;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(139,92,255,.35),rgba(53,224,230,.16));border:1px solid rgba(255,255,255,.14)"><div class="orb" style="position:absolute;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(53,224,230,.55),transparent 70%);top:-30px;right:-20px"></div><div style="font-size:34px">🎁</div><div class="g-title" style="font-size:17px;margin-top:8px">+20 💎 за каждого друга</div><div style="font-size:11.5px;color:rgba(238,240,255,.7);margin-top:5px;line-height:1.4">И тебе, и другу — бонусные кредиты<br>сразу после его первого запроса</div></div>
+              <div style="display:flex;gap:12px">
+                <div class="glass" style="flex:1;border-radius:18px;padding:16px;text-align:center"><div class="g-title" style="font-size:24px">7</div><div style="font-size:10.5px;color:rgba(238,240,255,.6);margin-top:3px">Приглашено</div></div>
+                <div class="glass" style="flex:1;border-radius:18px;padding:16px;text-align:center"><div class="g-title" style="font-size:24px">140 💎</div><div style="font-size:10.5px;color:rgba(238,240,255,.6);margin-top:3px">Заработано</div></div>
+              </div>
+              <div class="glass" style="border-radius:16px;padding:12px 15px;font-size:11.5px;color:rgba(238,240,255,.6);display:flex;align-items:center;justify-content:space-between"><span>t.me/aihub?start=ref_8842</span><span>📋</span></div>
+              <div class="press g-grad" style="border-radius:999px;padding:14px;text-align:center;font-size:14px;font-weight:700;color:#fff;box-shadow:0 10px 24px rgba(139,92,255,.5);cursor:pointer">Поделиться ссылкой</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ===== SETTINGS (pushed) ===== -->
+        <sc-if value="{{ isSettings }}">
+          <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+            <div style="display:flex;align-items:center;padding:8px 16px 14px"><span class="press" onClick="{{ back }}" style="font-size:20px;cursor:pointer">←</span><div class="g-title" style="flex:1;text-align:center;font-size:16px;margin-right:20px">Настройки</div></div>
+            <div style="flex:1;overflow-y:auto;padding:0 16px 20px;display:flex;flex-direction:column;gap:16px" class="nn-row">
+              <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:0 4px 8px">Предпочтения</div><div class="glass" style="border-radius:16px;overflow:hidden">
+                <div style="padding:13px 15px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between"><span>🌐 Язык ответов</span><span style="color:rgba(238,240,255,.55)">Русский ›</span></div>
+                <div style="padding:13px 15px;font-size:13px;display:flex;align-items:center;justify-content:space-between"><span>🔔 Уведомления</span><span style="width:34px;height:20px;border-radius:999px;background:linear-gradient(135deg,#8b5cff,#35e0e6);position:relative"><span style="position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff"></span></span></div>
+              </div></div>
+              <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:0 4px 8px">Поддержка</div><div class="glass" style="border-radius:16px;padding:14px 15px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:13.5px">Написать в поддержку</div><div style="font-size:11px;color:rgba(238,240,255,.55);margin-top:2px">@aihub_support · отвечаем за 10 мин</div></div><span style="color:rgba(238,240,255,.4)">›</span></div></div>
+              <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:0 4px 8px">О приложении</div><div class="glass" style="border-radius:16px;padding:14px 15px"><div style="display:flex;align-items:center;gap:10px"><div class="g-grad" style="width:30px;height:30px;border-radius:9px"></div><div><div style="font-size:13.5px;font-weight:600">AI Hub</div><div style="font-size:11px;color:rgba(238,240,255,.55);margin-top:1px">Все нейросети в одном месте · v2.0</div></div></div></div></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ===== TABBAR (only on tab roots) ===== -->
+        <sc-if value="{{ showTab }}">
+          <div class="glass" style="margin:0 16px 16px;padding:8px;border-radius:22px;display:flex;align-items:center;gap:4px;background:rgba(20,14,36,.6)">
+            <div class="press" onClick="{{ goHome }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:15px;cursor:pointer;font-size:11px;font-weight:600;color:{{ tHomeCol }};background:{{ tHomeStyle }}"><span style="font-size:17px">🏠</span>Home</div>
+            <div class="press" onClick="{{ goTrends }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:15px;cursor:pointer;font-size:11px;font-weight:600;color:{{ tTrendsCol }};background:{{ tTrendsStyle }}"><span style="font-size:17px">✨</span>Trends</div>
+            <div class="press" onClick="{{ goAccount }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:15px;cursor:pointer;font-size:11px;font-weight:600;color:{{ tAccCol }};background:{{ tAccStyle }}"><span style="font-size:17px">👤</span>Account</div>
+          </div>
+        </sc-if>
+
+        <!-- ===== OVERLAYS ===== -->
+        <sc-if value="{{ isChat }}">
+          <div onClick="{{ close }}" style="position:absolute;inset:0;z-index:5;background:rgba(5,3,12,.62);backdrop-filter:blur(3px)"></div>
+          <div class="sheet" style="position:absolute;left:0;right:0;bottom:0;z-index:6;border-radius:26px 26px 38px 38px;background:linear-gradient(180deg,#150d2c,#0b0716);border-top:1px solid rgba(255,255,255,.12);padding:14px 16px 22px">
+            <div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.2);margin:0 auto 14px"></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div class="g-grad" style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px">🧠</div>
+              <div style="flex:1"><div style="font-weight:600;font-size:15px">{{ model }}</div><div style="font-size:11px;color:rgba(238,240,255,.55)">Чат · 1 💎 за запрос</div></div>
+              <div class="press" onClick="{{ close }}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer">✕</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <div class="press" onClick="{{ setChatGPT }}" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600;color:#fff;cursor:pointer;background:{{ chatGptBg }}">GPT-5</div>
+              <div class="press" onClick="{{ setChatClaude }}" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600;color:#fff;cursor:pointer;background:{{ chatClaudeBg }}">Claude</div>
+              <div class="press" onClick="{{ setChatGemini }}" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600;color:#fff;cursor:pointer;background:{{ chatGeminiBg }}">Gemini</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:12px">
+              <div class="glass" style="align-self:flex-start;max-width:84%;padding:10px 13px;border-radius:16px 16px 16px 5px;font-size:12.5px;line-height:1.4">Привет! О чём поговорим?</div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:center">
+              <div class="glass" style="flex:1;padding:11px 14px;border-radius:16px;font-size:12.5px;color:rgba(238,240,255,.5)">Сообщение…</div>
+              <div class="g-grad" style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px">➤</div>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isImage }}">
+          <div onClick="{{ close }}" style="position:absolute;inset:0;z-index:5;background:rgba(5,3,12,.62);backdrop-filter:blur(3px)"></div>
+          <div class="sheet" style="position:absolute;left:0;right:0;bottom:0;z-index:6;border-radius:26px 26px 38px 38px;background:linear-gradient(180deg,#150d2c,#0b0716);border-top:1px solid rgba(255,255,255,.12);padding:14px 16px 24px">
+            <div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.2);margin:0 auto 14px"></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div class="g-grad" style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px">🎨</div>
+              <div style="flex:1"><div style="font-weight:600;font-size:15px">{{ model }}</div><div style="font-size:11px;color:rgba(238,240,255,.55)">Генерация фото</div></div>
+              <div class="press" onClick="{{ close }}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer">✕</div>
+            </div>
+            <div class="glass" style="border-radius:16px;padding:14px;font-size:12.5px;color:rgba(238,240,255,.5);min-height:70px">Опишите, что хотите создать…</div>
+            <div style="margin-top:13px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5);margin-bottom:7px">Модель</div>
+              <div style="display:flex;gap:8px">
+                <div class="press" onClick="{{ pickImgFlux }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ imgFluxBg }}">Flux</div>
+                <div class="press" onClick="{{ pickImgMj }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ imgMjBg }}">Midjourney</div>
+                <div class="press" onClick="{{ pickImgDalle }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ imgDalleBg }}">DALL·E</div>
+              </div>
+            </div>
+            <div style="margin-top:13px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5);margin-bottom:7px">Качество</div>
+              <div style="display:flex;gap:8px">
+                <div class="g-grad" style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font-size:12px;font-weight:600;color:#fff">1K</div>
+                <div class="glass" style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font-size:12px;font-weight:600">2K</div>
+                <div class="glass" style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font-size:12px;font-weight:600">4K</div>
+              </div>
+            </div>
+            <div class="press g-grad" style="margin-top:13px;border-radius:999px;padding:14px;text-align:center;font-weight:700;font-size:14px;color:#fff;box-shadow:0 10px 24px rgba(139,92,255,.5);cursor:pointer">✨ Создать · 5 💎</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isVideo }}">
+          <div onClick="{{ close }}" style="position:absolute;inset:0;z-index:5;background:rgba(5,3,12,.62);backdrop-filter:blur(3px)"></div>
+          <div class="sheet" style="position:absolute;left:0;right:0;bottom:0;z-index:6;border-radius:26px 26px 38px 38px;background:linear-gradient(180deg,#0c1f2e,#0a0716);border-top:1px solid rgba(255,255,255,.12);padding:14px 16px 24px">
+            <div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.2);margin:0 auto 14px"></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#35e0e6,#1b8fa0);display:flex;align-items:center;justify-content:center;font-size:16px">🎬</div>
+              <div style="flex:1"><div style="font-weight:600;font-size:15px">{{ model }}</div><div style="font-size:11px;color:rgba(238,240,255,.55)">Генерация видео</div></div>
+              <div class="press" onClick="{{ close }}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer">✕</div>
+            </div>
+            <div class="glass" style="border-radius:16px;padding:16px;display:flex;align-items:center;justify-content:center;gap:9px;border-style:dashed;font-size:12px;color:rgba(238,240,255,.6);margin-bottom:11px"><span style="font-size:17px">🖼</span>Добавить фото для оживления</div>
+            <div class="glass" style="border-radius:16px;padding:14px;font-size:12.5px;color:rgba(238,240,255,.5);min-height:56px">Опишите видео…</div>
+            <div style="margin-top:14px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5);margin-bottom:7px">Модель</div>
+              <div style="display:flex;gap:8px">
+                <div class="press" onClick="{{ pickKling }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ klingBg }}">Kling</div>
+                <div class="press" onClick="{{ pickRunway }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ runwayBg }}">Runway</div>
+                <div class="press" onClick="{{ pickSora }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ soraBg }}">Sora</div>
+              </div>
+            </div>
+            <div style="margin-top:14px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5)">Длительность</span><span style="font-size:13px;font-weight:700">{{ duration }} сек</span></div>
+              <input type="range" min="2" max="15" step="1" value="{{ duration }}" onInput="{{ setDuration }}" style="width:100%;accent-color:#8b5cff;height:4px;cursor:pointer" />
+            </div>
+            <div style="margin-top:14px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5);margin-bottom:7px">Качество</div>
+              <div style="display:flex;gap:8px">
+                <div class="press" onClick="{{ pickQ720 }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ q720Bg }}">720p</div>
+                <div class="press" onClick="{{ pickQ1080 }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ q1080Bg }}">1080p</div>
+                <div class="press" onClick="{{ pickQ4k }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ q4kBg }}">4K</div>
+              </div>
+            </div>
+            <div class="press g-grad" style="margin-top:14px;border-radius:999px;padding:14px;text-align:center;font-weight:700;font-size:14px;color:#fff;box-shadow:0 10px 24px rgba(53,224,230,.45);cursor:pointer">🎬 Создать · {{ vCost }} 💎</div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+  <p class="dv-next">Дальше: «добавь состояние загрузки при генерации» · «сделай онбординг» · «добавь пустые состояния и ошибки» · «поправь копирайтинг на …»</p>
+</section>
+
+<section class="dv-turn" id="t2">
+  <div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Aurora Glass (<a class="dv-oid" href="#1b">1b</a>) — раскатано на все экраны</span></div>
+  <div class="dv-opts">
+
+    <!-- 2a HOME -->
+    <div class="dv-opt" id="2a">
+      <div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a><span><b>Home</b></span></div>
+      <div class="scr">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 18px 14px">
+          <div style="display:flex;align-items:center;gap:9px"><div class="g-grad" style="width:30px;height:30px;border-radius:10px;box-shadow:0 6px 18px rgba(139,92,255,.5)"></div><div class="g-title" style="font-size:17px">AI Hub</div></div>
+          <div class="glass" style="display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600">128 💎</div>
+        </div>
+        <div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 18px 10px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.78)">Нейросети</div>
+            <div style="font-size:10.5px;color:rgba(238,240,255,.45)">листай →</div>
+          </div>
+          <div class="nn-row" style="display:flex;gap:11px;overflow-x:auto;padding:0 16px 4px">
+            <div class="press" onClick="{{ openGPT }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#10a37f,#0d7a5f)">
+              <image-slot id="nn-chatgpt" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot>
+              <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.1) 55%,transparent);pointer-events:none"></div>
+              <div style="position:absolute;left:11px;right:11px;bottom:11px;pointer-events:none">
+                <div style="font-weight:600;font-size:13px;color:#fff">ChatGPT</div>
+                <div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(4px)">Текст</div>
+              </div>
+            </div>
+            <div class="press" onClick="{{ openClaude }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#d97757,#b85c3f)">
+              <image-slot id="nn-claude" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot>
+              <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.1) 55%,transparent);pointer-events:none"></div>
+              <div style="position:absolute;left:11px;right:11px;bottom:11px;pointer-events:none">
+                <div style="font-weight:600;font-size:13px;color:#fff">Claude</div>
+                <div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(4px)">Текст</div>
+              </div>
+            </div>
+            <div class="press" onClick="{{ openGemini }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#4285f4,#9b72f2)">
+              <image-slot id="nn-gemini" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot>
+              <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.1) 55%,transparent);pointer-events:none"></div>
+              <div style="position:absolute;left:11px;right:11px;bottom:11px;pointer-events:none">
+                <div style="font-weight:600;font-size:13px;color:#fff">Gemini</div>
+                <div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(4px)">Текст</div>
+              </div>
+            </div>
+            <div class="press" onClick="{{ openFlux }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#8b5cff,#5a34c9)">
+              <image-slot id="nn-flux" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot>
+              <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.1) 55%,transparent);pointer-events:none"></div>
+              <div style="position:absolute;left:11px;right:11px;bottom:11px;pointer-events:none">
+                <div style="font-weight:600;font-size:13px;color:#fff">Flux</div>
+                <div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(139,92,255,.7);color:#fff;backdrop-filter:blur(4px)">Фото</div>
+              </div>
+            </div>
+            <div class="press" onClick="{{ openMJ }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#a86bff,#6b3fd6)">
+              <image-slot id="nn-midjourney" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot>
+              <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.1) 55%,transparent);pointer-events:none"></div>
+              <div style="position:absolute;left:11px;right:11px;bottom:11px;pointer-events:none">
+                <div style="font-weight:600;font-size:13px;color:#fff">Midjourney</div>
+                <div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(139,92,255,.7);color:#fff;backdrop-filter:blur(4px)">Фото</div>
+              </div>
+            </div>
+            <div class="press" onClick="{{ openKling }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#35e0e6,#1b8fa0)">
+              <image-slot id="nn-kling" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot>
+              <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.1) 55%,transparent);pointer-events:none"></div>
+              <div style="position:absolute;left:11px;right:11px;bottom:11px;pointer-events:none">
+                <div style="font-weight:600;font-size:13px;color:#fff">Kling</div>
+                <div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(53,224,230,.75);color:#04252a;backdrop-filter:blur(4px)">Видео</div>
+              </div>
+            </div>
+            <div class="press" onClick="{{ openRunway }}" style="flex:none;width:118px;height:150px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;background:linear-gradient(135deg,#22d3ee,#0e7f96)">
+              <image-slot id="nn-runway" style="position:absolute;inset:0;display:block" shape="rect" placeholder="фото"></image-slot>
+              <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(5,3,12,.85),rgba(5,3,12,.1) 55%,transparent);pointer-events:none"></div>
+              <div style="position:absolute;left:11px;right:11px;bottom:11px;pointer-events:none">
+                <div style="font-weight:600;font-size:13px;color:#fff">Runway</div>
+                <div style="display:inline-block;margin-top:5px;font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(53,224,230,.75);color:#04252a;backdrop-filter:blur(4px)">Видео</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="press glass" onClick="{{ openGPT }}" style="margin:14px 16px 0;border-radius:22px;padding:15px;display:flex;align-items:center;gap:12px;cursor:pointer">
+          <div class="g-grad" style="width:44px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex:none;box-shadow:0 8px 20px rgba(139,92,255,.45)">💬</div>
+          <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14.5px">Спросить нейросеть</div><div style="font-size:11.5px;color:rgba(238,240,255,.6);margin-top:2px">Задайте вопрос — ответит ИИ</div></div>
+          <div style="width:34px;height:34px;border-radius:11px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff">→</div>
+        </div>
+        <div class="glass" style="margin:14px 16px 0;border-radius:22px;padding:15px;display:flex;align-items:center;gap:12px">
+          <div style="display:flex"><div style="width:38px;height:48px;border-radius:11px;background:linear-gradient(160deg,#7c5cff,#3b2b8f);border:2px solid #140c26"></div><div style="width:38px;height:48px;border-radius:11px;background:linear-gradient(160deg,#35e0e6,#1b7f9c);border:2px solid #140c26;margin-left:-16px"></div></div>
+          <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14.5px">Generate Image</div><div style="font-size:11.5px;color:rgba(238,240,255,.6);margin-top:2px">Опишите, что создать</div></div>
+          <div class="g-grad" style="width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 8px 20px rgba(139,92,255,.5)">✨</div>
+        </div>
+        <div class="glass" style="margin:10px 16px 0;border-radius:22px;padding:15px;display:flex;align-items:center;gap:12px">
+          <div style="display:flex"><div style="position:relative;width:56px;height:48px;border-radius:11px;background:linear-gradient(160deg,#35e0e6,#3b2b8f);border:2px solid #140c26;display:flex;align-items:center;justify-content:center"><span style="width:0;height:0;border-left:11px solid rgba(255,255,255,.95);border-top:7px solid transparent;border-bottom:7px solid transparent;margin-left:3px"></span></div></div>
+          <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14.5px">Generate Video</div><div style="font-size:11.5px;color:rgba(238,240,255,.6);margin-top:2px">Оживи текст или фото</div></div>
+          <div class="g-grad" style="width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 8px 20px rgba(139,92,255,.5)">🎬</div>
+        </div>
+        <div style="display:flex;gap:9px;padding:12px 16px 0;font-size:12px;font-weight:500">
+          <div class="glass" style="flex:1;text-align:center;padding:10px 0;border-radius:14px">💳 Тарифы</div>
+          <div class="glass" style="flex:1;text-align:center;padding:10px 0;border-radius:14px">🎁 Пригласить</div>
+        </div>
+        <div style="flex:1"></div>
+        <div class="glass" style="margin:0 16px 16px;padding:8px;border-radius:22px;display:flex;align-items:center;gap:4px;background:rgba(20,14,36,.6)">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:15px;background:linear-gradient(135deg,rgba(139,92,255,.4),rgba(53,224,230,.25));font-size:11px;font-weight:600"><span style="font-size:17px;filter:drop-shadow(0 0 6px rgba(139,92,255,.8))">🏠</span>Home</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font-size:11px;color:rgba(238,240,255,.55)"><span style="font-size:17px">✨</span>Trends</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font-size:11px;color:rgba(238,240,255,.55)"><span style="font-size:17px">👤</span>Account</div>
+        </div>
+        <div class="fab g-grad" style="position:absolute;right:18px;bottom:96px;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px">✨</div>
+
+        <!-- IMAGE GEN OVERLAY -->
+        <sc-if value="{{ isImage }}">
+          <div onClick="{{ close }}" style="position:absolute;inset:0;z-index:5;background:rgba(5,3,12,.62);backdrop-filter:blur(3px)"></div>
+          <div class="sheet" style="position:absolute;left:0;right:0;bottom:0;z-index:6;border-radius:26px 26px 38px 38px;background:linear-gradient(180deg,#150d2c,#0b0716);border-top:1px solid rgba(255,255,255,.12);padding:14px 16px 24px">
+            <div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.2);margin:0 auto 14px"></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div class="g-grad" style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px">🎨</div>
+              <div style="flex:1"><div style="font-weight:600;font-size:15px">{{ model }}</div><div style="font-size:11px;color:rgba(238,240,255,.55)">Генерация фото</div></div>
+              <div class="press" onClick="{{ close }}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer">✕</div>
+            </div>
+            <div class="glass" style="border-radius:16px;padding:14px;font-size:12.5px;color:rgba(238,240,255,.5);min-height:70px">Опишите, что хотите создать…</div>
+            <div style="display:flex;gap:8px;margin-top:11px">
+              <div style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font-size:12px;font-weight:600;background:linear-gradient(135deg,#8b5cff,#35e0e6);color:#fff">1K</div>
+              <div class="glass" style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font-size:12px;font-weight:600">2K</div>
+              <div class="glass" style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font-size:12px;font-weight:600">4K</div>
+            </div>
+            <div class="press g-grad" style="margin-top:13px;border-radius:999px;padding:14px;text-align:center;font-weight:700;font-size:14px;color:#fff;box-shadow:0 10px 24px rgba(139,92,255,.5);cursor:pointer">✨ Generate · 5 💎</div>
+          </div>
+        </sc-if>
+
+        <!-- VIDEO GEN OVERLAY -->
+        <sc-if value="{{ isVideo }}">
+          <div onClick="{{ close }}" style="position:absolute;inset:0;z-index:5;background:rgba(5,3,12,.62);backdrop-filter:blur(3px)"></div>
+          <div class="sheet" style="position:absolute;left:0;right:0;bottom:0;z-index:6;border-radius:26px 26px 38px 38px;background:linear-gradient(180deg,#0c1f2e,#0a0716);border-top:1px solid rgba(255,255,255,.12);padding:14px 16px 24px">
+            <div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.2);margin:0 auto 14px"></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#35e0e6,#1b8fa0);display:flex;align-items:center;justify-content:center;font-size:16px">🎬</div>
+              <div style="flex:1"><div style="font-weight:600;font-size:15px">{{ model }}</div><div style="font-size:11px;color:rgba(238,240,255,.55)">Генерация видео</div></div>
+              <div class="press" onClick="{{ close }}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer">✕</div>
+            </div>
+            <div class="glass" style="border-radius:16px;padding:16px;display:flex;align-items:center;justify-content:center;gap:9px;border-style:dashed;font-size:12px;color:rgba(238,240,255,.6);margin-bottom:11px"><span style="font-size:17px">🖼</span>Добавить фото для оживления</div>
+            <div class="glass" style="border-radius:16px;padding:14px;font-size:12.5px;color:rgba(238,240,255,.5);min-height:56px">Опишите видео…</div>
+            <div style="margin-top:13px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5);margin-bottom:7px">Модель</div>
+              <div style="display:flex;gap:8px">
+                <div class="press" onClick="{{ pickKling }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ klingBg }}">Kling</div>
+                <div class="press" onClick="{{ pickRunway }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ runwayBg }}">Runway</div>
+                <div class="press" onClick="{{ pickSora }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ soraBg }}">Sora</div>
+              </div>
+            </div>
+            <div style="margin-top:14px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5)">Длительность</span><span style="font-size:13px;font-weight:700">{{ duration }} сек</span></div>
+              <input type="range" min="2" max="15" step="1" value="{{ duration }}" onInput="{{ setDuration }}" style="width:100%;accent-color:#8b5cff;height:4px;cursor:pointer" />
+            </div>
+            <div style="margin-top:14px">
+              <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5);margin-bottom:7px">Качество</div>
+              <div style="display:flex;gap:8px">
+                <div class="press" onClick="{{ pickQ720 }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ q720Bg }}">720p</div>
+                <div class="press" onClick="{{ pickQ1080 }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ q1080Bg }}">1080p</div>
+                <div class="press" onClick="{{ pickQ4k }}" style="flex:1;text-align:center;padding:9px 0;border-radius:14px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;background:{{ q4kBg }}">4K</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:14px">
+              <div class="glass" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600">16:9</div>
+              <div class="glass" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600">9:16</div>
+              <div class="glass" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600">1:1</div>
+            </div>
+            <div class="press g-grad" style="margin-top:14px;border-radius:999px;padding:14px;text-align:center;font-weight:700;font-size:14px;color:#fff;box-shadow:0 10px 24px rgba(53,224,230,.45);cursor:pointer">🎬 Generate · {{ vCost }} 💎</div>
+          </div>
+        </sc-if>
+
+        <!-- CHAT OVERLAY -->
+        <sc-if value="{{ isChat }}">
+          <div onClick="{{ close }}" style="position:absolute;inset:0;z-index:5;background:rgba(5,3,12,.62);backdrop-filter:blur(3px)"></div>
+          <div class="sheet" style="position:absolute;left:0;right:0;bottom:0;z-index:6;border-radius:26px 26px 38px 38px;background:linear-gradient(180deg,#150d2c,#0b0716);border-top:1px solid rgba(255,255,255,.12);padding:14px 16px 22px">
+            <div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.2);margin:0 auto 14px"></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div class="g-grad" style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px">🧠</div>
+              <div style="flex:1"><div style="font-weight:600;font-size:15px">{{ model }}</div><div style="font-size:11px;color:rgba(238,240,255,.55)">Чат · 1 💎 за запрос</div></div>
+              <div class="press" onClick="{{ close }}" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer">✕</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <div class="press" onClick="{{ setChatGPT }}" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600;color:#fff;cursor:pointer;background:{{ chatGptBg }}">GPT-5</div>
+              <div class="press" onClick="{{ setChatClaude }}" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600;color:#fff;cursor:pointer;background:{{ chatClaudeBg }}">Claude</div>
+              <div class="press" onClick="{{ setChatGemini }}" style="flex:1;text-align:center;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600;color:#fff;cursor:pointer;background:{{ chatGeminiBg }}">Gemini</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:12px">
+              <div class="glass" style="align-self:flex-start;max-width:84%;padding:10px 13px;border-radius:16px 16px 16px 5px;font-size:12.5px;line-height:1.4">Привет! О чём поговорим?</div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:center">
+              <div class="glass" style="flex:1;padding:11px 14px;border-radius:16px;font-size:12.5px;color:rgba(238,240,255,.5)">Сообщение…</div>
+              <div class="g-grad" style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px">➤</div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- 2b CHAT -->
+    <div class="dv-opt" id="2b">
+      <div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a><span><b>Чат с ИИ</b></span></div>
+      <div class="scr">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div style="padding:6px 14px 10px"><div class="glass" style="display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:16px"><div class="g-grad" style="width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px">🧠</div><div style="flex:1"><div style="font-size:13.5px;font-weight:600">GPT-4o</div><div style="font-size:10.5px;color:rgba(238,240,255,.55)">Быстрые ответы · 1 💎</div></div><span style="color:rgba(238,240,255,.5)">⌄</span></div></div>
+        <div style="flex:1;padding:6px 14px;display:flex;flex-direction:column;gap:10px;overflow:hidden">
+          <div class="glass" style="align-self:flex-start;max-width:82%;padding:10px 13px;border-radius:16px 16px 16px 5px;font-size:12.5px;line-height:1.4">Привет! Я AI Hub. Спроси что угодно или выбери пресет во вкладке Trends ✨</div>
+          <div style="align-self:flex-end;max-width:82%;padding:10px 13px;border-radius:16px 16px 5px 16px;font-size:12.5px;line-height:1.4;background:linear-gradient(135deg,#8b5cff,#35e0e6);color:#fff">Напиши пост про запуск приложения</div>
+          <div class="glass" style="align-self:flex-start;max-width:82%;padding:10px 13px;border-radius:16px 16px 16px 5px;font-size:12.5px;line-height:1.4">🚀 Мы запустили AI Hub — все топовые нейросети в одном месте. GPT, Claude, Gemini и генерация картинок по подписке…</div>
+          <div style="align-self:flex-start;display:flex;gap:4px;padding:6px 4px"><span style="width:6px;height:6px;border-radius:50%;background:rgba(238,240,255,.5)"></span><span style="width:6px;height:6px;border-radius:50%;background:rgba(238,240,255,.3)"></span><span style="width:6px;height:6px;border-radius:50%;background:rgba(238,240,255,.5)"></span></div>
+        </div>
+        <div style="padding:10px 14px 18px;display:flex;gap:9px;align-items:flex-end">
+          <div class="glass" style="flex:1;padding:11px 14px;border-radius:18px;font-size:12.5px;color:rgba(238,240,255,.5)">Сообщение…</div>
+          <div class="g-grad" style="width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 8px 20px rgba(139,92,255,.5)">➤</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2c GENERATE IMAGE -->
+    <div class="dv-opt" id="2c">
+      <div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a><span><b>Генерация картинок</b></span></div>
+      <div class="scr" style="min-height:720px">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div style="display:flex;align-items:center;padding:8px 16px 12px"><span style="font-size:20px">←</span><div class="g-title" style="flex:1;text-align:center;font-size:16px;margin-right:20px">Generate Image</div></div>
+        <div style="padding:0 16px;display:flex;flex-direction:column;gap:12px">
+          <div class="glass" style="border-radius:18px;padding:16px;display:flex;align-items:center;justify-content:center;gap:9px;border-style:dashed;font-size:12.5px;color:rgba(238,240,255,.6)"><span style="font-size:18px">🖼</span>Добавить фото (до 4)</div>
+          <div class="glass" style="border-radius:18px;padding:14px"><div style="font-size:12.5px;color:rgba(238,240,255,.5);line-height:1.4">Опишите, что хотите создать…</div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:24px;font-size:10.5px;color:rgba(238,240,255,.45)">0/6000 ⤢</div></div>
+          <div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:rgba(238,240,255,.5);margin:0 0 8px 2px">Модель</div><div style="display:flex;gap:8px"><div style="flex:1;text-align:center;padding:10px 0;border-radius:14px;font-size:12.5px;font-weight:600;color:#fff;background:linear-gradient(135deg,#8b5cff,#35e0e6)">Flux</div><div class="glass" style="flex:1;text-align:center;padding:10px 0;border-radius:14px;font-size:12.5px;font-weight:600">Midjourney</div><div class="glass" style="flex:1;text-align:center;padding:10px 0;border-radius:14px;font-size:12.5px;font-weight:600">DALL·E</div></div></div>
+          <div style="display:flex;gap:9px">
+            <div style="flex:1;text-align:center;padding:10px 0;border-radius:999px;font-size:12.5px;font-weight:600;background:linear-gradient(135deg,#8b5cff,#35e0e6);color:#fff">1K</div>
+            <div class="glass" style="flex:1;text-align:center;padding:10px 0;border-radius:999px;font-size:12.5px;font-weight:600">2K</div>
+            <div class="glass" style="flex:1;text-align:center;padding:10px 0;border-radius:999px;font-size:12.5px;font-weight:600">4K</div>
+          </div>
+          <div class="glass" style="text-align:center;padding:11px 0;border-radius:999px;font-size:12.5px;font-weight:600">▦ Auto</div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="padding:14px 16px 20px;background:linear-gradient(to top,rgba(10,7,22,.95),transparent)">
+          <div style="text-align:center;font-size:11px;color:rgba(238,240,255,.6);margin-bottom:9px">Баланс: 128 💎</div>
+          <div class="g-grad" style="border-radius:999px;padding:14px;text-align:center;font-size:14.5px;font-weight:700;color:#fff;box-shadow:0 10px 26px rgba(139,92,255,.55)">✨ Generate · 5 💎</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2d TRENDS -->
+    <div class="dv-opt" id="2d">
+      <div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a><span><b>Тренды</b></span></div>
+      <div class="scr">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div style="padding:8px 18px 4px"><div class="g-title" style="font-size:22px">✨ Trends</div><div style="font-size:12px;color:rgba(238,240,255,.6);margin-top:4px">Готовые пресеты — выбери и сразу в диалог</div></div>
+        <div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="border-radius:18px;padding:14px;height:120px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(150deg,rgba(139,92,255,.4),rgba(139,92,255,.08));border:1px solid rgba(255,255,255,.1)"><span style="font-size:22px">🖋</span><div><div style="font-size:13px;font-weight:600">Соцсети</div><div style="font-size:10.5px;color:rgba(238,240,255,.6);margin-top:2px">Посты и подписи</div></div></div>
+          <div style="border-radius:18px;padding:14px;height:120px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(150deg,rgba(53,224,230,.4),rgba(53,224,230,.08));border:1px solid rgba(255,255,255,.1)"><span style="font-size:22px">📸</span><div><div style="font-size:13px;font-weight:600">Фотостиль</div><div style="font-size:10.5px;color:rgba(238,240,255,.6);margin-top:2px">Обработка фото</div></div></div>
+          <div style="border-radius:18px;padding:14px;height:120px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(150deg,rgba(255,120,180,.38),rgba(255,120,180,.08));border:1px solid rgba(255,255,255,.1)"><span style="font-size:22px">💼</span><div><div style="font-size:13px;font-weight:600">Работа</div><div style="font-size:10.5px;color:rgba(238,240,255,.6);margin-top:2px">Письма и резюме</div></div></div>
+          <div style="border-radius:18px;padding:14px;height:120px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(150deg,rgba(120,200,140,.38),rgba(120,200,140,.08));border:1px solid rgba(255,255,255,.1)"><span style="font-size:22px">🎓</span><div><div style="font-size:13px;font-weight:600">Учёба</div><div style="font-size:10.5px;color:rgba(238,240,255,.6);margin-top:2px">Конспекты, эссе</div></div></div>
+        </div>
+        <div style="flex:1"></div>
+        <div class="glass" style="margin:0 16px 16px;padding:8px;border-radius:22px;display:flex;align-items:center;gap:4px;background:rgba(20,14,36,.6)">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font-size:11px;color:rgba(238,240,255,.55)"><span style="font-size:17px">🏠</span>Home</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:15px;background:linear-gradient(135deg,rgba(139,92,255,.4),rgba(53,224,230,.25));font-size:11px;font-weight:600"><span style="font-size:17px;filter:drop-shadow(0 0 6px rgba(139,92,255,.8))">✨</span>Trends</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font-size:11px;color:rgba(238,240,255,.55)"><span style="font-size:17px">👤</span>Account</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2e ACCOUNT -->
+    <div class="dv-opt" id="2e">
+      <div class="dv-olabel"><a class="dv-oid" href="#2e">2e</a><span><b>Аккаунт / баланс</b></span></div>
+      <div class="scr" style="min-height:700px">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div class="g-title" style="text-align:center;font-size:17px;padding:8px 0 14px">@username</div>
+        <div style="padding:0 16px;display:flex;flex-direction:column;gap:14px">
+          <div class="glass" style="border-radius:20px;padding:17px;position:relative;overflow:hidden"><div class="g-grad" style="position:absolute;inset:0 0 auto 0;height:3px"></div>
+            <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(238,240,255,.6)">Current plan</div>
+            <div class="g-title" style="font-size:21px;margin:4px 0 12px">Premium</div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px"><span style="color:rgba(238,240,255,.65)">Дневные запросы</span><span>34 / 100</span></div>
+            <div style="height:7px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden"><div class="g-grad" style="width:34%;height:100%"></div></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;font-size:10.5px">
+              <span class="glass" style="padding:4px 9px;border-radius:999px">Быстрые: 66/100</span>
+              <span class="glass" style="padding:4px 9px;border-radius:999px">Премиум: 12/20</span>
+              <span class="glass" style="padding:4px 9px;border-radius:999px">Картинки: 8/15</span>
+            </div>
+          </div>
+          <div class="glass" style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:12px"><div style="font-size:22px">💎</div><div style="flex:1"><div style="font-weight:600;font-size:14px">128 кредитов</div><div style="font-size:10.5px;color:rgba(238,240,255,.55);margin-top:2px">Тратятся, когда лимит исчерпан</div></div><div class="g-grad" style="width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">+</div></div>
+          <div>
+            <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:2px 4px 8px">Рефералы</div>
+            <div style="display:flex;gap:10px">
+              <div class="glass" style="flex:1;border-radius:16px;padding:14px;text-align:center"><div class="g-title" style="font-size:22px">7</div><div style="font-size:10px;color:rgba(238,240,255,.6);margin-top:3px">Приглашено</div></div>
+              <div class="glass" style="flex:1;border-radius:16px;padding:14px;text-align:center"><div class="g-title" style="font-size:22px">140 💎</div><div style="font-size:10px;color:rgba(238,240,255,.6);margin-top:3px">Бонусов</div></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:2px 4px 8px">Settings</div>
+            <div class="glass" style="border-radius:16px;overflow:hidden">
+              <div style="padding:13px 15px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.07)">⚙️ Настройки и поддержка</div>
+              <div style="padding:13px 15px;font-size:13px">🎁 Реферальная программа</div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1"></div>
+        <div class="glass" style="margin:14px 16px 16px;padding:8px;border-radius:22px;display:flex;align-items:center;gap:4px;background:rgba(20,14,36,.6)">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font-size:11px;color:rgba(238,240,255,.55)"><span style="font-size:17px">🏠</span>Home</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font-size:11px;color:rgba(238,240,255,.55)"><span style="font-size:17px">✨</span>Trends</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:15px;background:linear-gradient(135deg,rgba(139,92,255,.4),rgba(53,224,230,.25));font-size:11px;font-weight:600"><span style="font-size:17px;filter:drop-shadow(0 0 6px rgba(139,92,255,.8))">👤</span>Account</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2f TARIFFS -->
+    <div class="dv-opt" id="2f">
+      <div class="dv-olabel"><a class="dv-oid" href="#2f">2f</a><span><b>Тарифы</b></span></div>
+      <div class="scr">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div style="display:flex;align-items:center;padding:8px 16px 14px"><span style="font-size:20px">←</span><div class="g-title" style="flex:1;text-align:center;font-size:16px;margin-right:20px">Тарифы</div></div>
+        <div style="padding:0 16px;display:flex;flex-direction:column;gap:12px">
+          <div class="glass" style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:12px"><div style="flex:1"><div style="font-weight:600;font-size:14.5px">Free</div><div style="font-size:11px;color:rgba(238,240,255,.55);margin-top:2px">Базовый доступ, 20 запросов/день</div></div><div style="background:rgba(255,255,255,.1);color:rgba(238,240,255,.7);font-size:12px;font-weight:600;padding:7px 14px;border-radius:999px">Активен</div></div>
+          <div style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(139,92,255,.25),rgba(53,224,230,.1));border:1px solid rgba(255,255,255,.16)"><div style="flex:1"><div style="font-weight:600;font-size:14.5px">Pro</div><div style="font-size:11px;color:rgba(238,240,255,.6);margin-top:2px">100 запросов/день, premium-модели</div></div><div class="g-grad" style="font-size:12.5px;font-weight:700;color:#fff;padding:8px 15px;border-radius:999px;box-shadow:0 8px 18px rgba(139,92,255,.45)">299₽</div></div>
+          <div class="glass" style="border-radius:18px;padding:15px;display:flex;align-items:center;gap:12px"><div style="flex:1"><div style="font-weight:600;font-size:14.5px">Premium</div><div style="font-size:11px;color:rgba(238,240,255,.55);margin-top:2px">Безлимит + генерация картинок 4K</div></div><div class="g-grad" style="font-size:12.5px;font-weight:700;color:#fff;padding:8px 15px;border-radius:999px;box-shadow:0 8px 18px rgba(139,92,255,.45)">599₽</div></div>
+          <div style="text-align:center;font-size:10.5px;color:rgba(238,240,255,.45);margin-top:4px">Оплата — Telegram Stars или картой (ЮKassa)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2g REFERRAL -->
+    <div class="dv-opt" id="2g">
+      <div class="dv-olabel"><a class="dv-oid" href="#2g">2g</a><span><b>Рефералка</b></span></div>
+      <div class="scr">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div style="display:flex;align-items:center;padding:8px 16px 12px"><span style="font-size:20px">←</span><div class="g-title" style="flex:1;text-align:center;font-size:16px;margin-right:20px">Приглашай друзей</div></div>
+        <div style="padding:0 16px;display:flex;flex-direction:column;gap:14px">
+          <div style="border-radius:22px;padding:22px 18px;text-align:center;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(139,92,255,.35),rgba(53,224,230,.16));border:1px solid rgba(255,255,255,.14)"><div class="orb" style="position:absolute;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(53,224,230,.55),transparent 70%);top:-30px;right:-20px"></div><div style="font-size:34px">🎁</div><div class="g-title" style="font-size:17px;margin-top:8px">+20 💎 за друга</div><div style="font-size:11.5px;color:rgba(238,240,255,.7);margin-top:5px;line-height:1.4">И другу, и тебе — бонусные кредиты<br>после первого запроса</div></div>
+          <div style="display:flex;gap:12px">
+            <div class="glass" style="flex:1;border-radius:18px;padding:16px;text-align:center"><div class="g-title" style="font-size:24px">7</div><div style="font-size:10.5px;color:rgba(238,240,255,.6);margin-top:3px">Приглашено</div></div>
+            <div class="glass" style="flex:1;border-radius:18px;padding:16px;text-align:center"><div class="g-title" style="font-size:24px">140 💎</div><div style="font-size:10.5px;color:rgba(238,240,255,.6);margin-top:3px">Бонусов</div></div>
+          </div>
+          <div class="glass" style="border-radius:16px;padding:12px 15px;font-size:11.5px;color:rgba(238,240,255,.6);display:flex;align-items:center;justify-content:space-between"><span>t.me/aihub?start=ref_8842</span><span>📋</span></div>
+          <div class="g-grad" style="border-radius:999px;padding:14px;text-align:center;font-size:14px;font-weight:700;color:#fff;box-shadow:0 10px 24px rgba(139,92,255,.5)">Поделиться ссылкой</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2h SETTINGS -->
+    <div class="dv-opt" id="2h">
+      <div class="dv-olabel"><a class="dv-oid" href="#2h">2h</a><span><b>Настройки</b></span></div>
+      <div class="scr">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div style="display:flex;align-items:center;padding:8px 16px 14px"><span style="font-size:20px">←</span><div class="g-title" style="flex:1;text-align:center;font-size:16px;margin-right:20px">Настройки</div></div>
+        <div style="padding:0 16px;display:flex;flex-direction:column;gap:16px">
+          <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:0 4px 8px">Поддержка</div><div class="glass" style="border-radius:16px;padding:14px 15px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:13.5px">Написать в поддержку</div><div style="font-size:11px;color:rgba(238,240,255,.55);margin-top:2px">@aihub_support</div></div><span style="color:rgba(238,240,255,.4)">›</span></div></div>
+          <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.45);padding:0 4px 8px">О приложении</div><div class="glass" style="border-radius:16px;padding:14px 15px"><div style="display:flex;align-items:center;gap:10px"><div class="g-grad" style="width:30px;height:30px;border-radius:9px"></div><div><div style="font-size:13.5px;font-weight:600">AI Hub</div><div style="font-size:11px;color:rgba(238,240,255,.55);margin-top:1px">Все нейросети в одном месте · v2.0</div></div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2i ADMIN -->
+    <div class="dv-opt" id="2i">
+      <div class="dv-olabel"><a class="dv-oid" href="#2i">2i</a><span><b>Админка</b></span></div>
+      <div class="scr">
+        <div class="sb"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <div style="display:flex;align-items:center;padding:8px 16px 12px"><span style="font-size:20px">←</span><div class="g-title" style="flex:1;text-align:center;font-size:16px;margin-right:20px">🛠 Админка</div></div>
+        <div style="padding:0 14px;display:flex;gap:6px;overflow:hidden;font-size:11.5px;font-weight:600">
+          <div class="g-grad" style="padding:7px 13px;border-radius:999px;color:#fff;white-space:nowrap">Статистика</div>
+          <div class="glass" style="padding:7px 13px;border-radius:999px;white-space:nowrap;color:rgba(238,240,255,.7)">Юзеры</div>
+          <div class="glass" style="padding:7px 13px;border-radius:999px;white-space:nowrap;color:rgba(238,240,255,.7)">Платежи</div>
+          <div class="glass" style="padding:7px 13px;border-radius:999px;white-space:nowrap;color:rgba(238,240,255,.7)">Модели</div>
+        </div>
+        <div style="padding:16px 14px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="glass" style="border-radius:18px;padding:15px"><div style="font-size:10.5px;color:rgba(238,240,255,.6)">Пользователей</div><div class="g-title" style="font-size:25px;margin-top:4px">2 481</div><div style="font-size:10px;color:#35e0e6;margin-top:2px">▲ +124 за неделю</div></div>
+          <div class="glass" style="border-radius:18px;padding:15px"><div style="font-size:10.5px;color:rgba(238,240,255,.6)">Активных подписок</div><div class="g-title" style="font-size:25px;margin-top:4px">312</div><div style="font-size:10px;color:#35e0e6;margin-top:2px">▲ +18</div></div>
+          <div class="glass" style="border-radius:18px;padding:15px"><div style="font-size:10.5px;color:rgba(238,240,255,.6)">Выручка / мес</div><div class="g-title" style="font-size:25px;margin-top:4px">148к ₽</div><div style="font-size:10px;color:#35e0e6;margin-top:2px">▲ +9%</div></div>
+          <div class="glass" style="border-radius:18px;padding:15px"><div style="font-size:10.5px;color:rgba(238,240,255,.6)">Запросов сегодня</div><div class="g-title" style="font-size:25px;margin-top:4px">18 903</div><div style="font-size:10px;color:rgba(238,240,255,.5);margin-top:2px">GPT · Claude · Flux</div></div>
+        </div>
+        <div class="glass" style="margin:0 14px;border-radius:18px;padding:15px"><div style="font-size:11px;color:rgba(238,240,255,.6);margin-bottom:10px">Запросы за 7 дней</div><div style="display:flex;align-items:flex-end;gap:7px;height:60px">
+          <div class="g-grad" style="flex:1;height:40%;border-radius:5px"></div><div class="g-grad" style="flex:1;height:65%;border-radius:5px"></div><div class="g-grad" style="flex:1;height:50%;border-radius:5px"></div><div class="g-grad" style="flex:1;height:80%;border-radius:5px"></div><div class="g-grad" style="flex:1;height:70%;border-radius:5px"></div><div class="g-grad" style="flex:1;height:95%;border-radius:5px"></div><div class="g-grad" style="flex:1;height:60%;border-radius:5px"></div>
+        </div></div>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">Дальше: «добавь на Home блок …» · «на <a class="dv-oid" href="#2e">2e</a> добавь кнопку …» · «сделай экран интерактивным прототипом» · «поменяй акцентный цвет»</p>
+</section>
+
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">AI Hub — Home, 3 смелых направления</span></div>
+  <div class="dv-opts">
+
+    <!-- ============ 1A — MONO BRUTALIST ============ -->
+    <div class="dv-opt" id="1a">
+      <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a><span><b>Mono Brutalist.</b> Тёмный, высокий контраст, кислотный лайм, hairline-рамки, моноширинные метки. Строго и уверенно.</span></div>
+      <div class="phone" style="background:#0c0c0d;color:#f4f4f0;font-family:'Space Grotesk',sans-serif;display:flex;flex-direction:column">
+        <div class="sb" style="color:#f4f4f0"><span style="font-family:'Space Mono',monospace">9:41</span><span class="sb-dots"><i style="background:#f4f4f0"></i><i style="background:#f4f4f0"></i><i style="background:#ceff1a"></i></span></div>
+        <!-- header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px 14px">
+          <div style="font-weight:700;font-size:20px;letter-spacing:-.02em">AI<span style="color:#ceff1a">//</span>HUB</div>
+          <div style="font-family:'Space Mono',monospace;font-size:9.5px;border:1px solid rgba(244,244,240,.35);padding:4px 7px;letter-spacing:.05em">12 MODELS</div>
+        </div>
+        <!-- hero -->
+        <div style="margin:0 16px;border:1.5px solid #f4f4f0;padding:18px 16px 14px;position:relative">
+          <div style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.14em;color:#ceff1a">/// AI HUB v2</div>
+          <div style="font-weight:700;font-size:30px;line-height:.98;letter-spacing:-.03em;margin-top:10px">EVERY&nbsp;AI.<br>ONE&nbsp;APP.</div>
+          <div style="font-family:'Space Mono',monospace;font-size:10px;color:rgba(244,244,240,.6);margin-top:10px;line-height:1.4">GPT · CLAUDE · GEMINI<br>DEEPSEEK · IMAGE GEN</div>
+          <div style="display:flex;gap:5px;margin-top:14px"><i style="width:16px;height:3px;background:#ceff1a"></i><i style="width:6px;height:3px;background:rgba(244,244,240,.3)"></i><i style="width:6px;height:3px;background:rgba(244,244,240,.3)"></i></div>
+        </div>
+        <!-- generate card -->
+        <div style="margin:14px 16px 0;border:1.5px solid #f4f4f0;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:stretch;border-bottom:1.5px solid #f4f4f0">
+            <div style="flex:1;padding:14px 14px">
+              <div style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.12em;color:rgba(244,244,240,.55)">GENERATE IMAGE</div>
+              <div style="font-weight:600;font-size:15px;margin-top:5px;letter-spacing:-.01em">Опиши — получи кадр</div>
+            </div>
+            <div style="width:74px;border-left:1.5px solid #f4f4f0;background:repeating-linear-gradient(45deg,#161616 0 6px,#0c0c0d 6px 12px);display:flex;align-items:center;justify-content:center;font-size:22px">✦</div>
+          </div>
+          <div style="background:#ceff1a;color:#0c0c0d;font-weight:700;font-size:13px;letter-spacing:.02em;text-align:center;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px">GENERATE <span>→</span></div>
+        </div>
+        <!-- chips -->
+        <div style="display:flex;gap:8px;padding:14px 16px 0;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.05em">
+          <div style="flex:1;border:1.5px solid rgba(244,244,240,.4);padding:9px 0;text-align:center">💳 TARIFFS</div>
+          <div style="flex:1;border:1.5px solid rgba(244,244,240,.4);padding:9px 0;text-align:center">🎁 INVITE</div>
+        </div>
+        <div style="flex:1"></div>
+        <!-- tabbar -->
+        <div style="border-top:1.5px solid #f4f4f0;display:flex;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.08em">
+          <div style="flex:1;text-align:center;padding:12px 0 16px;position:relative;color:#0c0c0d;background:#ceff1a">HOME</div>
+          <div style="flex:1;text-align:center;padding:12px 0 16px;color:rgba(244,244,240,.6)">TRENDS</div>
+          <div style="flex:1;text-align:center;padding:12px 0 16px;color:rgba(244,244,240,.6)">ACCOUNT</div>
+        </div>
+        <!-- fab -->
+        <div style="position:absolute;right:16px;bottom:70px;width:48px;height:48px;background:#ceff1a;color:#0c0c0d;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 0 0 1.5px #0c0c0d">✦</div>
+      </div>
+    </div>
+
+    <!-- ============ 1B — AURORA GLASS ============ -->
+    <div class="dv-opt" id="1b">
+      <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a><span><b>Aurora Glass.</b> Тёмная база, фиолетово-циановое сияние, матовое стекло, мягкие свечения и глубина. Эволюция текущего неона — но спокойнее и дороже.</span></div>
+      <div class="phone" style="background:radial-gradient(120% 80% at 15% 0%,#1b1140 0%,#0a0716 55%),radial-gradient(90% 70% at 100% 30%,#0b2a3a 0%,rgba(10,7,22,0) 60%);color:#eef0ff;font-family:'Sora',sans-serif;display:flex;flex-direction:column">
+        <div class="sb" style="color:#eef0ff"><span>9:41</span><span class="sb-dots"><i style="background:#eef0ff"></i><i style="background:#eef0ff"></i><i style="background:#8b5cff"></i></span></div>
+        <!-- header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 18px 14px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <div style="width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,#8b5cff,#35e0e6);box-shadow:0 6px 18px rgba(139,92,255,.5)"></div>
+            <div style="font-weight:600;font-size:17px;letter-spacing:-.01em">AI Hub</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600">128 💎</div>
+        </div>
+        <!-- hero -->
+        <div style="margin:0 16px;border-radius:24px;padding:20px 18px;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(139,92,255,.35),rgba(53,224,230,.16));border:1px solid rgba(255,255,255,.14);box-shadow:0 20px 40px -18px rgba(139,92,255,.6)">
+          <div style="position:absolute;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(53,224,230,.6),transparent 70%);top:-40px;right:-30px;filter:blur(6px)"></div>
+          <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(238,240,255,.75)">Все нейросети</div>
+          <div style="font-weight:700;font-size:25px;line-height:1.05;margin-top:8px;letter-spacing:-.02em">в одном<br>приложении</div>
+          <div style="display:inline-flex;align-items:center;gap:7px;margin-top:16px;background:rgba(255,255,255,.92);color:#160a2e;font-weight:600;font-size:12.5px;padding:9px 15px;border-radius:999px">Открыть Premium →</div>
+        </div>
+        <!-- generate card -->
+        <div style="margin:14px 16px 0;border-radius:22px;padding:15px;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(20px)">
+          <div style="display:flex">
+            <div style="width:38px;height:48px;border-radius:11px;background:linear-gradient(160deg,#7c5cff,#3b2b8f);border:2px solid #140c26"></div>
+            <div style="width:38px;height:48px;border-radius:11px;background:linear-gradient(160deg,#35e0e6,#1b7f9c);border:2px solid #140c26;margin-left:-16px"></div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:14.5px">Generate Image</div>
+            <div style="font-size:11.5px;color:rgba(238,240,255,.6);margin-top:2px">Опишите, что создать</div>
+          </div>
+          <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#8b5cff,#35e0e6);display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 8px 20px rgba(139,92,255,.5)">✨</div>
+        </div>
+        <!-- chips -->
+        <div style="display:flex;gap:9px;padding:12px 16px 0;font-size:12px;font-weight:500">
+          <div style="flex:1;text-align:center;padding:10px 0;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)">💳 Тарифы</div>
+          <div style="flex:1;text-align:center;padding:10px 0;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)">🎁 Пригласить</div>
+        </div>
+        <div style="flex:1"></div>
+        <!-- tabbar -->
+        <div style="margin:0 16px 16px;padding:8px;border-radius:22px;display:flex;align-items:center;background:rgba(20,14,36,.6);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(24px);gap:4px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:15px;background:linear-gradient(135deg,rgba(139,92,255,.4),rgba(53,224,230,.25));font-size:11px;font-weight:600"><span style="font-size:17px;filter:drop-shadow(0 0 6px rgba(139,92,255,.8))">🏠</span>Home</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font-size:11px;color:rgba(238,240,255,.55)"><span style="font-size:17px">✨</span>Trends</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;font-size:11px;color:rgba(238,240,255,.55)"><span style="font-size:17px">👤</span>Account</div>
+        </div>
+        <!-- fab -->
+        <div style="position:absolute;right:18px;bottom:96px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#8b5cff,#35e0e6);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 10px 30px rgba(139,92,255,.7)">✨</div>
+      </div>
+    </div>
+
+    <!-- ============ 1C — WARM LUMINOUS LIGHT ============ -->
+    <div class="dv-opt" id="1c">
+      <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a><span><b>Warm Luminous.</b> Полный разворот — светлая кремовая тема, сочный мандариновый акцент, мягкие тени, воздух и простота. Дружелюбно и премиально.</span></div>
+      <div class="phone" style="background:#f3efe7;color:#191510;font-family:'Manrope',sans-serif;display:flex;flex-direction:column">
+        <div class="sb" style="color:#191510"><span>9:41</span><span class="sb-dots"><i style="background:#191510"></i><i style="background:#191510"></i><i style="background:#ff5a2b"></i></span></div>
+        <!-- header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 18px 14px">
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:20px;letter-spacing:-.02em">AI Hub</div>
+          <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid rgba(0,0,0,.06);padding:6px 11px;border-radius:999px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.04)">128 💎</div>
+        </div>
+        <!-- hero -->
+        <div style="margin:0 16px;border-radius:26px;padding:22px 18px;position:relative;overflow:hidden;background:linear-gradient(135deg,#ffd9a8,#ff9d6b 60%,#ff5a2b);box-shadow:0 16px 34px -14px rgba(255,90,43,.55)">
+          <div style="position:absolute;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.28);top:-34px;right:-24px"></div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(41,20,8,.7)">Все нейросети</div>
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:26px;line-height:1.04;margin-top:8px;letter-spacing:-.02em;color:#2a1408">в одном<br>месте</div>
+          <div style="display:inline-flex;align-items:center;gap:7px;margin-top:16px;background:#191510;color:#fff;font-weight:700;font-size:12.5px;padding:10px 16px;border-radius:999px">Открыть Premium →</div>
+        </div>
+        <!-- generate card -->
+        <div style="margin:14px 16px 0;border-radius:22px;padding:15px;display:flex;align-items:center;gap:12px;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.05)">
+          <div style="display:flex">
+            <div style="width:38px;height:48px;border-radius:12px;background:linear-gradient(160deg,#ff8a5b,#ff5a2b);border:2px solid #fff"></div>
+            <div style="width:38px;height:48px;border-radius:12px;background:linear-gradient(160deg,#8f6bff,#6d4bff);border:2px solid #fff;margin-left:-16px"></div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14.5px">Generate Image</div>
+            <div style="font-size:11.5px;color:rgba(25,21,16,.5);margin-top:2px">Опишите, что создать</div>
+          </div>
+          <div style="width:40px;height:40px;border-radius:13px;background:#ff5a2b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 8px 18px rgba(255,90,43,.4)">✨</div>
+        </div>
+        <!-- chips -->
+        <div style="display:flex;gap:9px;padding:12px 16px 0;font-size:12px;font-weight:600">
+          <div style="flex:1;text-align:center;padding:11px 0;border-radius:15px;background:#fff;box-shadow:0 3px 10px rgba(0,0,0,.04)">💳 Тарифы</div>
+          <div style="flex:1;text-align:center;padding:11px 0;border-radius:15px;background:#fff;box-shadow:0 3px 10px rgba(0,0,0,.04)">🎁 Пригласить</div>
+        </div>
+        <div style="flex:1"></div>
+        <!-- tabbar -->
+        <div style="margin:0 14px 16px;padding:7px;border-radius:22px;display:flex;align-items:center;background:#fff;box-shadow:0 6px 20px rgba(0,0,0,.08);gap:4px">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;border-radius:15px;background:#191510;color:#fff;font-size:11px;font-weight:700"><span style="font-size:16px">🏠</span>Home</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;font-size:11px;color:rgba(25,21,16,.45);font-weight:600"><span style="font-size:16px">✨</span>Trends</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;font-size:11px;color:rgba(25,21,16,.45);font-weight:600"><span style="font-size:16px">👤</span>Account</div>
+        </div>
+        <!-- fab -->
+        <div style="position:absolute;right:18px;bottom:96px;width:52px;height:52px;border-radius:50%;background:#ff5a2b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 10px 26px rgba(255,90,43,.5)">✨</div>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">Дальше: «беру <a class="dv-oid" href="#1b">1b</a>, раскатай на все экраны» · «<a class="dv-oid" href="#1a">1a</a>, но лайм замени на другой цвет» · «смешай стекло из <a class="dv-oid" href="#1b">1b</a> со светлой темой <a class="dv-oid" href="#1c">1c</a>» · «покажи ещё направления»</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { overlay: null, model: "", duration: 5, quality: "1080p", tab: "home", stack: [] };
+  componentDidMount() {
+    const hRow = (el) => {
+      let n = el;
+      while (n && n.classList) {
+        if (n.classList.contains("nn-row") && n.scrollWidth > n.clientWidth + 2) return n;
+        n = n.parentElement;
+      }
+      return null;
+    };
+    // wheel: vertical wheel over a horizontal carousel -> scroll it horizontally
+    document.addEventListener("wheel", (e) => {
+      const row = hRow(e.target);
+      if (!row) return;
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (!d) return;
+      row.scrollLeft += d;
+      e.preventDefault();
+      e.stopPropagation();
+    }, { passive: false, capture: true });
+    // pointer drag-to-scroll (works even in canvas/pan mode)
+    let drag = null;
+    document.addEventListener("pointerdown", (e) => {
+      const row = hRow(e.target);
+      if (!row) return;
+      drag = { row, x: e.clientX, left: row.scrollLeft, moved: false };
+    }, true);
+    document.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      if (!drag.moved && Math.abs(dx) < 6) return;
+      drag.moved = true;
+      drag.row.scrollLeft = drag.left - dx;
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+    const endDrag = (e) => {
+      if (drag && drag.moved && e) { e.preventDefault(); e.stopPropagation(); }
+      drag = null;
+    };
+    document.addEventListener("pointerup", endDrag, true);
+    document.addEventListener("pointercancel", endDrag, true);
+  }
+  open(overlay, model) { this.setState({ overlay, model }); }
+  close() { this.setState({ overlay: null }); }
+  goTab(tab) { this.setState({ tab, stack: [], overlay: null }); }
+  push(view) { this.setState(s => ({ stack: [...s.stack, view], overlay: null })); }
+  back() { this.setState(s => ({ stack: s.stack.slice(0, -1) })); }
+  renderVals() {
+    const o = this.state.overlay;
+    const view = this.state.stack.length ? this.state.stack[this.state.stack.length - 1] : this.state.tab;
+    return {
+      isHome: view === "home",
+      isTrends: view === "trends",
+      isAccount: view === "account",
+      isTariffs: view === "tariffs",
+      isReferral: view === "referral",
+      isSettings: view === "settings",
+      isGenImage: view === "genimage",
+      showTab: this.state.stack.length === 0,
+      tabHome: this.state.tab === "home",
+      tabTrends: this.state.tab === "trends",
+      tabAccount: this.state.tab === "account",
+      goHome: () => this.goTab("home"),
+      goTrends: () => this.goTab("trends"),
+      goAccount: () => this.goTab("account"),
+      toTariffs: () => this.push("tariffs"),
+      toReferral: () => this.push("referral"),
+      toSettings: () => this.push("settings"),
+      toGenImage: () => this.push("genimage"),
+      back: () => this.back(),
+      tHomeStyle: this.state.tab === "home" ? "linear-gradient(135deg,rgba(139,92,255,.4),rgba(53,224,230,.25))" : "transparent",
+      tTrendsStyle: this.state.tab === "trends" ? "linear-gradient(135deg,rgba(139,92,255,.4),rgba(53,224,230,.25))" : "transparent",
+      tAccStyle: this.state.tab === "account" ? "linear-gradient(135deg,rgba(139,92,255,.4),rgba(53,224,230,.25))" : "transparent",
+      tHomeCol: this.state.tab === "home" ? "#eef0ff" : "rgba(238,240,255,.55)",
+      tTrendsCol: this.state.tab === "trends" ? "#eef0ff" : "rgba(238,240,255,.55)",
+      tAccCol: this.state.tab === "account" ? "#eef0ff" : "rgba(238,240,255,.55)",
+      model: this.state.model,
+      isImage: o === "image",
+      isVideo: o === "video",
+      isChat: o === "chat",
+      duration: this.state.duration ?? 5,
+      quality: this.state.quality ?? "1080p",
+      vCost: Math.round((this.state.duration ?? 5) * 4 * (this.state.quality === "4K" ? 2.5 : this.state.quality === "1080p" ? 1.5 : 1)),
+      q720Bg: this.state.quality === "720p" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      q1080Bg: this.state.quality === "1080p" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      q4kBg: this.state.quality === "4K" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      pickQ720: () => this.setState({ quality: "720p" }),
+      pickQ1080: () => this.setState({ quality: "1080p" }),
+      pickQ4k: () => this.setState({ quality: "4K" }),
+      setDuration: (e) => this.setState({ duration: +e.target.value }),
+      klingBg: this.state.model === "Kling" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      runwayBg: this.state.model === "Runway" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      soraBg: this.state.model === "Sora" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      pickKling: () => this.setState({ model: "Kling" }),
+      pickRunway: () => this.setState({ model: "Runway" }),
+      pickSora: () => this.setState({ model: "Sora" }),
+      imgFluxBg: this.state.model === "Flux" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      imgMjBg: this.state.model === "Midjourney" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      imgDalleBg: this.state.model === "DALL·E 3" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      pickImgFlux: () => this.setState({ model: "Flux" }),
+      pickImgMj: () => this.setState({ model: "Midjourney" }),
+      pickImgDalle: () => this.setState({ model: "DALL·E 3" }),
+      chatGptBg: this.state.model === "ChatGPT" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      chatClaudeBg: this.state.model === "Claude" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      chatGeminiBg: this.state.model === "Gemini" ? "linear-gradient(135deg,#8b5cff,#35e0e6)" : "rgba(255,255,255,.06)",
+      setChatGPT: () => this.setState({ model: "ChatGPT" }),
+      setChatClaude: () => this.setState({ model: "Claude" }),
+      setChatGemini: () => this.setState({ model: "Gemini" }),
+      close: () => this.close(),
+      openGPT: () => this.open("chat", "ChatGPT"),
+      openClaude: () => this.open("chat", "Claude"),
+      openGemini: () => this.open("chat", "Gemini"),
+      openFlux: () => this.open("image", "Flux"),
+      openMJ: () => this.open("image", "Midjourney"),
+      openKling: () => this.open("video", "Kling"),
+      openRunway: () => this.open("video", "Runway"),
+      openSora: () => this.open("video", "Sora"),
+    };
+  }
+}
+</script>
+</body>
+</html>
