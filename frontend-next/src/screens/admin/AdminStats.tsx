@@ -34,11 +34,36 @@ export default function AdminStats() {
         <Cell subtitle="AI-запросов">{stats.today_ai_requests}</Cell>
         <Cell subtitle="Расходы на API">${stats.today_api_cost_usd.toFixed(4)}</Cell>
         <Cell subtitle="Ошибки">{stats.today_errors}</Cell>
+        <Cell subtitle="Выручка (кредиты)">{stats.today_revenue_credits}</Cell>
+        <Cell subtitle="Выручка (оценка, ₽)">{stats.today_revenue_rub_estimated.toFixed(2)}₽</Cell>
+        <Cell subtitle="Маржа (₽)">{stats.today_margin_rub.toFixed(2)}₽</Cell>
+        <Cell subtitle="Средняя себестоимость (кредиты)">{stats.today_avg_cost_credits.toFixed(2)}</Cell>
       </Section>
+
       <Section header="За месяц">
         <Cell subtitle="Выручка">{stats.month_revenue_rub}₽</Cell>
-        <Cell subtitle="Активные подписки">{stats.month_active_subscriptions}</Cell>
+        <Cell subtitle="Покупок кредитов">{stats.month_credits_purchases_count}</Cell>
       </Section>
+
+      {stats.model_usage.length > 0 && (
+        <Section header="Топ моделей (сегодня)">
+          {stats.model_usage.map((m) => (
+            <Cell key={m.model_code} subtitle={`${m.requests} запросов · $${m.cost_usd.toFixed(4)}`}>
+              {m.model_code}: {m.credits_spent} кредитов
+            </Cell>
+          ))}
+        </Section>
+      )}
+
+      {stats.top_users_by_spend.length > 0 && (
+        <Section header="Топ пользователей по тратам (сегодня)">
+          {stats.top_users_by_spend.map((u) => (
+            <Cell key={u.telegram_id}>
+              tg:{u.telegram_id} — {u.credits_spent} кредитов
+            </Cell>
+          ))}
+        </Section>
+      )}
     </List>
   );
 }
