@@ -125,17 +125,21 @@ AI_MODELS = [
     dict(**_MEDIA, category=ModelCategory.video, code="wan_video", display_name="Wan Video",
          tier=ModelTier.standard, cost_unit=CostUnit.second,
          provider_model_id="fal-ai/wan/v2.2-a14b/text-to-video",
-         min_credits=600, recommended_credits=600, sort_order=180),
+         # $0.08/с * 5.0625с (81 кадр / 16 fps) = $0.405 -> 932; пол = 480p ($0.2025 -> 466)
+         min_credits=466, recommended_credits=932, sort_order=180),
     # Аналогично: приложение fal-ai/kling-video, маршрут v2/master/text-to-video.
     dict(**_MEDIA, category=ModelCategory.video, code="kling_video", display_name="Kling Video",
          tier=ModelTier.premium, cost_unit=CostUnit.second,
          provider_model_id="fal-ai/kling-video/v2/master/text-to-video",
-         min_credits=850, recommended_credits=850, sort_order=190),
+         # $1.40 за 5с (измерено списанием) -> 3220. Было 850 = продажа в минус.
+         min_credits=3220, recommended_credits=3220, sort_order=190),
     # veo3 депрецирован; resolution=4k есть только у veo3.1.
     dict(**_MEDIA, category=ModelCategory.video, code="veo_video", display_name="Veo Video",
          tier=ModelTier.ultra, cost_unit=CostUnit.second,
          provider_model_id="fal-ai/veo3.1",
-         min_credits=4800, recommended_credits=4800, sort_order=200),
+         # дефолт 8с со звуком: $0.40/с * 8 = $3.20 -> 7360.
+         # пол: 4с без звука $0.20/с * 4 = $0.80 -> 1840.
+         min_credits=1840, recommended_credits=7360, sort_order=200),
 ]
 
 # Banner-сиды переносятся как есть (не относятся к кредитной системе).

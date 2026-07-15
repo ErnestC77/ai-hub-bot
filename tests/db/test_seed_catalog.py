@@ -1,3 +1,4 @@
+import math
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -73,6 +74,13 @@ def test_twenty_models_split_12_text_4_image_4_video():
 
 
 def test_model_codes_and_credit_floors_match_tz():
+    """Медиа-цены = формула проекта: credits = usd * 2300
+    (usd -> *80 руб -> *1.15 комиссия -> *2.5 маржа -> /0.10 руб за кредит).
+    Себестоимость измерена живыми генерациями fal 2026-07-15, см. спек.
+
+    recommended_credits -- цена ДЕФОЛТНОЙ комбинации параметров модели.
+    min_credits -- цена самой дешёвой (пол не должен отрезать дешёвые опции).
+    """
     by_code = {m["code"]: m for m in AI_MODELS}
     expected = {
         # code: (min_credits, recommended_credits)
@@ -81,12 +89,41 @@ def test_model_codes_and_credit_floors_match_tz():
         "gpt_premium": (20, 30), "gemini_flash": (20, 30), "gemini_pro": (30, 40),
         "claude_sonnet": (40, 50), "claude_opus": (70, 90),
         "qwen_image": (50, 50), "seedream": (75, 75), "flux_kontext_pro": (100, 100), "nano_banana": (100, 100),
-        "ovi_video": (500, 500), "wan_video": (600, 600), "kling_video": (850, 850), "veo_video": (4800, 4800),
+        # ovi: $0.20 плоско -> 460, в сиде 500 (округление вверх, сходится)
+        "ovi_video": (500, 500),
+        # wan: 480p $0.04/с * 5.0625с ($0.2025 измерено) -> 466 = пол;
+        #      720p (дефолт) $0.08/с * 5.0625с = $0.405 -> 932
+        "wan_video": (466, 932),
+        # kling: $1.40 за 5с (измерено) -> 3220; дешевле 5с не бывает, пол = цене
+        "kling_video": (3220, 3220),
+        # veo: дефолт 8с со звуком $0.40/с = $3.20 -> 7360;
+        #      дешевле всего 4с без звука $0.20/с = $0.80 -> 1840 = пол
+        "veo_video": (1840, 7360),
     }
     assert set(by_code) == set(expected)
     for code, (min_c, rec_c) in expected.items():
         assert by_code[code]["min_credits"] == min_c, code
         assert by_code[code]["recommended_credits"] == rec_c, code
+
+
+def test_media_prices_follow_the_project_formula():
+    """Страховка от 'поправлю число руками': каждая медиа-цена должна получаться
+    из измеренной себестоимости той же формулой, что и текстовые."""
+    CREDITS_PER_USD = 80 * 1.15 * 2.5 / 0.10  # = 2300
+    by_code = {m["code"]: m for m in AI_MODELS}
+    measured_usd = {          # измерено списанием с баланса fal 2026-07-15
+        "qwen_image": 0.02,   # за 1.05 МП
+        "ovi_video": 0.20,    # плоско за видео (по докам, не мерили)
+        "wan_video": 0.405,   # 720p: $0.08/с * 5.0625с (480p измерен как $0.2025)
+        "kling_video": 1.40,  # 5с
+        "veo_video": 3.20,    # 8с со звуком: $0.40/с
+    }
+    for code, usd in measured_usd.items():
+        expected = math.ceil(usd * CREDITS_PER_USD)
+        actual = by_code[code]["recommended_credits"]
+        # ovi/qwen округлены вверх до круглого числа при первичном сиде -- допускаем +10%
+        assert actual >= expected, f"{code}: {actual} < {expected} -- продаём ниже формулы"
+        assert actual <= expected * 1.1, f"{code}: {actual} сильно выше {expected}"
 
 
 def test_media_cost_units_match_tz():
