@@ -180,6 +180,18 @@ export const api = {
 
 // --- admin ---------------------------------------------------------------
 
+export interface ModelUsageOut {
+  model_code: string;
+  requests: number;
+  credits_spent: number;
+  cost_usd: number;
+}
+
+export interface UserSpendOut {
+  telegram_id: number;
+  credits_spent: number;
+}
+
 export interface AdminStatsOut {
   today_new_users: number;
   today_payments_count: number;
@@ -187,8 +199,14 @@ export interface AdminStatsOut {
   today_ai_requests: number;
   today_api_cost_usd: number;
   today_errors: number;
+  today_revenue_credits: number;
+  today_revenue_rub_estimated: number;
+  today_margin_rub: number;
+  today_avg_cost_credits: number;
+  model_usage: ModelUsageOut[];
+  top_users_by_spend: UserSpendOut[];
   month_revenue_rub: number;
-  month_active_subscriptions: number;
+  month_credits_purchases_count: number;
 }
 
 export interface AdminUserOut {
