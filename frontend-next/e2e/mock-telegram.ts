@@ -21,6 +21,16 @@ function signInitData(botToken: string, telegramId: number): string {
 }
 
 export async function mockTelegramWebApp(page: Page, botToken: string, telegramId = 999999): Promise<void> {
+  // The real Telegram SDK (loaded by src/app/layout.tsx with
+  // strategy="beforeInteractive") unconditionally overwrites
+  // window.Telegram.WebApp with its own object once it executes -- even
+  // when window.Telegram already exists -- clobbering the mock below with
+  // an empty initData. Block the network request so the real script never
+  // runs in e2e; the mocked WebApp then stays the only one that ever exists.
+  await page.route("https://telegram.org/js/telegram-web-app.js", (route) =>
+    route.fulfill({ contentType: "application/javascript", body: "" }),
+  );
+
   const initData = signInitData(botToken, telegramId);
   await page.addInitScript((data) => {
     (window as unknown as { Telegram: unknown }).Telegram = {

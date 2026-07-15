@@ -8,5 +8,5 @@ test.beforeEach(async ({ page }) => {
 
 test("settings screen renders", async ({ page }) => {
   await page.goto("/settings");
-  await expect(page.getByText("AI Hub")).toBeVisible();
+  await expect(page.getByText("AI Hub", { exact: true })).toBeVisible();
 });
