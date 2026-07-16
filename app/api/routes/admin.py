@@ -3,6 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_admin, get_db
@@ -446,7 +447,16 @@ async def update_model_option(
 
     for field, value in patch.items():
         setattr(opt, field, value)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Гонка: два админа одновременно назначают дефолт одному (model_id, kind).
+        # Проигравший упирается в частичный уникальный индекс uq_model_option_default.
+        # Отдаём 409 (повторить), а не голый 500.
+        await session.rollback()
+        raise HTTPException(
+            status_code=409, detail="Опции изменены параллельно, повторите"
+        ) from None
 
     model = (
         await session.execute(select(AiModel).where(AiModel.id == opt.model_id))
