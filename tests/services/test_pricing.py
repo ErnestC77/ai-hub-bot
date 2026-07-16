@@ -41,16 +41,16 @@ def _media_model(cost_unit: CostUnit, recommended: int, min_credits: int,
 
 def test_text_formula_steps_1_to_8():
     # apiCostUsd = 2000/1e6*3 + 1000/1e6*15 = 0.021; rub = 0.021*80 = 1.68;
-    # gross = 1.68*1.15 = 1.932; user = 1.932*2.5 = 4.83; ceil(4.83/0.10) = 49.
+    # gross = 1.68*1.15 = 1.932; user = 1.932*1.428571 = 2.7602; ceil(27.602) = 28.
     model = _text_model(input_price=3.0, output_price=15.0, min_credits=5)
-    assert calculate_text_credits(model, 2000, 1000, settings=SETTINGS) == 49
+    assert calculate_text_credits(model, 2000, 1000, settings=SETTINGS) == 28
 
 
 def test_text_ceil_rounds_up():
-    # apiCostUsd = 1043/1e6*10 = 0.01043; user = 0.01043*80*1.15*2.5 = 2.39890 rub;
-    # /0.10 = 23.989 -> ceil = 24.
+    # apiCostUsd = 1043/1e6*10 = 0.01043; user = 0.01043*80*1.15*1.428571 = 1.37080 rub;
+    # /0.10 = 13.708 -> ceil = 14.
     model = _text_model(input_price=10.0, output_price=0.0, min_credits=1)
-    assert calculate_text_credits(model, 1043, 0, settings=SETTINGS) == 24
+    assert calculate_text_credits(model, 1043, 0, settings=SETTINGS) == 14
 
 
 def test_text_model_min_credits_floor():
@@ -68,8 +68,8 @@ def test_text_global_minimum_text_credits_floor():
 def test_text_uses_settings_overrides():
     model = _text_model(input_price=3.0, output_price=15.0, min_credits=5)
     doubled = PricingSettings(usd_to_rub_rate=160.0)
-    # Тот же расчёт, но курс x2: 4.83*2 = 9.66 rub -> ceil(96.6) = 97.
-    assert calculate_text_credits(model, 2000, 1000, settings=doubled) == 97
+    # Тот же расчёт, но курс x2: 2.7602*2 = 5.5204 rub -> ceil(55.204) = 56.
+    assert calculate_text_credits(model, 2000, 1000, settings=doubled) == 56
 
 
 # --- calculate_image_credits ---
@@ -123,10 +123,10 @@ def test_video_cost_unit_is_irrelevant_to_credits():
     assert calculate_video_credits(per_second) == calculate_video_credits(flat) == 600
 
 
-def test_video_global_minimum_500():
-    # recommended 300, min_credits 0 -> глобальный минимум видео 500.
-    model = _media_model(CostUnit.video, recommended=300, min_credits=0, category=ModelCategory.video)
-    assert calculate_video_credits(model) == 500
+def test_video_global_minimum_290():
+    # recommended 200, min_credits 0 -> глобальный минимум видео 290.
+    model = _media_model(CostUnit.video, recommended=200, min_credits=0, category=ModelCategory.video)
+    assert calculate_video_credits(model) == 290
 
 
 def test_options_multiplier_applies_before_floors():

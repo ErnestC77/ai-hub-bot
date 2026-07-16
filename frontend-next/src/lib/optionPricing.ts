@@ -40,18 +40,17 @@ export function optionsMultiplier(model: ModelOut | null, codes: Record<string, 
  * (duration x 4 x qMult) выдумана и не совпадает ни с одной моделью.
  *
  * Порядок повторяет бэкенд (app/services/pricing.py: умножить -> ceil -> floor
- * по min_credits), а не Math.round без floor -- иначе дробные множители
+ * по эффективному полу), а не Math.round без floor -- иначе дробные множители
  * (0.75, 1.988, 0.5) округлялись бы вниз, а дешёвые комбо проваливались бы
- * ниже min_credits, и CTA показывал бы МЕНЬШЕ, чем спишет бэкенд.
+ * ниже пола, и CTA показывал бы МЕНЬШЕ, чем спишет бэкенд.
  *
- * Остаточный разрыв: бэкенд ещё дополнительно флорит видео константой
- * VIDEO_MIN_CREDITS (=500), которая не приходит в ModelOut -- для видео
- * дешевле 500 кредитов CTA всё ещё может показать меньше факта. Эту
- * константу на фронте не хардкодим (расходится при дрейфе бэкенда) --
- * точную сумму по-прежнему даёт только 409-гейт.
+ * Пол берём из min_charge_credits (бэкенд отдаёт его в ModelOut уже с учётом
+ * VIDEO_MIN_CREDITS для видео) -- поэтому CTA совпадает со списанием и для
+ * дешёвых видео-комбо. Раньше здесь был min_credits без этой константы, и
+ * бэкенд списывал больше показанного (баг C1: показывали 466, списывали 500).
  */
 export function estimatedCredits(model: ModelOut | null, codes: Record<string, string>): number {
   if (!model) return 0;
   const raw = Math.ceil(model.recommended_credits * optionsMultiplier(model, codes));
-  return Math.max(raw, model.min_credits);
+  return Math.max(raw, model.min_charge_credits);
 }

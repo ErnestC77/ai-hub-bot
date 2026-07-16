@@ -9,7 +9,7 @@ from app.db.models import AiModel
 
 IMAGE_EDIT_MULTIPLIER = 1.5
 IMAGE_EDIT_MIN_CREDITS = 100
-VIDEO_MIN_CREDITS = 500
+VIDEO_MIN_CREDITS = 290  # пол при валовой марже 30% (было 500 при марже 2.5)
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,10 @@ class PricingSettings:
     usd_to_rub_rate: float = 80.0
     rub_per_credit: float = 0.10
     provider_fee_multiplier: float = 1.15
-    margin_multiplier: float = 2.5
+    # Валовая маржа 30%: цена = себестоимость / (1 - 0.30) = ×1.428571.
+    # Медиа-модели используют не это поле, а свои recommended_credits (= usd × 1314,
+    # где 1314 = 80 × 1.15 × 1.428571 / 0.10) -- держать в синхроне при смене маржи.
+    margin_multiplier: float = 1.428571
     minimum_text_credits: int = 3
 
 
