@@ -217,6 +217,45 @@ async def grant_credits(
     return tx
 
 
+async def revoke_purchase_credits(
+    session: AsyncSession,
+    user_id: int,
+    amount: int,
+    *,
+    reason: str,
+    metadata: dict | None = None,
+) -> CreditTransaction:
+    """Отзыв начисленных за пакет кредитов при возврате платежа -- зеркало
+    grant_credits.
+
+    Баланс МОЖЕТ уйти в минус: если кредиты уже потрачены, клавбэк всё равно
+    списывает полную начисленную сумму, иначе схема «купил -> потратил ->
+    вернул деньги» фармит кредиты бесплатно. Пишется транзакцией типа refund с
+    отрицательной суммой; total_credits_purchased уменьшается (не ниже нуля).
+    Идемпотентность гарантирует вызывающий (refund_service пускает возврат
+    только для payment.status == succeeded, который затем становится refunded)."""
+    if amount <= 0:
+        raise ValueError(f"revoke amount must be positive, got {amount}")
+
+    user = await _lock_user(session, user_id)
+    balance_before = user.credits_balance
+    user.credits_balance = balance_before - amount  # допускаем < 0 (анти-фарм)
+    user.total_credits_purchased = max(0, user.total_credits_purchased - amount)
+
+    tx = CreditTransaction(
+        user_id=user_id,
+        type=CreditTxType.refund,
+        amount=-amount,
+        balance_before=balance_before,
+        balance_after=user.credits_balance,
+        description=reason,
+        metadata_json=metadata,
+    )
+    session.add(tx)
+    await session.flush()
+    return tx
+
+
 async def adjust_credits_admin(
     session: AsyncSession, user_id: int, delta: int, *, reason: str
 ) -> CreditTransaction:

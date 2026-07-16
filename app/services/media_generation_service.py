@@ -376,10 +376,11 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
 async def refund_stale_reserved_requests(
     session: AsyncSession, *, older_than_minutes: int = RECONCILE_STALE_AFTER_MINUTES
 ) -> int:
-    """Возврат кредитов за запросы, застрявшие в status=reserved дольше
-    older_than_minutes -- признак того, что вебхук fal.ai так и не пришёл
-    (сетевой сбой, потерянный callback и т.п.). Без этой развёртки
-    зарезервированные кредиты остались бы списанными навсегда без возврата.
+    """Возврат кредитов за запросы ЛЮБОЙ категории, застрявшие в status=reserved
+    дольше older_than_minutes. Для media это потерянный вебхук fal.ai (сетевой
+    сбой, callback не пришёл); для синхронного text -- краш/сбой Redis между
+    reserve-commit и settle. Без этой развёртки зарезервированные кредиты
+    остались бы списанными навсегда без возврата (backend-аудит C1).
 
     Запускается периодически из app/worker.py (job reconcile_stale_media_reserves,
     подключён в фазе 4).
@@ -402,7 +403,10 @@ async def refund_stale_reserved_requests(
         await session.execute(
             select(AIRequest).where(
                 AIRequest.status == RequestStatus.reserved,
-                AIRequest.category.in_((ModelCategory.image, ModelCategory.video)),
+                # ВСЕ категории, включая text: синхронный текст тоже может
+                # застрять в reserved (краш/сбой Redis между reserve-commit и
+                # settle), а отдельного text-реконсайла нет -- без этого его
+                # кредиты не вернулись бы никогда (backend-аудит C1).
                 AIRequest.created_at < threshold,
             )
         )
@@ -417,7 +421,7 @@ async def refund_stale_reserved_requests(
                 AIRequest.status == RequestStatus.reserved,
                 AIRequest.created_at < threshold,
             )
-            .values(error_message="reconciliation: fal webhook never arrived")
+            .values(error_message="reconciliation: request stuck in reserved")
             # synchronize_session=False: не нужно синхронизировать identity map
             # по этому UPDATE (мы не читаем error_message из `request` дальше,
             # только status, который эта строка не меняет) -- "evaluate"
@@ -430,7 +434,7 @@ async def refund_stale_reserved_requests(
             continue  # уже обработан (вебхук успел раньше) -- не наш запрос больше
 
         await refund_request(
-            session, request, reason="reconciliation: fal webhook never arrived"
+            session, request, reason="reconciliation: request stuck in reserved"
         )
         # decrement здесь (как и на webhook-ветках submit/ERROR/no-result-url выше)
         # может случиться минуты-часы спустя после исходного +estimated в

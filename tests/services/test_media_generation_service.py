@@ -770,6 +770,26 @@ async def test_refund_stale_reserved_requests_refunds_old_reserves(session, fake
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]
 
 
+async def test_refund_stale_reserved_requests_covers_text(session, fake_redis):
+    # Backend-аудит C1: синхронный текст тоже может застрять в reserved, а раньше
+    # реконсайл фильтровал только image/video -> кредиты не возвращались никогда.
+    text_model = AiModel(
+        provider=ModelProvider.openrouter, category=ModelCategory.text, code="txt",
+        display_name="txt", provider_model_id="openrouter/txt", tier=ModelTier.standard,
+        cost_unit=CostUnit.tokens, min_credits=0, recommended_credits=5, fixed_cost_usd=0.0,
+    )
+    user = await _seed(session, text_model)
+    request = await _seed_reserved_request(session, user, text_model, age_minutes=30)
+
+    count = await refund_stale_reserved_requests(session, older_than_minutes=20)
+
+    assert count == 1
+    await session.refresh(request)
+    assert request.status == RequestStatus.refunded
+    fetched = await session.get(User, user.id)
+    assert fetched.credits_balance == 1000  # резерв текста возвращён
+
+
 async def test_refund_stale_reserved_requests_ignores_recent_reserves(session, fake_redis):
     model = _image_model()
     user = await _seed(session, model)
