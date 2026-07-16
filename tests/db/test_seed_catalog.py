@@ -4,9 +4,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.base import Base
-from app.db.enums import CostUnit, ModelCategory, ModelProvider
-from app.db.models import AiModel, CreditPackage, Setting
-from app.db.seed import AI_MODELS, CREDIT_PACKAGES, SETTINGS_ROWS, apply_seed
+from app.db.enums import CostUnit, ModelCategory, ModelOptionKind, ModelProvider
+from app.db.models import AiModel, CreditPackage, ModelOption, Setting
+from app.db.seed import AI_MODELS, CREDIT_PACKAGES, MODEL_OPTIONS, SETTINGS_ROWS, apply_seed
 
 
 @pytest.fixture
@@ -250,3 +250,131 @@ def test_migration_values_match_seed_constants():
         assert by_code[code]["provider_model_id"] in text, f"{code}: эндпоинт из сида не найден в миграции"
     for code in ("wan_video", "kling_video", "veo_video"):
         assert str(by_code[code]["recommended_credits"]) in text, f"{code}: цена из сида не найдена в миграции"
+
+
+def test_option_multipliers_follow_measured_provider_costs():
+    """Множители выведены из замеров живого fal 2026-07-15, а не назначены:
+      kling  10с $2.80 / 5с $1.40         -> 2.0
+      veo    без звука $0.20/с / со звуком $0.40/с -> 0.5
+      veo    4с / 8с                       -> 0.5;  6с / 8с -> 0.75
+      wan    480p $0.04/с / 720p $0.08/с   -> 0.5;  580p $0.06 -> 0.75
+      qwen   2048^2 = 4.19 МП / 1024^2 = 1.05 МП -> 4.0
+    """
+    by = {(o["model_code"], o["kind"], o["code"]): o for o in MODEL_OPTIONS}
+    assert by[("kling_video", ModelOptionKind.duration, "10s")]["credits_multiplier"] == 2.0
+    assert by[("veo_video", ModelOptionKind.audio, "off")]["credits_multiplier"] == 0.5
+    assert by[("veo_video", ModelOptionKind.duration, "4s")]["credits_multiplier"] == 0.5
+    assert by[("wan_video", ModelOptionKind.quality, "480p")]["credits_multiplier"] == 0.5
+    assert by[("qwen_image", ModelOptionKind.quality, "2k")]["credits_multiplier"] == 4.0
+
+
+def test_exactly_one_default_per_model_and_kind():
+    """recommended_credits каталога -- цена ДЕФОЛТНОЙ комбинации. Если дефолтов
+    два или ноль, эта величина теряет смысл."""
+    seen = {}
+    for o in MODEL_OPTIONS:
+        if o.get("is_default"):
+            key = (o["model_code"], o["kind"])
+            assert key not in seen, f"два дефолта: {key}"
+            seen[key] = o
+    kinds = {(o["model_code"], o["kind"]) for o in MODEL_OPTIONS}
+    assert set(seen) == kinds, f"без дефолта: {kinds - set(seen)}"
+
+
+def test_default_option_multiplier_is_one():
+    """Дефолт стоит ровно recommended_credits -- значит его множитель 1.0,
+    иначе каталог и опции разъедутся."""
+    for o in MODEL_OPTIONS:
+        if o.get("is_default"):
+            assert o["credits_multiplier"] == 1.0, o["model_code"]
+
+
+def test_no_options_for_models_without_provider_knobs():
+    """У flux-pro/kontext, nano-banana и kling нет ручки размера (только
+    aspect_ratio) -- опций качества у них быть не должно. У Ovi нет и длительности.
+    Нарисовать контрол, которого провайдер не понимает, хуже, чем не рисовать."""
+    codes_with_quality = {o["model_code"] for o in MODEL_OPTIONS
+                          if o["kind"] == ModelOptionKind.quality}
+    assert "flux_kontext_pro" not in codes_with_quality
+    assert "nano_banana" not in codes_with_quality
+    assert "kling_video" not in codes_with_quality
+    codes_with_duration = {o["model_code"] for o in MODEL_OPTIONS
+                           if o["kind"] == ModelOptionKind.duration}
+    assert "ovi_video" not in codes_with_duration
+
+
+def test_veo_resolution_multipliers_match_measurements():
+    """Измерено 3 генерациями veo 4с без звука: 720p $0.80, 1080p $0.80, 4k $1.60.
+    1080p БЕСПЛАТЕН -- ровно как 720p; дорожает только 4K, вдвое. Угадать это было
+    нельзя: доки о разнице 720p/1080p молчат, а «три градации = три цены» неверно."""
+    by = {o["code"]: o for o in MODEL_OPTIONS
+          if o["model_code"] == "veo_video" and o["kind"] == ModelOptionKind.quality}
+    assert by["720p"]["credits_multiplier"] == 1.0
+    assert by["1080p"]["credits_multiplier"] == 1.0
+    assert by["4k"]["credits_multiplier"] == 2.0
+
+
+def test_nano_banana_pro_resolution_multipliers_match_measurements():
+    """Селектор 1K/2K/4K из дизайн-макета -- на модели, для которой он и создан.
+    Измерено: 1K $0.15, 2K $0.15, 4K $0.30. 2K БЕСПЛАТЕН.
+
+    Этот тест защищает от «здравого смысла»: 1K/2K/4K -> 1/2/4 выглядит очевидно
+    и означало бы вдвое лишнего с пользователя за каждую генерацию в 2K.
+    """
+    by = {o["code"]: o for o in MODEL_OPTIONS
+          if o["model_code"] == "nano_banana_pro" and o["kind"] == ModelOptionKind.quality}
+    assert set(by) == {"1k", "2k", "4k"}
+    assert by["1k"]["credits_multiplier"] == 1.0
+    assert by["2k"]["credits_multiplier"] == 1.0
+    assert by["4k"]["credits_multiplier"] == 2.0
+
+
+def test_seedream_resolution_is_free():
+    """Измерено: square_hd + auto_2K + auto_4K = ровно $0.09 на троих, т.е. $0.03
+    за картинку независимо от разрешения (cost_unit=image -- плоский тариф).
+    Множители 1.0: 2K и 4K достаются пользователю даром."""
+    by = {o["code"]: o for o in MODEL_OPTIONS
+          if o["model_code"] == "seedream" and o["kind"] == ModelOptionKind.quality}
+    assert set(by) == {"1k", "2k", "4k"}
+    assert all(o["credits_multiplier"] == 1.0 for o in by.values())
+
+
+def test_unmeasured_options_are_absent():
+    """НЕ заводим то, чего не мерили. Опция с выдуманным множителем хуже
+    отсутствующей -- она молча ошибётся в деньгах. Ovi: цена плоская, но влияние
+    resolution не измеряли; длительность у него не управляется вовсе."""
+    ovi = {o["code"] for o in MODEL_OPTIONS if o["model_code"] == "ovi_video"}
+    assert ovi == set(), "влияние resolution на цену ovi не измерено"
+
+
+async def test_apply_seed_inserts_options_and_is_idempotent(session):
+    await apply_seed(session)
+    await apply_seed(session)
+    count = (await session.execute(select(func.count()).select_from(ModelOption))).scalar_one()
+    assert count == len(MODEL_OPTIONS)
+
+
+def test_option_migration_matches_seed_constants():
+    """Миграция сида опций (`d4e5f6a9b0c1` в исходном плане переименован в
+    `bb51258925d4`, т.к. `d4e5f6a9b0c1` коллизировал с уже применёнными ревизиями
+    после пересчёта плана) должна вставлять РОВНО те же строки, что MODEL_OPTIONS.
+    Импортируем модуль миграции (а не читаем файл как текст) -- подстрока не
+    отличает `_OPTIONS` от случайного совпадения в другой константе."""
+    import importlib.util, json
+    from pathlib import Path
+
+    path = Path("alembic/versions/bb51258925d4_seed_model_options.py")
+    spec_ = importlib.util.spec_from_file_location("seed_options_migration", path)
+    mod = importlib.util.module_from_spec(spec_)
+    spec_.loader.exec_module(mod)
+
+    from_migration = {
+        (o["model_code"], o["kind"], o["code"]): (float(o["mult"]), json.loads(o["params"]), o["is_default"])
+        for o in mod._OPTIONS
+    }
+    from_seed = {
+        (o["model_code"], o["kind"].value, o["code"]):
+            (float(o["credits_multiplier"]), o["provider_params"], o["is_default"])
+        for o in MODEL_OPTIONS
+    }
+    assert from_migration == from_seed
