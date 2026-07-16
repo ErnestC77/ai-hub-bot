@@ -120,7 +120,13 @@ def upgrade() -> None:
                 "INSERT INTO model_options "
                 "(model_id, kind, code, label, provider_params, credits_multiplier, "
                 " is_default, sort_order, is_active) "
-                "SELECT id, :kind, :code, :label, CAST(:params AS JSONB), :mult, "
+                # CAST(:kind AS modeloptionkind) обязателен: bind-параметр приезжает
+                # в Postgres как varchar, а колонка -- enum, и неявного приведения
+                # для параметров НЕТ (в отличие от строковых литералов -- именно
+                # поэтому соседняя миграция с VALUES ('image', 'pro') работает).
+                # Без каста: DatatypeMismatchError -- проверено на живом Postgres.
+                "SELECT id, CAST(:kind AS modeloptionkind), :code, :label, "
+                "       CAST(:params AS JSONB), CAST(:mult AS NUMERIC), "
                 "       :is_default, :sort_order, true "
                 "FROM ai_models WHERE code = :model_code"
             ).bindparams(**o)
