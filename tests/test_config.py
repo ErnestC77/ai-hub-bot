@@ -61,13 +61,15 @@ def test_prod_web_requires_https_backend_url(monkeypatch):
     assert "BACKEND_PUBLIC_URL" in str(exc.value)
 
 
-def test_prod_web_passes_when_all_secrets_present(monkeypatch):
+def test_prod_web_passes_without_yookassa(monkeypatch):
+    # yookassa опционален (Stars-only валиден) -- ядро задано, старт разрешён.
+    monkeypatch.setenv("BOT_MODE", "polling")  # без webhook -> WEBHOOK_SECRET не обязателен
     for k, v in {
         "OPENROUTER_API_KEY": "k", "FAL_IMAGE_KEY": "k", "FAL_VIDEO_KEY": "k",
         "FAL_WEBHOOK_SECRET": "s", "BACKEND_PUBLIC_URL": "https://back",
-        "FRONTEND_URL": "https://front", "YOOKASSA_SHOP_ID": "1", "YOOKASSA_SECRET_KEY": "k",
+        "FRONTEND_URL": "https://front",
     }.items():
         monkeypatch.setenv(k, v)
     s = Settings(bot_token="x", database_url="postgresql+asyncpg://u@h/db",
                  app_env=AppEnv.prod, _env_file=None)
-    s.require_prod_web_secrets()  # не бросает
+    s.require_prod_web_secrets()  # не бросает даже без yookassa

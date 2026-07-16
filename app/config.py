@@ -181,8 +181,8 @@ class Settings(BaseSettings):
             missing.append("FRONTEND_URL")
         if self.bot_mode == "webhook" and not self.webhook_secret:
             missing.append("WEBHOOK_SECRET (bot_mode=webhook)")
-        if not self.yookassa_shop_id or not self.yookassa_secret_key:
-            missing.append("YOOKASSA_SHOP_ID/SECRET_KEY")
+        # YOOKASSA НЕ требуем: платежи возможны и через Telegram Stars, yookassa
+        # опционален. Отсутствие ключей ломает только yookassa-платежи, не старт.
         if missing:
             raise RuntimeError(
                 "APP_ENV=prod требует заданными: " + ", ".join(missing)
