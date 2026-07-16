@@ -60,7 +60,8 @@ class FalClient:
         return response.json()["request_id"]
 
     async def submit_image(
-        self, model: AiModel, prompt: str, *, image_url: str | None = None, webhook_url: str
+        self, model: AiModel, prompt: str, *, image_url: str | None = None,
+        provider_params: dict | None = None, webhook_url: str,
     ) -> str:
         body: dict = {"prompt": prompt}
         # У некоторых fal-моделей t2i и i2i -- разные маршруты (проверено по
@@ -74,12 +75,18 @@ class FalClient:
             endpoint = model.provider_model_id_edit or model.provider_model_id
         else:
             endpoint = model.provider_model_id
+        # Параметры опций приходят из model_options.provider_params как есть:
+        # адаптер НЕ знает про resolution/duration/num_frames -- контракты
+        # у моделей несводимы, и знание о них живёт в БД, а не в коде.
+        if provider_params:
+            body.update(provider_params)
         return await self._submit(endpoint, body, webhook_url)
 
     async def submit_video(
-        self, model: AiModel, prompt: str, *, duration_seconds: int, webhook_url: str
+        self, model: AiModel, prompt: str, *, provider_params: dict | None = None,
+        webhook_url: str,
     ) -> str:
-        # PLACEHOLDER: имя поля длительности ("duration") уточнить перед
-        # продакшн-запуском для каждой video-модели каталога.
-        body = {"prompt": prompt, "duration": duration_seconds}
+        body: dict = {"prompt": prompt}
+        if provider_params:
+            body.update(provider_params)
         return await self._submit(model.provider_model_id, body, webhook_url)
