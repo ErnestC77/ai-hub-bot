@@ -63,9 +63,18 @@ class FalClient:
         self, model: AiModel, prompt: str, *, image_url: str | None = None, webhook_url: str
     ) -> str:
         body: dict = {"prompt": prompt}
+        # У некоторых fal-моделей t2i и i2i -- разные маршруты (проверено по
+        # схеме fal 2026-07-15): fal-ai/flux-pro/kontext требует image_url
+        # (required: ["prompt","image_url"]), его t2i-версия -- отдельный
+        # /text-to-image эндпоинт без этого поля; nano-banana аналогично
+        # разделяется на .../edit. provider_model_id_edit = None у моделей
+        # с единственным маршрутом -- тогда используем provider_model_id как обычно.
         if image_url is not None:
             body["image_url"] = image_url
-        return await self._submit(model.provider_model_id, body, webhook_url)
+            endpoint = model.provider_model_id_edit or model.provider_model_id
+        else:
+            endpoint = model.provider_model_id
+        return await self._submit(endpoint, body, webhook_url)
 
     async def submit_video(
         self, model: AiModel, prompt: str, *, duration_seconds: int, webhook_url: str

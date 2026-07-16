@@ -17,6 +17,9 @@ class AiModel(Base, TimestampMixin):
     code: Mapped[str] = mapped_column(String(64), unique=True)
     display_name: Mapped[str] = mapped_column(String(128))
     provider_model_id: Mapped[str] = mapped_column(String(128))
+    # Маршрут image-to-image, если у модели он отдельный (flux-pro/kontext, nano-banana/edit).
+    # None = модель обходится одним provider_model_id. Выбор делает FalClient по наличию image_url.
+    provider_model_id_edit: Mapped[str | None] = mapped_column(String(128), nullable=True, default=None)
     tier: Mapped[ModelTier] = mapped_column()
 
     input_price_usd_per_1m_tokens: Mapped[float] = mapped_column(Numeric(12, 6), default=0)

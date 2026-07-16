@@ -1,3 +1,4 @@
+import math
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -73,6 +74,13 @@ def test_twenty_models_split_12_text_4_image_4_video():
 
 
 def test_model_codes_and_credit_floors_match_tz():
+    """Медиа-цены = формула проекта: credits = usd * 2300
+    (usd -> *80 руб -> *1.15 комиссия -> *2.5 маржа -> /0.10 руб за кредит).
+    Себестоимость измерена живыми генерациями fal 2026-07-15, см. спек.
+
+    recommended_credits -- цена ДЕФОЛТНОЙ комбинации параметров модели.
+    min_credits -- цена самой дешёвой (пол не должен отрезать дешёвые опции).
+    """
     by_code = {m["code"]: m for m in AI_MODELS}
     expected = {
         # code: (min_credits, recommended_credits)
@@ -81,12 +89,41 @@ def test_model_codes_and_credit_floors_match_tz():
         "gpt_premium": (20, 30), "gemini_flash": (20, 30), "gemini_pro": (30, 40),
         "claude_sonnet": (40, 50), "claude_opus": (70, 90),
         "qwen_image": (50, 50), "seedream": (75, 75), "flux_kontext_pro": (100, 100), "nano_banana": (100, 100),
-        "ovi_video": (500, 500), "wan_video": (600, 600), "kling_video": (850, 850), "veo_video": (4800, 4800),
+        # ovi: $0.20 плоско -> 460, в сиде 500 (округление вверх, сходится)
+        "ovi_video": (500, 500),
+        # wan: 480p $0.04/с * 5.0625с ($0.2025 измерено) -> 466 = пол;
+        #      720p (дефолт) $0.08/с * 5.0625с = $0.405 -> 932
+        "wan_video": (466, 932),
+        # kling: $1.40 за 5с (измерено) -> 3220; дешевле 5с не бывает, пол = цене
+        "kling_video": (3220, 3220),
+        # veo: дефолт 8с со звуком $0.40/с = $3.20 -> 7360;
+        #      дешевле всего 4с без звука $0.20/с = $0.80 -> 1840 = пол
+        "veo_video": (1840, 7360),
     }
     assert set(by_code) == set(expected)
     for code, (min_c, rec_c) in expected.items():
         assert by_code[code]["min_credits"] == min_c, code
         assert by_code[code]["recommended_credits"] == rec_c, code
+
+
+def test_media_prices_follow_the_project_formula():
+    """Страховка от 'поправлю число руками': каждая медиа-цена должна получаться
+    из измеренной себестоимости той же формулой, что и текстовые."""
+    CREDITS_PER_USD = 80 * 1.15 * 2.5 / 0.10  # = 2300
+    by_code = {m["code"]: m for m in AI_MODELS}
+    measured_usd = {          # измерено списанием с баланса fal 2026-07-15
+        "qwen_image": 0.02,   # за 1.05 МП
+        "ovi_video": 0.20,    # плоско за видео (по докам, не мерили)
+        "wan_video": 0.405,   # 720p: $0.08/с * 5.0625с (480p измерен как $0.2025)
+        "kling_video": 1.40,  # 5с
+        "veo_video": 3.20,    # 8с со звуком: $0.40/с
+    }
+    for code, usd in measured_usd.items():
+        expected = math.ceil(usd * CREDITS_PER_USD)
+        actual = by_code[code]["recommended_credits"]
+        # ovi/qwen округлены вверх до круглого числа при первичном сиде -- допускаем +10%
+        assert actual >= expected, f"{code}: {actual} < {expected} -- продаём ниже формулы"
+        assert actual <= expected * 1.1, f"{code}: {actual} сильно выше {expected}"
 
 
 def test_media_cost_units_match_tz():
@@ -131,3 +168,68 @@ async def test_fallback_column_roundtrips_through_orm(session):
         await session.execute(select(AiModel).where(AiModel.code == "deepseek_v3"))
     ).scalar_one()
     assert deepseek.fallback_model_code is None
+
+
+def test_media_provider_model_ids_are_real_fal_endpoints():
+    """Проверено 2026-07-15 запросом схемы fal (openapi.json?endpoint_id=...):
+    200 = эндпоинт есть, 404 = нет. Старые id (wan/v2.2, kling-video/v2) очередь
+    принимает, но воркер роняет с 'Path /v2.2 not found' -- это хуже честного 404.
+    """
+    by_code = {m["code"]: m for m in AI_MODELS}
+    assert by_code["qwen_image"]["provider_model_id"] == "fal-ai/qwen-image"
+    assert by_code["seedream"]["provider_model_id"] == "fal-ai/bytedance/seedream/v4/text-to-image"
+    assert by_code["flux_kontext_pro"]["provider_model_id"] == "fal-ai/flux-pro/kontext/text-to-image"
+    assert by_code["nano_banana"]["provider_model_id"] == "fal-ai/nano-banana"
+    assert by_code["ovi_video"]["provider_model_id"] == "fal-ai/ovi"
+    assert by_code["wan_video"]["provider_model_id"] == "fal-ai/wan/v2.2-a14b/text-to-video"
+    assert by_code["kling_video"]["provider_model_id"] == "fal-ai/kling-video/v2/master/text-to-video"
+    assert by_code["veo_video"]["provider_model_id"] == "fal-ai/veo3.1"
+
+
+def test_no_deprecated_fal_endpoints():
+    """fal пометил seedream/v3 и veo3 как 'no longer supported'. Оба ещё отвечают,
+    но 2K/4K есть только у преемников -- см. спек, раздел 'Разрешения'."""
+    ids = {m.get("provider_model_id", "") for m in AI_MODELS}
+    assert not any("seedream/v3" in i for i in ids)
+    assert not any(i == "fal-ai/veo3" for i in ids)
+
+
+def test_edit_endpoints_for_image_models_that_have_them():
+    """У flux-pro/kontext и nano-banana t2i и i2i -- разные маршруты fal.
+    Голый fal-ai/flux-pro/kontext требует image_url (required по схеме),
+    поэтому как t2i он падает; а /text-to-image не принимает image_url.
+    """
+    by_code = {m["code"]: m for m in AI_MODELS}
+    assert by_code["flux_kontext_pro"]["provider_model_id_edit"] == "fal-ai/flux-pro/kontext"
+    assert by_code["nano_banana"]["provider_model_id_edit"] == "fal-ai/nano-banana/edit"
+    # у остальных развилки нет
+    assert by_code["qwen_image"].get("provider_model_id_edit") is None
+    assert by_code["seedream"].get("provider_model_id_edit") is None
+
+
+async def test_edit_column_roundtrips_through_orm(session):
+    await apply_seed(session)
+    row = (
+        await session.execute(select(AiModel).where(AiModel.code == "flux_kontext_pro"))
+    ).scalar_one()
+    assert row.provider_model_id_edit == "fal-ai/flux-pro/kontext"
+    qwen = (
+        await session.execute(select(AiModel).where(AiModel.code == "qwen_image"))
+    ).scalar_one()
+    assert qwen.provider_model_id_edit is None
+
+
+def test_migration_values_match_seed_constants():
+    """Миграция чинит существующие строки, сид -- чистую БД. Если они разъедутся,
+    прод и тесты будут жить в разных каталогах. Здесь ловим расхождение.
+    """
+    from pathlib import Path
+
+    path = Path("alembic/versions/a1b2c3d4e5f6_fix_fal_catalog_endpoints_and_prices.py")
+    text = path.read_text(encoding="utf-8")
+    by_code = {m["code"]: m for m in AI_MODELS}
+
+    for code in ("wan_video", "kling_video", "veo_video", "seedream", "flux_kontext_pro"):
+        assert by_code[code]["provider_model_id"] in text, f"{code}: эндпоинт из сида не найден в миграции"
+    for code in ("wan_video", "kling_video", "veo_video"):
+        assert str(by_code[code]["recommended_credits"]) in text, f"{code}: цена из сида не найдена в миграции"

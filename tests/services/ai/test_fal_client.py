@@ -10,10 +10,12 @@ from app.services.ai.fal_client import FalClient, extract_result_url
 
 
 def _model(code="flux_dev", *, provider_model_id="fal-ai/flux/dev",
+           provider_model_id_edit: str | None = None,
            category=ModelCategory.image) -> AiModel:
     return AiModel(
         provider=ModelProvider.fal, category=category, code=code, display_name=code,
-        provider_model_id=provider_model_id, tier=ModelTier.standard,
+        provider_model_id=provider_model_id, provider_model_id_edit=provider_model_id_edit,
+        tier=ModelTier.standard,
         cost_unit=CostUnit.image, min_credits=0, recommended_credits=100,
     )
 
@@ -53,6 +55,80 @@ async def test_submit_image_includes_image_url_for_edit():
 
     body = json.loads(route.calls.last.request.content)
     assert body == {"prompt": "make it night", "image_url": "https://cdn.example.com/in.png"}
+
+
+@respx.mock
+async def test_submit_image_with_image_url_and_edit_route_hits_edit_endpoint():
+    # image_url задан + provider_model_id_edit задан -> запрос идёт на edit-маршрут
+    # (i2i), а не на t2i-маршрут -- иначе пользователя списывают по цене edit,
+    # а сервер тихо игнорирует фото (billing-критичный баг).
+    edit_route = respx.post(host="queue.fal.run", path="/fal-ai/flux-pro/kontext").mock(
+        return_value=httpx.Response(200, json={"request_id": "req-edit"})
+    )
+    t2i_route = respx.post(
+        host="queue.fal.run", path="/fal-ai/flux-pro/kontext/text-to-image"
+    ).mock(return_value=httpx.Response(200, json={"request_id": "req-t2i"}))
+    client = FalClient(api_key="k")
+
+    request_id = await client.submit_image(
+        _model(
+            provider_model_id="fal-ai/flux-pro/kontext/text-to-image",
+            provider_model_id_edit="fal-ai/flux-pro/kontext",
+        ),
+        "make it night",
+        image_url="https://cdn.example.com/in.png",
+        webhook_url="https://backend.example.com/api/fal/webhook?secret=s",
+    )
+
+    assert request_id == "req-edit"
+    assert edit_route.called
+    assert not t2i_route.called
+
+
+@respx.mock
+async def test_submit_image_with_image_url_and_no_edit_route_falls_back_to_provider_model_id():
+    # provider_model_id_edit не задан (единственный маршрут, напр. qwen_image) ->
+    # используем provider_model_id даже при наличии image_url.
+    route = respx.post(host="queue.fal.run", path="/fal-ai/qwen/image-edit").mock(
+        return_value=httpx.Response(200, json={"request_id": "req-single-route"})
+    )
+    client = FalClient(api_key="k")
+
+    request_id = await client.submit_image(
+        _model(provider_model_id="fal-ai/qwen/image-edit", provider_model_id_edit=None),
+        "make it night",
+        image_url="https://cdn.example.com/in.png",
+        webhook_url="https://backend.example.com/api/fal/webhook?secret=s",
+    )
+
+    assert request_id == "req-single-route"
+    assert route.called
+
+
+@respx.mock
+async def test_submit_image_without_image_url_never_uses_edit_route():
+    # Без image_url это t2i-запрос -- обязан идти на provider_model_id, даже
+    # если у модели настроен provider_model_id_edit.
+    t2i_route = respx.post(
+        host="queue.fal.run", path="/fal-ai/flux-pro/kontext/text-to-image"
+    ).mock(return_value=httpx.Response(200, json={"request_id": "req-t2i"}))
+    edit_route = respx.post(host="queue.fal.run", path="/fal-ai/flux-pro/kontext").mock(
+        return_value=httpx.Response(200, json={"request_id": "req-edit"})
+    )
+    client = FalClient(api_key="k")
+
+    request_id = await client.submit_image(
+        _model(
+            provider_model_id="fal-ai/flux-pro/kontext/text-to-image",
+            provider_model_id_edit="fal-ai/flux-pro/kontext",
+        ),
+        "a bear",
+        webhook_url="https://backend.example.com/api/fal/webhook?secret=s",
+    )
+
+    assert request_id == "req-t2i"
+    assert t2i_route.called
+    assert not edit_route.called
 
 
 @respx.mock
