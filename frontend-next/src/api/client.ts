@@ -76,6 +76,8 @@ export interface ModelOut {
   tier: "economy" | "standard" | "premium" | "pro" | "ultra";
   min_credits: number;
   recommended_credits: number;
+  /** Превью-фото карточки нейросети (public/models/<code>.jpg), при 404 -> градиент. */
+  preview_url: string;
   /** Эффективный минимум списания (для видео уже с учётом VIDEO_MIN_CREDITS).
    * Использовать его как пол цены в CTA, а не min_credits. */
   min_charge_credits: number;

@@ -55,6 +55,9 @@ class ModelOut(BaseModel):
     tier: str
     min_credits: int
     recommended_credits: int
+    # Превью-фото карточки нейросети (frontend public/models/<code>.jpg;
+    # фронт резолвит по своему origin, при 404 падает на градиент).
+    preview_url: str
     # Эффективный минимум списания: то, что бэкенд реально спишет как пол
     # (для видео max(min_credits, VIDEO_MIN_CREDITS), иначе min_credits). Фронт
     # использует ЕГО, а не min_credits -- иначе CTA показывал бы меньше, чем
@@ -122,6 +125,7 @@ async def list_models(
             tier=m.tier.value,
             min_credits=m.min_credits,
             recommended_credits=m.recommended_credits,
+            preview_url=f"/models/{m.code}.jpg",
             min_charge_credits=(
                 max(m.min_credits, VIDEO_MIN_CREDITS)
                 if category == ModelCategory.video
