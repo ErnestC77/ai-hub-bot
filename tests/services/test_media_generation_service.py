@@ -14,11 +14,12 @@ from app.db.enums import (
     CostUnit,
     CreditTxType,
     ModelCategory,
+    ModelOptionKind,
     ModelProvider,
     ModelTier,
     RequestStatus,
 )
-from app.db.models import AIRequest, AiModel, CreditTransaction, User
+from app.db.models import AIRequest, AiModel, CreditTransaction, ModelOption, User
 from app.services import antifraud_service as afs
 from app.services import media_generation_service as mgs
 from app.services.ai.base import AIError
@@ -34,6 +35,7 @@ from app.services.media_generation_service import (
     ConfirmationRequiredError,
     ModelNotFoundError,
     RequestInProgressError,
+    UnknownOptionError,
     get_generation,
     handle_fal_webhook,
     refund_stale_reserved_requests,
@@ -108,7 +110,7 @@ class FakeFalClient:
         self.api_keys.append(api_key)
         return self
 
-    async def submit_image(self, model, prompt, *, image_url=None, webhook_url):
+    async def submit_image(self, model, prompt, *, image_url=None, provider_params=None, webhook_url):
         if self.error is not None:
             raise self.error
         # Зеркалит выбор маршрута в реальном FalClient.submit_image
@@ -122,16 +124,16 @@ class FakeFalClient:
         self.image_calls.append({
             "model": model.code, "prompt": prompt,
             "image_url": image_url, "webhook_url": webhook_url,
-            "endpoint": endpoint,
+            "endpoint": endpoint, "provider_params": provider_params,
         })
         return self.request_id
 
-    async def submit_video(self, model, prompt, *, duration_seconds, webhook_url):
+    async def submit_video(self, model, prompt, *, provider_params=None, webhook_url):
         if self.error is not None:
             raise self.error
         self.video_calls.append({
             "model": model.code, "prompt": prompt,
-            "duration_seconds": duration_seconds, "webhook_url": webhook_url,
+            "provider_params": provider_params, "webhook_url": webhook_url,
         })
         return self.request_id
 
@@ -188,6 +190,22 @@ def _video_model(code="vid", *, cost_unit=CostUnit.second, recommended=600,
     )
 
 
+async def _add_option(
+    session, model, *, kind: ModelOptionKind, code: str, params: dict, mult: float,
+    is_default: bool = False, is_active: bool = True,
+) -> ModelOption:
+    """Добавляет строку опции модели напрямую в БД (model уже должен быть
+    сохранён -- нужен его id). Зеркалит форму, которую сеет реальный сид."""
+    option = ModelOption(
+        model_id=model.id, kind=kind, code=code, label=code,
+        provider_params=params, credits_multiplier=mult,
+        is_default=is_default, is_active=is_active,
+    )
+    session.add(option)
+    await session.commit()
+    return option
+
+
 async def _seed(session, *models, balance=1000, purchased=1, spent=0) -> User:
     user = User(
         telegram_id=1, username="u", credits_balance=balance,
@@ -235,7 +253,7 @@ async def test_image_success_reserves_and_submits(session, fake_redis, fal):
     assert fal.image_calls == [{
         "model": "img", "prompt": "a bear",
         "image_url": None, "webhook_url": EXPECTED_WEBHOOK_URL,
-        "endpoint": "fal-ai/img",
+        "endpoint": "fal-ai/img", "provider_params": {},
     }]
     fetched = await session.get(User, user.id)
     assert fetched.credits_balance == 900
@@ -295,26 +313,31 @@ async def test_no_image_url_always_uses_provider_model_id_even_with_edit_route(s
 
 
 async def test_video_uses_default_duration_of_five_seconds(session, fal):
+    # Без опций -- множитель 1.0, provider_params пуст (у модели нет опций
+    # вовсе, поэтому и дефолта навязывать нечему).
     user = await _seed(session, _video_model())
 
     request = await start_media_generation(session, user, "vid", "a bear runs")
 
-    assert request.estimated_credits == 600  # ceil(5/5 * 600)
+    assert request.estimated_credits == 600  # recommended_credits * 1.0
     assert fal.video_calls == [{
         "model": "vid", "prompt": "a bear runs",
-        "duration_seconds": 5, "webhook_url": EXPECTED_WEBHOOK_URL,
+        "provider_params": {}, "webhook_url": EXPECTED_WEBHOOK_URL,
     }]
 
 
 async def test_video_duration_scales_credits_and_is_passed_to_fal(session, fal):
-    user = await _seed(session, _video_model(), balance=2000)
+    model = _video_model(recommended=600)
+    user = await _seed(session, model, balance=2000)
+    await _add_option(session, model, kind=ModelOptionKind.duration, code="10s",
+                      params={"duration": "10"}, mult=2.0)
 
     request = await start_media_generation(
-        session, user, "vid", "a bear runs", duration_seconds=10, confirm=True
+        session, user, "vid", "a bear runs", option_codes={"duration": "10s"}, confirm=True
     )
 
-    assert request.estimated_credits == 1200  # ceil(10/5 * 600); >1000 -> нужен confirm
-    assert fal.video_calls[0]["duration_seconds"] == 10
+    assert request.estimated_credits == 1200  # ceil(600 * 2.0); >1000 -> нужен confirm
+    assert fal.video_calls[0]["provider_params"] == {"duration": "10"}
 
 
 # --- provider_cost_usd (фаза 6) ---
@@ -344,12 +367,13 @@ async def test_image_edit_does_not_multiply_provider_cost_usd(session, fal):
 async def test_video_start_fills_provider_cost_usd(session, fal):
     user = await _seed(session, _video_model(fixed_cost_usd=0.5), balance=2000)
 
-    request = await start_media_generation(
-        session, user, "vid", "a bear runs", duration_seconds=10, confirm=True
-    )
+    request = await start_media_generation(session, user, "vid", "a bear runs")
 
-    # cost_unit=second: 10/5 * 0.5 = 1.0 (та же длительность, что и в кредитах)
-    assert float(request.provider_cost_usd) == pytest.approx(1.0)
+    # cost_unit=second: провайдерская себестоимость всегда считается по
+    # VIDEO_DEFAULT_DURATION_SECONDS (5с) -- это отдельная забота от
+    # пользовательской цены, которую задаёт опция duration (см. бриф Task 6).
+    # 5/5 * 0.5 = 0.5
+    assert float(request.provider_cost_usd) == pytest.approx(0.5)
 
 
 # --- подтверждение дорогого запроса ---
@@ -1011,3 +1035,85 @@ async def test_worker_validation_error_body_refunds_credits(session, fal, fake_r
 
     assert (await session.get(User, user.id)).credits_balance == 1000
     assert await _tx_types(session) == [CreditTxType.reserve, CreditTxType.refund]
+
+
+# --- Task 6: резолв опций (option_codes -> множитель + provider_params) ---
+
+async def test_options_multiply_price_and_reach_provider(session, fal):
+    model = _video_model(recommended=3220, min_credits=3220)
+    user = await _seed(session, model, balance=10000)
+    await _add_option(session, model, kind=ModelOptionKind.duration, code="10s",
+                      params={"duration": "10"}, mult=2.0)
+
+    # confirm=True: 6440 > VIDEO_CONFIRM_THRESHOLD_CREDITS (1000) -- у kling уже
+    # база (3220) выше порога, это отдельная забота (антифрод-подтверждение),
+    # не то, что проверяет этот тест (композицию множителя опции).
+    request = await start_media_generation(
+        session, user, model.code, "a cube",
+        option_codes={"duration": "10s"}, confirm=True,
+    )
+
+    assert request.estimated_credits == 6440  # 3220 * 2.0
+    assert fal.video_calls[-1]["provider_params"] == {"duration": "10"}
+
+
+async def test_default_option_used_when_code_absent(session, fal):
+    model = _video_model(recommended=3220, min_credits=3220)
+    user = await _seed(session, model, balance=10000)
+    await _add_option(session, model, kind=ModelOptionKind.duration, code="5s",
+                      params={"duration": "5"}, mult=1.0, is_default=True)
+
+    # confirm=True: та же причина, что в test_options_multiply_price_and_reach_provider --
+    # 3220 (база kling) уже выше VIDEO_CONFIRM_THRESHOLD_CREDITS сама по себе.
+    request = await start_media_generation(
+        session, user, model.code, "a cube", confirm=True
+    )
+
+    assert request.estimated_credits == 3220
+    assert fal.video_calls[-1]["provider_params"] == {"duration": "5"}
+
+
+async def test_unknown_option_code_raises(session, fal):
+    """400, не тихий дефолт: молчаливый откат вернёт нас ровно к тому,
+    от чего уходим -- контролу, который делает не то, что показывает."""
+    model = _video_model()
+    user = await _seed(session, model, balance=10000)
+    await _add_option(session, model, kind=ModelOptionKind.duration, code="5s",
+                      params={"duration": "5"}, mult=1.0, is_default=True)
+
+    with pytest.raises(UnknownOptionError):
+        await start_media_generation(
+            session, user, model.code, "a cube", option_codes={"duration": "99s"}
+        )
+
+
+async def test_inactive_option_rejected(session, fal):
+    model = _video_model()
+    user = await _seed(session, model, balance=10000)
+    await _add_option(session, model, kind=ModelOptionKind.duration, code="10s",
+                      params={"duration": "10"}, mult=2.0, is_active=False)
+    with pytest.raises(UnknownOptionError):
+        await start_media_generation(
+            session, user, model.code, "a cube", option_codes={"duration": "10s"}
+        )
+
+
+async def test_multiple_kinds_compose(session, fal):
+    """Veo: длительность и звук -- независимые оси, множители перемножаются,
+    provider_params сливаются."""
+    model = _video_model(recommended=7360, min_credits=1840)
+    user = await _seed(session, model, balance=100000)
+    await _add_option(session, model, kind=ModelOptionKind.duration, code="4s",
+                      params={"duration": "4s"}, mult=0.5)
+    await _add_option(session, model, kind=ModelOptionKind.audio, code="off",
+                      params={"generate_audio": False}, mult=0.5)
+
+    # confirm=True: 1840 > VIDEO_CONFIRM_THRESHOLD_CREDITS (1000) -- независимо
+    # от опций у Veo уже такая база; проверяем композицию множителей, не gate.
+    request = await start_media_generation(
+        session, user, model.code, "a cube",
+        option_codes={"duration": "4s", "audio": "off"}, confirm=True,
+    )
+
+    assert request.estimated_credits == 1840  # 7360 * 0.5 * 0.5
+    assert fal.video_calls[-1]["provider_params"] == {"duration": "4s", "generate_audio": False}
