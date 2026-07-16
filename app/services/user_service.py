@@ -30,6 +30,9 @@ async def get_or_create_user(
         user.first_name = first_name
         if language_code:
             user.language_code = language_code
+        # Ре-синхрон с ADMIN_IDS: снятие/добавление ID отражается на флаге (для
+        # витрины). Авторизация всё равно сверяет env напрямую (current_admin).
+        user.is_admin = telegram_id in settings.admin_id_list
 
     await session.commit()
     return user
