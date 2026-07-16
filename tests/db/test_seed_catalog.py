@@ -27,7 +27,7 @@ def test_settings_rows_with_spec_values():
         "usd_to_rub_rate": "80",
         "rub_per_credit": "0.10",
         "provider_fee_multiplier": "1.15",
-        "margin_multiplier": "2.5",
+        "margin_multiplier": "1.428571",
         "minimum_text_credits": "3",
         # antifraud (фаза 5)
         "daily_spend_limit_credits": "10000",
@@ -78,8 +78,8 @@ def test_catalog_split_12_text_5_image_4_video():
 
 
 def test_model_codes_and_credit_floors_match_tz():
-    """Медиа-цены = формула проекта: credits = usd * 2300
-    (usd -> *80 руб -> *1.15 комиссия -> *2.5 маржа -> /0.10 руб за кредит).
+    """Медиа-цены = формула проекта: credits = usd * 1314
+    (usd -> *80 руб -> *1.15 комиссия -> *1.428571 маржа 30% -> /0.10 руб за кредит).
     Себестоимость измерена живыми генерациями fal 2026-07-15, см. спек.
 
     recommended_credits -- цена ДЕФОЛТНОЙ комбинации параметров модели.
@@ -87,23 +87,22 @@ def test_model_codes_and_credit_floors_match_tz():
     """
     by_code = {m["code"]: m for m in AI_MODELS}
     expected = {
-        # code: (min_credits, recommended_credits)
+        # code: (min_credits, recommended_credits) -- текст неизменен (полы),
+        # медиа пересчитаны под маржу 30% (фактор 1314 = ceil(old*1314/2300)).
         "deepseek_v3": (3, 3), "llama_3_1_8b": (3, 3), "qwen_plus": (3, 6), "mistral_large": (3, 6),
         "gpt_mini": (5, 6), "qwen_max": (10, 15), "grok": (10, 15),
         "gpt_premium": (20, 30), "gemini_flash": (20, 30), "gemini_pro": (30, 40),
         "claude_sonnet": (40, 50), "claude_opus": (70, 90),
-        "qwen_image": (50, 50), "seedream": (75, 75), "flux_kontext_pro": (100, 100), "nano_banana": (100, 100),
-        "nano_banana_pro": (345, 345),
-        # ovi: $0.20 плоско -> 460, в сиде 500 (округление вверх, сходится)
-        "ovi_video": (500, 500),
-        # wan: 480p $0.04/с * 5.0625с ($0.2025 измерено) -> 466 = пол;
-        #      720p (дефолт) $0.08/с * 5.0625с = $0.405 -> 932
-        "wan_video": (466, 932),
-        # kling: $1.40 за 5с (измерено) -> 3220; дешевле 5с не бывает, пол = цене
-        "kling_video": (3220, 3220),
-        # veo: дефолт 8с со звуком $0.40/с = $3.20 -> 7360;
-        #      дешевле всего 4с без звука $0.20/с = $0.80 -> 1840 = пол
-        "veo_video": (1840, 7360),
+        "qwen_image": (29, 29), "seedream": (43, 43), "flux_kontext_pro": (58, 58), "nano_banana": (58, 58),
+        "nano_banana_pro": (198, 198),
+        # ovi: $0.20 плоско * 1314 -> 263, в сиде 286 (округление вверх)
+        "ovi_video": (286, 286),
+        # wan: 480p $0.2025 -> 267 = пол; 720p (дефолт) $0.405 * 1314 -> 533
+        "wan_video": (267, 533),
+        # kling: $1.40 за 5с (измерено) * 1314 -> 1840; дешевле 5с не бывает, пол = цене
+        "kling_video": (1840, 1840),
+        # veo: дефолт 8с со звуком $3.20 * 1314 -> 4206; пол 4с без звука $0.80 -> 1052
+        "veo_video": (1052, 4206),
     }
     assert set(by_code) == set(expected)
     for code, (min_c, rec_c) in expected.items():
@@ -114,7 +113,7 @@ def test_model_codes_and_credit_floors_match_tz():
 def test_media_prices_follow_the_project_formula():
     """Страховка от 'поправлю число руками': каждая медиа-цена должна получаться
     из измеренной себестоимости той же формулой, что и текстовые."""
-    CREDITS_PER_USD = 80 * 1.15 * 2.5 / 0.10  # = 2300
+    CREDITS_PER_USD = 80 * 1.15 * 1.428571 / 0.10  # = 1314 (валовая маржа 30%)
     by_code = {m["code"]: m for m in AI_MODELS}
     measured_usd = {          # измерено списанием с баланса fal 2026-07-15
         "qwen_image": 0.02,   # за 1.05 МП
@@ -135,14 +134,14 @@ def test_media_prices_follow_the_project_formula():
 def test_nano_banana_pro_in_catalog():
     """Модель из дизайн-макета: у неё resolution=["1K","2K","4K"] -- ровно тот
     селектор, который рисовал дизайнер. Цена измерена живым fal 2026-07-15:
-    1K=$0.15 -> 345 кредитов по формуле usd*2300."""
+    1K=$0.15 -> 198 кредитов по формуле usd*1314 (маржа 30%)."""
     by_code = {m["code"]: m for m in AI_MODELS}
     pro = by_code["nano_banana_pro"]
     assert pro["provider_model_id"] == "fal-ai/nano-banana-pro"
     assert pro["provider_model_id_edit"] == "fal-ai/nano-banana-pro/edit"
     assert pro["category"] == ModelCategory.image
     assert pro["cost_unit"] == CostUnit.image
-    assert (pro["min_credits"], pro["recommended_credits"]) == (345, 345)
+    assert (pro["min_credits"], pro["recommended_credits"]) == (198, 198)
     # вчетверо дороже обычной ($0.15 против $0.0398) -- цена, а не вкус
     assert pro["recommended_credits"] > by_code["nano_banana"]["recommended_credits"] * 3
 
@@ -246,14 +245,21 @@ def test_migration_values_match_seed_constants():
     """
     from pathlib import Path
 
-    path = Path("alembic/versions/a1b2c3d4e5f6_fix_fal_catalog_endpoints_and_prices.py")
-    text = path.read_text(encoding="utf-8")
     by_code = {m["code"]: m for m in AI_MODELS}
 
+    # Эндпоинты выставила миграция a1b2c3d4e5f6 (с тех пор не менялись).
+    endpoints = Path(
+        "alembic/versions/a1b2c3d4e5f6_fix_fal_catalog_endpoints_and_prices.py"
+    ).read_text(encoding="utf-8")
     for code in ("wan_video", "kling_video", "veo_video", "seedream", "flux_kontext_pro"):
-        assert by_code[code]["provider_model_id"] in text, f"{code}: эндпоинт из сида не найден в миграции"
+        assert by_code[code]["provider_model_id"] in endpoints, f"{code}: эндпоинт из сида не найден в миграции"
+
+    # Актуальные цены выставляет репрайс-миграция d1e2f3a4b5c6 (маржа 30%).
+    prices = Path(
+        "alembic/versions/d1e2f3a4b5c6_reprice_gross_margin_30.py"
+    ).read_text(encoding="utf-8")
     for code in ("wan_video", "kling_video", "veo_video"):
-        assert str(by_code[code]["recommended_credits"]) in text, f"{code}: цена из сида не найдена в миграции"
+        assert str(by_code[code]["recommended_credits"]) in prices, f"{code}: цена из сида не найдена в репрайс-миграции"
 
 
 def test_option_multipliers_follow_measured_provider_costs():

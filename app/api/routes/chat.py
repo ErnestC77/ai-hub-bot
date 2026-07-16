@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import current_user, get_db
 from app.db.enums import ModelCategory
 from app.db.models import AiModel, ModelOption, User
-from app.services.pricing import IMAGE_EDIT_MULTIPLIER
+from app.services.pricing import IMAGE_EDIT_MULTIPLIER, VIDEO_MIN_CREDITS
 from app.services.ai.base import AIError
 from app.services.antifraud_service import (
     DailySpendLimitExceededError,
@@ -55,6 +55,11 @@ class ModelOut(BaseModel):
     tier: str
     min_credits: int
     recommended_credits: int
+    # Эффективный минимум списания: то, что бэкенд реально спишет как пол
+    # (для видео max(min_credits, VIDEO_MIN_CREDITS), иначе min_credits). Фронт
+    # использует ЕГО, а не min_credits -- иначе CTA показывал бы меньше, чем
+    # спишется (баг C1: показывали 466, списывали 500 из-за VIDEO_MIN_CREDITS).
+    min_charge_credits: int
     # Наборы значений диктует модель: у nano_banana опций качества не будет
     # вовсе (у fal нет ручки размера), у Wan их три. provider_params наружу
     # НЕ отдаём -- клиент шлёт код, а не сырые параметры.
@@ -117,6 +122,11 @@ async def list_models(
             tier=m.tier.value,
             min_credits=m.min_credits,
             recommended_credits=m.recommended_credits,
+            min_charge_credits=(
+                max(m.min_credits, VIDEO_MIN_CREDITS)
+                if category == ModelCategory.video
+                else m.min_credits
+            ),
             options=[
                 ModelOptionOut(
                     kind=o.kind.value,
