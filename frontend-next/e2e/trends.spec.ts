@@ -21,6 +21,8 @@ test("photo trend routes to the image generator with a prefilled prompt", async 
   await expect(page.getByTestId("trends-photo")).toBeVisible();
   await page.getByTestId("trends-photo").getByTestId("trend-card").first().click();
   await expect(page).toHaveURL(/\/generate-image\?prefill=/);
+  // Префикс должен реально долететь до поля промпта, а не только в URL.
+  await expect(page.getByTestId("generate-prompt")).toHaveValue(/.+/);
 });
 
 test("video trend routes to the video generator with a prefilled prompt", async ({ page }) => {
@@ -28,4 +30,5 @@ test("video trend routes to the video generator with a prefilled prompt", async 
   await expect(page.getByTestId("trends-video")).toBeVisible();
   await page.getByTestId("trends-video").getByTestId("trend-card").first().click();
   await expect(page).toHaveURL(/\/generate-video\?prefill=/);
+  await expect(page.getByTestId("generate-prompt")).toHaveValue(/.+/);
 });
