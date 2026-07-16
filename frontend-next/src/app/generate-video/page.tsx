@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
+import OptionPicker from "@/components/generate/OptionPicker";
+import { defaultOptionCodes, estimatedCredits } from "@/lib/optionPricing";
 import { haptic } from "@/lib/telegram";
 import { resolveModel } from "@/lib/resolveModel";
 import { useMe } from "@/context/MeContext";
@@ -16,15 +18,11 @@ import { useMe } from "@/context/MeContext";
 const POLL_INTERVAL_MS = 2000;
 const POLL_ATTEMPTS = Math.max(60, 20 * 15); // generous ceiling; video can take minutes
 
-const DURATION_MIN = 2;
-const DURATION_MAX = 15;
-const DURATION_DEFAULT = 5;
-
 interface PendingConfirmation {
   prompt: string;
   modelCode: string;
   imageUrl: string | undefined;
-  durationSeconds: number;
+  optionCodes: Record<string, string>;
   estimatedCredits: number;
 }
 
@@ -37,11 +35,14 @@ function GenerateVideoScreen() {
   const [model, setModel] = useState<ModelOut | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
   const [prompt, setPrompt] = useState("");
-  const [duration, setDuration] = useState(DURATION_DEFAULT);
+  const [optionCodes, setOptionCodes] = useState<Record<string, string>>({});
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  // Модель приходит асинхронно; отслеживаем последний код, для которого уже
+  // выставлены дефолтные опции, чтобы пересчитать их при смене модели.
+  const [optionCodesForModel, setOptionCodesForModel] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     api
@@ -53,33 +54,43 @@ function GenerateVideoScreen() {
       .catch(() => setModels([]));
   }, [preferredModelCode, me?.default_model_code]);
 
+  // Дефолтные коды опций выставляем во время рендера, а не в эффекте --
+  // это derived state (React docs: "Adjusting state when a prop changes"),
+  // без него смена модели на кадр показывала бы опции старой модели.
+  if (model?.code !== optionCodesForModel) {
+    setOptionCodesForModel(model?.code);
+    setOptionCodes(defaultOptionCodes(model));
+  }
+
   // Единственный источник отображаемых цен -- выбранная модель с бэкенда
-  // (ModelOut.recommended_credits / min_credits). Точную сумму списания даёт
-  // 409-гейт (ConfirmationRequiredError.estimatedCredits). Формулу
-  // duration×quality из макета НЕ переносим -- она выдумана дизайнером.
-  const cost = model?.recommended_credits ?? 0;
+  // (ModelOut.recommended_credits) x произведение множителей выбранных
+  // опций. Точную сумму списания даёт 409-гейт (ConfirmationRequiredError.
+  // estimatedCredits). Формулу duration×quality из макета НЕ переносим --
+  // она выдумана дизайнером.
+  const cost = estimatedCredits(model, optionCodes);
 
   async function generate(confirm = false) {
     let question: string;
     let modelCode: string;
     let imageUrl: string | undefined;
-    let durationSeconds: number;
+    let codes: Record<string, string>;
 
     if (confirm) {
       // Повторная отправка после баннера -- тот же самый вызов с confirm=true:
-      // фото уже загружено при первой попытке (url сохранён), длительность
-      // тоже берём сохранённую, чтобы подтверждалась ровно та же цена.
+      // фото уже загружено при первой попытке (url сохранён), коды опций
+      // тоже берём сохранённые, чтобы подтверждалась ровно та же цена --
+      // смена опций после появления баннера не должна утечь в подтверждённый вызов.
       if (!pendingConfirmation || generating) return;
       question = pendingConfirmation.prompt;
       modelCode = pendingConfirmation.modelCode;
       imageUrl = pendingConfirmation.imageUrl;
-      durationSeconds = pendingConfirmation.durationSeconds;
+      codes = pendingConfirmation.optionCodes;
       setPendingConfirmation(null);
     } else {
       if (!model || !prompt.trim() || generating) return;
       question = prompt.trim();
       modelCode = model.code;
-      durationSeconds = duration;
+      codes = optionCodes;
       // Новый запуск отменяет неподтверждённый предыдущий.
       setPendingConfirmation(null);
     }
@@ -93,7 +104,7 @@ function GenerateVideoScreen() {
         imageUrl = (await api.uploadImage(photos[0])).url;
       }
 
-      const { request_id } = await api.generate(modelCode, question, imageUrl, durationSeconds, confirm);
+      const { request_id } = await api.generate(modelCode, question, imageUrl, codes, confirm);
 
       for (let i = 0; i < POLL_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -117,7 +128,7 @@ function GenerateVideoScreen() {
           prompt: question,
           modelCode,
           imageUrl,
-          durationSeconds,
+          optionCodes: codes,
           estimatedCredits: err.estimatedCredits,
         });
       } else {
@@ -200,26 +211,27 @@ function GenerateVideoScreen() {
             ) : null}
           </div>
 
-          <div>
-            <div className="mb-2 flex items-baseline justify-between px-1">
-              <span className="text-[10px] font-semibold tracking-[.08em] text-foreground-dim uppercase">
-                Длительность
-              </span>
-              <span className="text-[13px] font-bold">{duration} сек</span>
-            </div>
-            <input
-              data-testid="generate-duration"
-              type="range"
-              min={DURATION_MIN}
-              max={DURATION_MAX}
-              step={1}
-              value={duration}
-              disabled={generating}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              aria-label="Длительность видео в секундах"
-              className="h-1 w-full cursor-pointer accent-brand-1"
-            />
-          </div>
+          <OptionPicker
+            model={model}
+            kind="quality"
+            label="Качество"
+            selected={optionCodes.quality}
+            onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
+          />
+          <OptionPicker
+            model={model}
+            kind="duration"
+            label="Длительность"
+            selected={optionCodes.duration}
+            onSelect={(code) => setOptionCodes((p) => ({ ...p, duration: code }))}
+          />
+          <OptionPicker
+            model={model}
+            kind="audio"
+            label="Звук"
+            selected={optionCodes.audio}
+            onSelect={(code) => setOptionCodes((p) => ({ ...p, audio: code }))}
+          />
 
           {pendingConfirmation && (
             <div data-testid="generate-confirm" className="glass relative overflow-hidden rounded-[16px] p-[14px]">
