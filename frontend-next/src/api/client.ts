@@ -286,6 +286,19 @@ export interface AdminModelOut {
   sort_order: number;
 }
 
+export interface AdminModelOptionOut {
+  id: number;
+  model_code: string;
+  kind: ModelOptionKind;
+  code: string;
+  label: string;
+  provider_params: Record<string, unknown>;
+  credits_multiplier: number;
+  is_default: boolean;
+  sort_order: number;
+  is_active: boolean;
+}
+
 export interface AdminBannerOut {
   id: number;
   title: string;
@@ -340,6 +353,16 @@ export const adminApi = {
     code: string,
     patch: Partial<Pick<AdminModelOut, "is_active" | "is_visible" | "min_credits" | "recommended_credits" | "sort_order">>,
   ) => request<AdminModelOut>(`/api/admin/models/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  modelOptions: (code: string) =>
+    request<AdminModelOptionOut[]>(`/api/admin/models/${encodeURIComponent(code)}/options`),
+  updateOption: (
+    id: number,
+    patch: Partial<Pick<AdminModelOptionOut, "label" | "credits_multiplier" | "sort_order" | "is_active" | "is_default">>,
+  ) =>
+    request<AdminModelOptionOut>(`/api/admin/options/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
   packages: () => request<AdminPackageOut[]>("/api/admin/packages"),
   updatePackage: (code: string, patch: Partial<Pick<AdminPackageOut, "credits" | "price_rub" | "price_stars" | "is_active">>) =>
     request<AdminPackageOut>(`/api/admin/packages/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),
