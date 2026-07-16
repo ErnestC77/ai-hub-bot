@@ -67,3 +67,4 @@ class CreditTxType(str, enum.Enum):
     reserve = "reserve"
     release = "release"
     admin_adjustment = "admin_adjustment"
+    referral_bonus = "referral_bonus"

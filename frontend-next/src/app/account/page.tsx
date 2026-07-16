@@ -116,15 +116,14 @@ export default function MyAccount() {
             <div className="heading-font text-[22px] font-semibold">{referral ? referral.referred_count : "—"}</div>
             <div className="mt-1 text-[10px] text-foreground-muted">Приглашено</div>
           </div>
-          {/* bonus_count -- это COUNT(referrals WHERE bonus_granted), т.е. число
-              выданных бонусов, а НЕ сумма кредитов. Поэтому без 💎 и без слова
-              "Заработано": иконка валюты рядом со счётчиком читалась бы как баланс.
-              Формулировка синхронизирована с /referral. */}
+          {/* earned_credits -- реальная сумма заработанных на рефералах кредитов
+              (SUM bonus_credits по роли пригласившего). Формат и слово совпадают
+              с /referral и HANDOFF §5 «Заработано 140 💎». */}
           <div className="glass flex-1 rounded-2xl p-3.5 text-center">
             <div className="heading-font text-[22px] font-semibold">
-              {referral ? referral.bonus_count : "—"}
+              {referral ? `${referral.earned_credits} 💎` : "—"}
             </div>
-            <div className="mt-1 text-[10px] text-foreground-muted">Бонусов начислено</div>
+            <div className="mt-1 text-[10px] text-foreground-muted">Заработано</div>
           </div>
         </div>
       </div>

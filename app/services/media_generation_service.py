@@ -46,6 +46,7 @@ from app.services.pricing import (
     calculate_video_api_cost_usd,
     calculate_video_credits,
 )
+from app.services.referral_service import maybe_grant_referral_bonus
 
 logger = logging.getLogger(__name__)
 
@@ -337,6 +338,9 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
                 # actual == estimated == reserved: settle_request штатно вернёт
                 # None (без корректирующей транзакции) -- см. спеку фазы 3.
                 await settle_request(session, request, request.estimated_credits)
+                # Реферальный бонус -- только в OK-ветке (запрос реально успешен),
+                # после settle, в той же транзакции, до commit.
+                await maybe_grant_referral_bonus(session, request.user_id)
             await session.commit()
         finally:
             await redis_client.delete(lock_key)

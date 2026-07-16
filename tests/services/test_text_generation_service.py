@@ -17,7 +17,7 @@ from app.db.enums import (
     ModelTier,
     RequestStatus,
 )
-from app.db.models import AIRequest, AiModel, CreditTransaction, User
+from app.db.models import AIRequest, AiModel, CreditTransaction, Referral, Setting, User
 from app.services import antifraud_service as afs
 from app.services import text_generation_service as tgs
 from app.services.ai.base import AIError, AIProvider, AIResult
@@ -184,6 +184,63 @@ async def test_success_reserves_settles_and_returns_result(session, fake_redis, 
 
     assert await _tx_types(session) == [CreditTxType.reserve, CreditTxType.release]
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]
+
+
+# --- Task 3: реферальный бонус по успешной генерации ---
+
+async def test_success_grants_referral_bonus_to_referrer(session, fake_redis, monkeypatch):
+    """Приглашённый (Referral на него) делает первый успешный запрос ->
+    пригласившему начисляется бонус (вне try/except settle, та же транзакция)."""
+    referrer = User(telegram_id=999, username="referrer", credits_balance=0)
+    session.add(referrer)
+    await session.flush()
+
+    referred = await _seed(session, _model())  # приглашённый -- делает запрос
+    session.add(Referral(referrer_user_id=referrer.id, referred_user_id=referred.id))
+    session.add_all([
+        Setting(key="referral_bonus_referrer_credits", value="20", type="int"),
+        Setting(key="referral_bonus_referred_credits", value="0", type="int"),
+    ])
+    await session.commit()
+
+    provider = FakeProvider(result=AIResult(answer="ответ", input_tokens=500, output_tokens=200))
+    monkeypatch.setattr(tgs, "_provider", provider)
+
+    result = await generate_text(session, referred, "cheap", "привет")
+
+    assert isinstance(result, TextGenerationResult)
+    fetched_referrer = await session.get(User, referrer.id)
+    assert fetched_referrer.credits_balance == 20  # бонус начислен после успешного settle
+
+    referral = (await session.execute(select(Referral))).scalar_one()
+    assert referral.bonus_granted is True
+    assert referral.bonus_credits == 20
+
+
+async def test_provider_error_does_not_grant_referral_bonus(session, fake_redis, monkeypatch):
+    """Ошибка провайдера -> refund, запрос не успешен -> бонус не начисляется."""
+    referrer = User(telegram_id=999, username="referrer", credits_balance=0)
+    session.add(referrer)
+    await session.flush()
+
+    referred = await _seed(session, _model())
+    session.add(Referral(referrer_user_id=referrer.id, referred_user_id=referred.id))
+    session.add_all([
+        Setting(key="referral_bonus_referrer_credits", value="20", type="int"),
+        Setting(key="referral_bonus_referred_credits", value="0", type="int"),
+    ])
+    await session.commit()
+
+    monkeypatch.setattr(tgs, "_provider", FakeProvider(error=AIError("boom")))
+
+    with pytest.raises(AIError):
+        await generate_text(session, referred, "cheap", "привет")
+
+    fetched_referrer = await session.get(User, referrer.id)
+    assert fetched_referrer.credits_balance == 0  # бонус НЕ начислен
+
+    referral = (await session.execute(select(Referral))).scalar_one()
+    assert referral.bonus_granted is False
 
 
 async def test_success_fills_provider_cost_usd(session, monkeypatch):

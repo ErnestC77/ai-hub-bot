@@ -32,6 +32,7 @@ from app.services.credit_service import (
     settle_request,
 )
 from app.services.pricing import calculate_api_cost_usd, calculate_text_credits
+from app.services.referral_service import maybe_grant_referral_bonus
 from app.services.settings_service import load_pricing_settings
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,14 @@ async def generate_text(
             # settle скорректировал списание (release или доплата) --
             # выравниваем дневной счётчик на разницу.
             await record_daily_spend(user.id, request.charged_credits - estimated)
+
+        # Реферальный бонус -- ВНЕ try вокруг settle: там любое исключение уходит
+        # в except -> refund_request -> commit, что ОТМЕНИЛО бы уже состоявшееся
+        # списание (= бесплатная генерация). Здесь settle лишь flush'нут; если бонус
+        # бросит, вся транзакция (вместе с settle) откатится целиком -- ни списания,
+        # ни начисления, запрос повиснет reserved и подчистится refund_stale_*.
+        # Та же транзакция, до commit -- balance_after уже с учётом бонуса.
+        await maybe_grant_referral_bonus(session, request.user_id)
 
         charged = request.charged_credits
         balance_after = user.credits_balance
