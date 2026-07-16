@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -40,6 +40,10 @@ function GenerateVideoScreen() {
   const [optionCodes, setOptionCodes] = useState<Record<string, string>>({});
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  // Отмена поллинга при размонтировании: видео поллится до 10 минут, иначе цикл
+  // продолжал бы бить API и делать setState на закрытом экране.
+  const pollCancelledRef = useRef(false);
+  useEffect(() => () => { pollCancelledRef.current = true; }, []);
   const [error, setError] = useState("");
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   // Модель приходит асинхронно; отслеживаем последний код, для которого уже
@@ -107,10 +111,20 @@ function GenerateVideoScreen() {
       }
 
       const { request_id } = await api.generate(modelCode, question, imageUrl, codes, confirm);
+      pollCancelledRef.current = false;
 
       for (let i = 0; i < POLL_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        const status = await api.generationStatus(request_id);
+        if (pollCancelledRef.current) return;  // экран закрыли -- не трогаем стейт
+        let status;
+        try {
+          status = await api.generationStatus(request_id);
+        } catch {
+          // Сетевой блип: генерация идёт и кредиты УЖЕ списаны. Не падаем в
+          // "failed" (иначе повторный "Создать" -> двойное списание) -- пробуем
+          // следующий тик; устойчивый сбой дойдёт до нейтрального таймаута.
+          continue;
+        }
         if (status.status === "completed") {
           setResultUrl(status.result_url);
           haptic("medium");
@@ -272,7 +286,6 @@ function GenerateVideoScreen() {
 
           {resultUrl && (
             <div data-testid="generate-result" className="glass rounded-[18px] p-3">
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <video controls src={resultUrl} className="block w-full rounded-[14px]" />
             </div>
           )}

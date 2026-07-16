@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -41,6 +41,10 @@ function GenerateImageScreen() {
   const [expanded, setExpanded] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  // Отмена поллинга при размонтировании (закрыли экран): иначе цикл бьёт API до
+  // 10 минут и делает setState на размонтированном компоненте.
+  const pollCancelledRef = useRef(false);
+  useEffect(() => () => { pollCancelledRef.current = true; }, []);
   const [error, setError] = useState("");
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   // Модель приходит асинхронно; отслеживаем последний код, для которого уже
@@ -127,10 +131,21 @@ function GenerateImageScreen() {
       }
 
       const { request_id } = await api.generate(modelCode, question, imageUrl, codes, confirm);
+      pollCancelledRef.current = false;
 
       for (let i = 0; i < POLL_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        const status = await api.generationStatus(request_id);
+        if (pollCancelledRef.current) return;  // экран закрыли -- не трогаем стейт
+        let status;
+        try {
+          status = await api.generationStatus(request_id);
+        } catch {
+          // Сетевой блип: генерация на бэке идёт и кредиты УЖЕ списаны. Не падаем
+          // в "failed" (иначе юзер нажмёт "Создать" снова -> двойное списание) --
+          // просто пробуем следующий тик; при устойчивом сбое дойдём до таймаут-
+          // сообщения, которое не провоцирует повтор.
+          continue;
+        }
         if (status.status === "completed") {
           setResultUrl(status.result_url);
           haptic("medium");
