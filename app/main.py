@@ -27,6 +27,10 @@ _polling_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     global _polling_task
 
+    # Fail-fast на проде: не стартуем web без критичных секретов (иначе фичи
+    # молча ломаются). Только для web -- worker сюда не заходит.
+    settings.require_prod_web_secrets()
+
     async with get_session() as session:
         await run_key_healthcheck(session)
 

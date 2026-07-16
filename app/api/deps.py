@@ -37,6 +37,10 @@ async def current_user(
 
 
 async def current_admin(user: User = Depends(current_user)) -> User:
-    if not user.is_admin:
+    # ADMIN_IDS -- источник правды в рантайме, а не кэшированный флаг is_admin:
+    # удаление ID из окружения сразу отзывает доступ (флаг в БД мог остаться
+    # true с момента создания юзера). get_or_create_user его ре-синхронит для
+    # витрины (кнопка «Админка»), но авторизация опирается на env напрямую.
+    if user.telegram_id not in settings.admin_id_list:
         raise HTTPException(status_code=403, detail="not an admin")
     return user

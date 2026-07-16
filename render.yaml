@@ -1,3 +1,6 @@
+# ВНИМАНИЕ: это blueprint для чистого создания сервисов. Работающие сервисы
+# были заведены вручную -- НЕ синкать этот файл на них бездумно. Значения-
+# секреты (sync: false) вносятся в UI/через API; URL-поля -- полные https://.
 databases:
   - name: ai-hub-bot-db
     databaseName: ai_hub_bot
@@ -19,6 +22,8 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
+      - key: APP_ENV                 # активирует fail-fast проверку секретов
+        value: prod
       - key: BOT_MODE
         value: webhook
       - key: BOT_TOKEN
@@ -27,27 +32,19 @@ services:
         sync: false
       - key: WEBHOOK_SECRET
         generateValue: true
+      # URL-поля: полный https:// -- вносятся вручную (fromService hostport даёт
+      # host:port без схемы, что ломает Telegram-webhook / fal-callback / CORS).
       - key: WEBAPP_URL
-        fromService:
-          type: web
-          name: ai-hub-bot
-          property: hostport
+        sync: false
       - key: FRONTEND_URL
-        fromService:
-          type: web
-          name: ai-hub-frontend
-          property: hostport
+        sync: false
+      - key: BACKEND_PUBLIC_URL
+        sync: false
       - key: PAYMENT_RETURN_URL
-        fromService:
-          type: web
-          name: ai-hub-bot
-          property: hostport
+        sync: false
       - key: YOOKASSA_WEBHOOK_URL
-        fromService:
-          type: web
-          name: ai-hub-bot
-          property: hostport
-      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL            # postgresql:// -> app нормализует в +asyncpg
         fromDatabase:
           name: ai-hub-bot-db
           property: connectionString
@@ -56,29 +53,21 @@ services:
           type: keyvalue
           name: ai-hub-bot-redis
           property: connectionString
-      - key: ANTHROPIC_API_KEY
+      # Провайдеры: приложение использует ТОЛЬКО OpenRouter (текст) + fal (медиа).
+      - key: OPENROUTER_API_KEY
         sync: false
-      - key: OPENAI_API_KEY
+      - key: FAL_IMAGE_KEY
         sync: false
-      - key: GEMINI_API_KEY
+      - key: FAL_VIDEO_KEY
         sync: false
-      - key: DEEPSEEK_API_KEY
-        sync: false
+      - key: FAL_WEBHOOK_SECRET      # сверяется на /api/fal/webhook; тот же сервис его и шлёт
+        generateValue: true
       - key: YOOKASSA_SHOP_ID
         sync: false
       - key: YOOKASSA_SECRET_KEY
         sync: false
       - key: ADMIN_IDS
         sync: false
-      - key: PIAPI_API_KEY
-        sync: false
-      - key: PIAPI_WEBHOOK_SECRET
-        generateValue: true
-      - key: BACKEND_PUBLIC_URL
-        fromService:
-          type: web
-          name: ai-hub-bot
-          property: hostport
 
   - type: web
     name: ai-hub-frontend
@@ -99,15 +88,19 @@ services:
     dockerCommand: "python -m app.worker"
     plan: starter
     envVars:
+      # worker шлёт fal/OpenRouter НЕ вызывает -- ему провайдер-ключи не нужны.
+      # APP_ENV=prod безопасен: web-fail-fast живёт в app.main.lifespan, а не в
+      # Settings, поэтому worker он не трогает.
+      - key: APP_ENV
+        value: prod
       - key: BOT_TOKEN
         sync: false
       - key: BOT_USERNAME
         sync: false
       - key: WEBAPP_URL
-        fromService:
-          type: web
-          name: ai-hub-bot
-          property: hostport
+        sync: false
+      - key: FRONTEND_URL            # нужен для кнопки в уведомлении о покупке
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: ai-hub-bot-db
@@ -117,14 +110,6 @@ services:
           type: keyvalue
           name: ai-hub-bot-redis
           property: connectionString
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: DEEPSEEK_API_KEY
-        sync: false
       - key: YOOKASSA_SHOP_ID
         sync: false
       - key: YOOKASSA_SECRET_KEY
