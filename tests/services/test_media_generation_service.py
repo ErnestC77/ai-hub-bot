@@ -19,7 +19,7 @@ from app.db.enums import (
     ModelTier,
     RequestStatus,
 )
-from app.db.models import AIRequest, AiModel, CreditTransaction, ModelOption, User
+from app.db.models import AIRequest, AiModel, CreditTransaction, ModelOption, Referral, Setting, User
 from app.services import antifraud_service as afs
 from app.services import media_generation_service as mgs
 from app.services.ai.base import AIError
@@ -549,6 +549,60 @@ async def test_webhook_ok_settles_and_stores_result_url(session, fake_redis, fal
     # actual == reserved -> settle без корректирующей транзакции (штатный путь)
     assert await _tx_types(session) == [CreditTxType.reserve]
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]
+
+
+# --- Task 3: реферальный бонус по успешному вебхуку ---
+
+async def test_webhook_ok_grants_referral_bonus_to_referrer(session, fake_redis, fal):
+    """Приглашённый (Referral на него) успешно завершает генерацию через
+    вебхук OK -> пригласившему начисляется бонус в ТОЙ ЖЕ транзакции (до commit)."""
+    referrer = User(telegram_id=999, username="referrer", credits_balance=0)
+    session.add(referrer)
+    await session.flush()
+
+    referred = await _seed(session, _image_model())  # приглашённый делает запрос
+    session.add(Referral(referrer_user_id=referrer.id, referred_user_id=referred.id))
+    session.add_all([
+        Setting(key="referral_bonus_referrer_credits", value="20", type="int"),
+        Setting(key="referral_bonus_referred_credits", value="0", type="int"),
+    ])
+    await session.commit()
+
+    await start_media_generation(session, referred, "img", "a bear")
+    await handle_fal_webhook(session, _ok_payload())
+
+    fetched_referrer = await session.get(User, referrer.id)
+    assert fetched_referrer.credits_balance == 20  # бонус начислен после успешного OK
+
+    referral = (await session.execute(select(Referral))).scalar_one()
+    assert referral.bonus_granted is True
+    assert referral.bonus_credits == 20
+
+
+async def test_webhook_error_does_not_grant_referral_bonus(session, fake_redis, fal):
+    """ERROR-ветка -- запрос не успешен, бонус не начисляется (только OK-ветка)."""
+    referrer = User(telegram_id=999, username="referrer", credits_balance=0)
+    session.add(referrer)
+    await session.flush()
+
+    referred = await _seed(session, _image_model(fixed_cost_usd=0.04))
+    session.add(Referral(referrer_user_id=referrer.id, referred_user_id=referred.id))
+    session.add_all([
+        Setting(key="referral_bonus_referrer_credits", value="20", type="int"),
+        Setting(key="referral_bonus_referred_credits", value="0", type="int"),
+    ])
+    await session.commit()
+
+    await start_media_generation(session, referred, "img", "a bear")
+    await handle_fal_webhook(
+        session, {"request_id": "fal-req-1", "status": "ERROR", "error": "nsfw content"}
+    )
+
+    fetched_referrer = await session.get(User, referrer.id)
+    assert fetched_referrer.credits_balance == 0  # бонус НЕ начислен -- запрос failed
+
+    referral = (await session.execute(select(Referral))).scalar_one()
+    assert referral.bonus_granted is False
 
 
 async def test_webhook_ok_extracts_video_url(session, fal):

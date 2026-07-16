@@ -32,6 +32,7 @@ from app.services.credit_service import (
     settle_request,
 )
 from app.services.pricing import calculate_api_cost_usd, calculate_text_credits
+from app.services.referral_service import maybe_grant_referral_bonus
 from app.services.settings_service import load_pricing_settings
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,10 @@ async def generate_text(
             # settle скорректировал списание (release или доплата) --
             # выравниваем дневной счётчик на разницу.
             await record_daily_spend(user.id, request.charged_credits - estimated)
+
+        # Реферальный бонус -- после состоявшегося settle, ВНЕ try: его падение
+        # не должно откатывать уже списанный запрос. Та же транзакция, до commit.
+        await maybe_grant_referral_bonus(session, request.user_id)
 
         charged = request.charged_credits
         balance_after = user.credits_balance
