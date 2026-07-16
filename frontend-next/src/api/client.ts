@@ -111,6 +111,8 @@ export interface ReferralOut {
   link: string;
   referred_count: number;
   bonus_count: number;
+  earned_credits: number;
+  bonus_amount: number;
 }
 
 export interface CreatePaymentResponse {
