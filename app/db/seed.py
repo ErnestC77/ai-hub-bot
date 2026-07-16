@@ -167,7 +167,10 @@ MODEL_OPTIONS = [
          provider_params={"resolution": "580p", "video_quality": "high"},
          credits_multiplier=0.75, is_default=False, sort_order=20),
     dict(model_code="wan_video", kind=ModelOptionKind.quality, code="720p", label="720p",
-         provider_params={"resolution": "720p", "video_quality": "maximum"},
+         # video_quality оставлен на дефолте fal "high" -- эффект этого параметра
+         # на цену НЕ замерялся (замер варьировал только resolution), поэтому
+         # менять его на "maximum" нельзя без отдельного замера.
+         provider_params={"resolution": "720p", "video_quality": "high"},
          credits_multiplier=1.0, is_default=True, sort_order=30),
     # У Wan поля duration нет: длина = num_frames / frames_per_second.
     # 81/16 = 5.0625с (дефолт модели), 161/16 = 10.0625с -> 10.0625/5.0625 = 1.988.

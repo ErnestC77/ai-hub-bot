@@ -35,7 +35,10 @@ _OPTIONS = [
          params=json.dumps({"resolution": "580p", "video_quality": "high"}),
          mult="0.75", is_default=False, sort_order=20),
     dict(model_code="wan_video", kind="quality", code="720p", label="720p",
-         params=json.dumps({"resolution": "720p", "video_quality": "maximum"}),
+         # video_quality оставлен на дефолте fal "high" -- эффект этого параметра
+         # на цену НЕ замерялся (замер варьировал только resolution), поэтому
+         # менять его на "maximum" нельзя без отдельного замера.
+         params=json.dumps({"resolution": "720p", "video_quality": "high"}),
          mult="1.0", is_default=True, sort_order=30),
     dict(model_code="wan_video", kind="duration", code="5s", label="5 сек",
          params=json.dumps({"num_frames": 81, "frames_per_second": 16}),

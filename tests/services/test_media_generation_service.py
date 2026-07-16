@@ -1098,6 +1098,34 @@ async def test_inactive_option_rejected(session, fal):
         )
 
 
+async def test_unknown_option_kind_with_no_options_raises(session, fal):
+    """Модель без единой опции вида quality (аналог kling_video, у которой
+    нет размерного knob'а -- только aspect_ratio) должна ОТКАЗАТЬ на
+    option_codes={"quality": ...}, а не молча проигнорировать код.
+
+    Это защита именно пре-валидационного прохода в _resolve_options: он
+    сверяет requested-коды со ВСЕМИ {k.value for k in by_kind} ДО основного
+    цикла, который сам идёт по by_kind и потому "чужой" kind никогда не
+    увидит. Без этого прохода запрос с {"quality": "4k"} к модели без
+    quality-опций был бы тихо отброшен: спишется базовая цена, а на fal
+    улетит generation без единого resolution-параметра -- ровно тот класс
+    молчаливой порчи контрола, который весь этот план должен исключить.
+    Тест специально не даёт модели вообще НИ ОДНОЙ опции вида quality
+    (в отличие от test_unknown_option_code_raises, где kind duration у
+    модели есть, просто код не тот), чтобы упасть именно на пре-проходе,
+    а не на поиске совпадения кода внутри цикла.
+    """
+    model = _video_model()
+    user = await _seed(session, model, balance=10000)
+    await _add_option(session, model, kind=ModelOptionKind.duration, code="5s",
+                      params={"duration": "5"}, mult=1.0, is_default=True)
+
+    with pytest.raises(UnknownOptionError):
+        await start_media_generation(
+            session, user, model.code, "a cube", option_codes={"quality": "4k"}
+        )
+
+
 async def test_multiple_kinds_compose(session, fal):
     """Veo: длительность и звук -- независимые оси, множители перемножаются,
     provider_params сливаются."""
