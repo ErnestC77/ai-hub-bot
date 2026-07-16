@@ -124,6 +124,7 @@ async def test_models_returns_visible_active_text_models_sorted(client, db_sessi
         "min_credits": 3,
         "recommended_credits": 5,
         "options": [],  # у модели без опций -- пустой список, не отсутствие ключа
+        "edit_multiplier": None,  # текстовая модель редактирование не поддерживает
     }
     # provider_model_id никогда не уходит наружу (ТЗ).
     assert "provider_model_id" not in response.text
@@ -152,6 +153,7 @@ async def test_models_category_image_returns_only_visible_active_image_models(cl
         "min_credits": 3,
         "recommended_credits": 5,
         "options": [],
+        "edit_multiplier": None,  # img_a без i2i-маршрута -> редактирование не поддерживает
     }
 
 
@@ -196,6 +198,27 @@ async def test_models_endpoint_exposes_options(client, db_sessionmaker):
     assert "provider_params" not in (await client.get(
         "/api/models", params={"category": "video"}
     )).text
+
+
+async def test_models_endpoint_exposes_edit_multiplier_only_for_edit_capable(client, db_sessionmaker):
+    """edit_multiplier != null <=> у модели есть i2i-маршрут. Фронт по нему решает,
+    показывать ли фото-бокс и на сколько дороже CTA с фото; само число (1.5) живёт
+    на бэке, чтобы фронт его не хардкодил."""
+    async with db_sessionmaker() as s:
+        edit = _text_model("nano_banana_pro", sort_order=10, category=ModelCategory.image)
+        edit.provider_model_id_edit = "fal-ai/nano-banana-pro/edit"
+        s.add_all([
+            edit,
+            _text_model("qwen_image", sort_order=20, category=ModelCategory.image),  # без edit
+        ])
+        await s.commit()
+
+    body = (await client.get("/api/models", params={"category": "image"})).json()
+
+    pro = next(m for m in body if m["code"] == "nano_banana_pro")
+    qwen = next(m for m in body if m["code"] == "qwen_image")
+    assert pro["edit_multiplier"] == 1.5
+    assert qwen["edit_multiplier"] is None
 
 
 async def test_models_endpoint_hides_inactive_options(client, db_sessionmaker):

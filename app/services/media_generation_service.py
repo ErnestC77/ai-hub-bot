@@ -177,8 +177,13 @@ async def start_media_generation(
     options_multiplier, provider_params = await _resolve_options(session, model, option_codes)
 
     if model.category == ModelCategory.image:
+        # Наценка за редактирование (x1.5) -- только если у модели есть отдельный
+        # i2i-маршрут. Иначе фото провайдером не используется (qwen_image/seedream
+        # не имеют edit-эндпоинта), и брать за него +50% -- значит списывать за
+        # то, чего не произошло. Фронт таким моделям и фото-бокс не показывает.
+        is_edit = image_url is not None and model.provider_model_id_edit is not None
         estimated = calculate_image_credits(
-            model, quantity=1, megapixels=1.0, is_edit=image_url is not None,
+            model, quantity=1, megapixels=1.0, is_edit=is_edit,
             options_multiplier=options_multiplier,
         )
         provider_cost_usd = calculate_image_api_cost_usd(model, quantity=1, megapixels=1.0)

@@ -78,6 +78,12 @@ export interface ModelOut {
   recommended_credits: number;
   /** Наборы задаёт модель. Пусто -- у провайдера нет соответствующей ручки. */
   options: ModelOptionOut[];
+  /**
+   * Множитель за генерацию по фото (i2i), либо null если модель редактирование
+   * не поддерживает. null -> фото-бокс не показываем; иначе CTA с фото дороже
+   * в edit_multiplier раз. Число с бэка (не хардкодим, чтобы не разъехалось).
+   */
+  edit_multiplier: number | null;
 }
 
 export interface ChatResponse {

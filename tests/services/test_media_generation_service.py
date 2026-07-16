@@ -261,8 +261,9 @@ async def test_image_success_reserves_and_submits(session, fake_redis, fal):
     assert fake_redis.deleted == []  # лок держится до вебхука, НЕ снимается здесь
 
 
-async def test_image_edit_multiplier_applied_when_image_url_given(session, fal):
-    user = await _seed(session, _image_model())
+async def test_image_edit_multiplier_applied_only_for_edit_capable_model(session, fal):
+    # У модели ЕСТЬ edit-маршрут -- наценка x1.5 законна.
+    user = await _seed(session, _image_model(provider_model_id_edit="fal-ai/img/edit"))
 
     request = await start_media_generation(
         session, user, "img", "make it night",
@@ -272,6 +273,23 @@ async def test_image_edit_multiplier_applied_when_image_url_given(session, fal):
     # calculate_image_credits(..., is_edit=True): max(ceil(100 * 1.5), 100) = 150
     assert request.estimated_credits == 150
     assert fal.image_calls[0]["image_url"] == "https://cdn.example.com/in.png"
+
+
+async def test_no_edit_surcharge_for_model_without_edit_route(session, fal):
+    """Наценку x1.5 берём ТОЛЬКО с моделей, у которых есть provider_model_id_edit.
+    Раньше is_edit = (image_url is not None) без проверки capability: юзер платил
+    +50% за фото на qwen_image/seedream, где edit-маршрута нет и фото провайдером
+    не используется. Фронт теперь и не даёт прикрепить фото к таким моделям, но
+    прямой API-клиент не должен переплачивать за неработающее редактирование."""
+    user = await _seed(session, _image_model())  # provider_model_id_edit не задан
+
+    request = await start_media_generation(
+        session, user, "img", "make it night",
+        image_url="https://cdn.example.com/in.png",
+    )
+
+    # is_edit=False -> без x1.5: цена как у обычной генерации (recommended 100).
+    assert request.estimated_credits == 100
 
 
 # --- Fix 1: маршрут i2i/t2i выбирается по provider_model_id_edit ---
@@ -352,7 +370,9 @@ async def test_image_start_fills_provider_cost_usd(session, fal):
 
 
 async def test_image_edit_does_not_multiply_provider_cost_usd(session, fal):
-    user = await _seed(session, _image_model(fixed_cost_usd=0.04))
+    # edit-множитель применяется только к edit-capable модели, поэтому маршрут задан.
+    user = await _seed(session, _image_model(
+        fixed_cost_usd=0.04, provider_model_id_edit="fal-ai/img/edit"))
 
     request = await start_media_generation(
         session, user, "img", "make it night",

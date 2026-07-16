@@ -63,11 +63,21 @@ function GenerateImageScreen() {
     setOptionCodes(defaultOptionCodes(model));
   }
 
-  // Единственный источник отображаемых цен -- выбранная модель с бэкенда
-  // (ModelOut.recommended_credits) x произведение множителей выбранных
-  // опций. Точную сумму списания даёт 409-гейт (ConfirmationRequiredError.
-  // estimatedCredits). Никаких формул.
-  const cost = estimatedCredits(model, optionCodes);
+  // Модель поддерживает генерацию по фото (i2i), только если бэк прислал
+  // edit_multiplier. Для остальных (qwen_image/seedream) фото-бокс не
+  // показываем: их провайдер фото не использует, а прежде бэк ещё и брал за
+  // него +50%.
+  const supportsEdit = model?.edit_multiplier != null;
+  const hasPhoto = photos.length > 0;
+
+  // Цена -- recommended_credits x множители опций, а с прикреплённым фото ещё
+  // x edit_multiplier (тем же порядком, что бэк: ceil после множителя).
+  // Число edit_multiplier -- с бэка, не хардкод. Точную сумму даёт 409-гейт.
+  const baseCost = estimatedCredits(model, optionCodes);
+  const cost =
+    supportsEdit && hasPhoto
+      ? Math.ceil(baseCost * (model!.edit_multiplier as number))
+      : baseCost;
 
   async function generate(confirm = false) {
     let question: string;
@@ -100,9 +110,11 @@ function GenerateImageScreen() {
     setResultUrl(null);
 
     try {
-      if (!confirm && photos.length > 0) {
-        // Бэкенд принимает один image_url -- используется только ПЕРВОЕ фото
-        // (известное упрощение спеки).
+      if (!confirm && supportsEdit && photos.length > 0) {
+        // Фото шлём только edit-capable модели: у прочих провайдер его не берёт.
+        // supportsEdit -- страховка на случай, если модель сменили после
+        // прикрепления (фото-бокс скрыт, но photos ещё в стейте).
+        // Бэкенд принимает один image_url -- берётся только ПЕРВОЕ фото.
         imageUrl = (await api.uploadImage(photos[0])).url;
       }
 
@@ -169,7 +181,9 @@ function GenerateImageScreen() {
         </div>
 
         <div className="flex flex-col gap-3.5">
-          <PhotoUploadBox photos={photos} onChange={setPhotos} />
+          {/* Фото-бокс -- только для моделей с i2i-маршрутом (edit_multiplier != null).
+              Прочим фото не нужно: провайдер его не использует. */}
+          {supportsEdit && <PhotoUploadBox photos={photos} onChange={setPhotos} />}
 
           <div className="flex flex-col gap-1.5">
             <Textarea

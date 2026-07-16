@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import current_user, get_db
 from app.db.enums import ModelCategory
 from app.db.models import AiModel, ModelOption, User
+from app.services.pricing import IMAGE_EDIT_MULTIPLIER
 from app.services.ai.base import AIError
 from app.services.antifraud_service import (
     DailySpendLimitExceededError,
@@ -58,6 +59,11 @@ class ModelOut(BaseModel):
     # вовсе (у fal нет ручки размера), у Wan их три. provider_params наружу
     # НЕ отдаём -- клиент шлёт код, а не сырые параметры.
     options: list[ModelOptionOut] = []
+    # Множитель за генерацию по фото (i2i), либо null если модель редактирование
+    # не поддерживает. Фронт по нему решает, показывать ли фото-бокс, и на сколько
+    # дороже станет CTA с фото. Само число -- на бэке (IMAGE_EDIT_MULTIPLIER),
+    # чтобы фронт его не хардкодил и они не разъехались.
+    edit_multiplier: float | None = None
 
 
 @router.get("/models", response_model=list[ModelOut])
@@ -122,6 +128,8 @@ async def list_models(
                 )
                 for o in options_by_model_id.get(m.id, [])
             ],
+            # edit-множитель только для моделей с i2i-маршрутом; у остальных null.
+            edit_multiplier=IMAGE_EDIT_MULTIPLIER if m.provider_model_id_edit else None,
         )
         for m in models
     ]
