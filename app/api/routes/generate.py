@@ -58,7 +58,6 @@ async def generate(
         request = await start_media_generation(
             session, user, body.model_code, body.prompt,
             image_url=body.image_url,
-            duration_seconds=body.duration_seconds,
             confirm=body.confirm,
         )
     except ModelNotFoundError as exc:

@@ -120,17 +120,18 @@ class FakeFalClient:
     def __call__(self, api_key: str):
         return self
 
-    async def submit_image(self, model, prompt, *, image_url=None, webhook_url):
+    async def submit_image(self, model, prompt, *, image_url=None, provider_params=None, webhook_url):
         self.image_calls.append({
             "model": model.code, "prompt": prompt,
             "image_url": image_url, "webhook_url": webhook_url,
+            "provider_params": provider_params,
         })
         return self.request_id
 
-    async def submit_video(self, model, prompt, *, duration_seconds, webhook_url):
+    async def submit_video(self, model, prompt, *, provider_params=None, webhook_url):
         self.video_calls.append({
             "model": model.code, "prompt": prompt,
-            "duration_seconds": duration_seconds, "webhook_url": webhook_url,
+            "provider_params": provider_params, "webhook_url": webhook_url,
         })
         return self.request_id
 
@@ -209,7 +210,9 @@ async def test_generate_success_returns_request_id_and_estimate(client, monkeypa
 
     assert response.status_code == 200
     assert response.json() == {"request_id": 7, "estimated_credits": 100}
-    assert mock.await_args.kwargs == {"image_url": None, "duration_seconds": None, "confirm": False}
+    # duration_seconds больше не форвардится в сервис (параметр удалён Task 6 --
+    # option_codes ещё не подключены к роуту, это Task 7).
+    assert mock.await_args.kwargs == {"image_url": None, "confirm": False}
 
 
 async def test_generate_passes_media_params(client, monkeypatch):
@@ -223,7 +226,7 @@ async def test_generate_passes_media_params(client, monkeypatch):
 
     assert response.status_code == 200
     assert mock.await_args.kwargs == {
-        "image_url": "https://x/in.png", "duration_seconds": 10, "confirm": True,
+        "image_url": "https://x/in.png", "confirm": True,
     }
 
 
