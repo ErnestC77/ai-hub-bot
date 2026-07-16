@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.base import Base
-from app.db.enums import CostUnit, ModelCategory, ModelOptionKind, ModelProvider
+from app.db.enums import CostUnit, CreditTxType, ModelCategory, ModelOptionKind, ModelProvider
 from app.db.models import AiModel, CreditPackage, ModelOption, Setting
 from app.db.seed import AI_MODELS, CREDIT_PACKAGES, MODEL_OPTIONS, SETTINGS_ROWS, apply_seed
 
@@ -35,11 +35,15 @@ def test_settings_rows_with_spec_values():
         "rate_limit_per_model_per_minute": "60",
         "duplicate_cooldown_seconds": "5",
         "free_tier_credit_cap": "100",
+        # referral bonus (фаза 6)
+        "referral_bonus_referrer_credits": "20",
+        "referral_bonus_referred_credits": "20",
     }
     assert all(row["type"] == "int" for row in SETTINGS_ROWS
                if row["key"] in {"daily_spend_limit_credits", "rate_limit_per_user_per_minute",
                                  "rate_limit_per_model_per_minute", "duplicate_cooldown_seconds",
-                                 "free_tier_credit_cap"})
+                                 "free_tier_credit_cap", "referral_bonus_referrer_credits",
+                                 "referral_bonus_referred_credits"})
 
 
 def test_five_packages_from_tz():
@@ -164,7 +168,7 @@ async def test_apply_seed_inserts_and_is_idempotent(session):
     settings_count = (await session.execute(select(func.count()).select_from(Setting))).scalar_one()
     assert models == 21
     assert packages == 5
-    assert settings_count == 10
+    assert settings_count == 12
 
 
 def test_fallback_pairs_from_phase2_spec():
@@ -378,3 +382,16 @@ def test_option_migration_matches_seed_constants():
         for o in MODEL_OPTIONS
     }
     assert from_migration == from_seed
+
+
+def test_referral_bonus_settings_seeded():
+    keys = {r["key"] for r in SETTINGS_ROWS}
+    assert "referral_bonus_referrer_credits" in keys
+    assert "referral_bonus_referred_credits" in keys
+    by_key = {r["key"]: r for r in SETTINGS_ROWS}
+    assert by_key["referral_bonus_referrer_credits"]["value"] == "20"
+    assert by_key["referral_bonus_referrer_credits"]["type"] == "int"
+
+
+def test_credittxtype_has_referral_bonus():
+    assert CreditTxType.referral_bonus.value == "referral_bonus"

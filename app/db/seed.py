@@ -29,6 +29,11 @@ SETTINGS_ROWS = [
          description="Окно блокировки повторного идентичного запроса"),
     dict(key="free_tier_credit_cap", value="100", type="int",
          description="Максимум бесплатных кредитов для непокупавших пользователей"),
+    # --- referral bonus (фаза 6) ---
+    dict(key="referral_bonus_referrer_credits", value="20", type="int",
+         description="Бонус пригласившему за друга, сделавшего первый запрос"),
+    dict(key="referral_bonus_referred_credits", value="20", type="int",
+         description="Бонус приглашённому после его первого запроса"),
 ]
 
 CREDIT_PACKAGES = [
