@@ -73,6 +73,12 @@ function GenerateImageScreen() {
   // Цена -- recommended_credits x множители опций, а с прикреплённым фото ещё
   // x edit_multiplier (тем же порядком, что бэк: ceil после множителя).
   // Число edit_multiplier -- с бэка, не хардкод. Точную сумму даёт 409-гейт.
+  // Остаточное расхождение: бэк добивает edit-цену полом IMAGE_EDIT_MIN_CREDITS
+  // (100), а мы его не моделируем. Сегодня спит -- у всех edit-моделей
+  // min_credits >= 100, так что base x1.5 всегда выше пола. Если заведут дешёвую
+  // edit-модель (min_credits < 67), CTA недо-покажет на <=34 кредита; это ниже
+  // порога подтверждения, 409 не сработает. Тогда пол надо будет вывести в API,
+  // как и edit_multiplier. То же с VIDEO_MIN_CREDITS для видео.
   const baseCost = estimatedCredits(model, optionCodes);
   const cost =
     supportsEdit && hasPhoto

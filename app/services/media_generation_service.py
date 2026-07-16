@@ -172,8 +172,6 @@ async def start_media_generation(
     await check_tier_allowed(user, model)
 
     # category зафиксирована в строке каталога -- клиент её не выбирает.
-    # Для image множитель редактирования включается всегда, когда передан
-    # image_url, без проверки "поддерживает ли модель edit" (см. спеку фазы 3).
     options_multiplier, provider_params = await _resolve_options(session, model, option_codes)
 
     if model.category == ModelCategory.image:
