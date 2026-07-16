@@ -58,12 +58,26 @@ export interface MeOut {
   total_credits_spent: number;
 }
 
+export type ModelOptionKind = "quality" | "duration" | "audio";
+
+export interface ModelOptionOut {
+  kind: ModelOptionKind;
+  code: string;
+  label: string;
+  /** Во сколько раз опция дороже дефолта. Выведен из замеров провайдера. */
+  credits_multiplier: number;
+  is_default: boolean;
+  sort_order: number;
+}
+
 export interface ModelOut {
   code: string;
   display_name: string;
   tier: "economy" | "standard" | "premium" | "pro" | "ultra";
   min_credits: number;
   recommended_credits: number;
+  /** Наборы задаёт модель. Пусто -- у провайдера нет соответствующей ручки. */
+  options: ModelOptionOut[];
 }
 
 export interface ChatResponse {
@@ -133,14 +147,21 @@ export const api = {
       body: JSON.stringify({ model_code: modelCode, prompt, confirm }),
     }),
   tools: () => request<ToolOut[]>("/api/tools"),
-  generate: (modelCode: string, prompt: string, imageUrl?: string, durationSeconds?: number, confirm = false) =>
+  generate: (
+    modelCode: string,
+    prompt: string,
+    imageUrl?: string,
+    optionCodes?: Record<string, string>,
+    confirm = false,
+  ) =>
     request<{ request_id: number; estimated_credits: number }>("/api/generate", {
       method: "POST",
       body: JSON.stringify({
         model_code: modelCode,
         prompt,
         image_url: imageUrl ?? null,
-        duration_seconds: durationSeconds ?? null,
+        // Коды опций, не сырые значения: наборы задаёт модель, см. ModelOut.options.
+        option_codes: optionCodes ?? null,
         confirm,
       }),
     }),
