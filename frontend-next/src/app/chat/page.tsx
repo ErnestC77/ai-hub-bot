@@ -1,10 +1,9 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Placeholder } from "@/components/ui/placeholder";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
@@ -25,8 +24,11 @@ interface PendingConfirmation {
 }
 
 function ChatScreen() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const prefill = searchParams.get("prefill") ?? "";
+  // ?model= ставят карточки моделей на Home; резолв приоритетов -- в lib/resolveModel.
+  const preferredModelCode = searchParams.get("model");
 
   const [model, setModel] = useState<ModelOut | null>(null);
   const [prompt, setPrompt] = useState(prefill);
@@ -84,66 +86,124 @@ function ChatScreen() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
-      <div className="p-3">
-        <ModelPicker selectedModel={model} onSelect={setModel} />
-      </div>
+    // Роут, одетый шторкой (spec §1.4): узкая полоска app-фона сверху + скруглённый
+    // «лист» на всю высоту с sheetUp-анимацией. ✕ = router.back(), Telegram BackButton
+    // остаётся рабочим (центральная привязка в shell).
+    <div className="flex h-dvh flex-col pt-2">
+      <div
+        className="sheet-up flex min-h-0 flex-1 flex-col rounded-t-[26px] border-t border-white/[0.12] px-4 pb-4 pt-3.5"
+        style={{ background: "linear-gradient(180deg, #150d2c, #0b0716)" }}
+        data-testid="chat-sheet"
+      >
+        {/* Хват-полоска */}
+        <div className="mx-auto mb-3.5 h-1 w-[38px] flex-none rounded-full bg-white/20" />
 
-      <div className="flex-1 overflow-y-auto px-3">
-        {messages.length === 0 && (
-          <Placeholder header="Начните диалог" description="Выберите модель и напишите сообщение." />
-        )}
-        {messages.map((m, i) => (
-          <div key={i} className={`my-2 max-w-[85%] ${m.role === "user" ? "ml-auto" : ""}`}>
-            <div
-              className={`rounded-xl px-3 py-2 whitespace-pre-wrap ${
-                m.role === "user"
-                  ? "bg-brand-2 text-white"
-                  : m.role === "error"
-                    ? "bg-surface-strong text-red-400"
-                    : "bg-surface-strong text-foreground"
-              }`}
-            >
-              {m.text}
+        {/* Шапка шторки: иконка + модель + цена + ✕ */}
+        <div className="mb-3.5 flex flex-none items-center gap-2.5">
+          <div className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] bg-[image:var(--brand-gradient)] text-[15px] shadow-glow">
+            🧠
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-semibold" data-testid="chat-model-name">
+              {model ? model.display_name : "Чат"}
             </div>
-            {m.role === "assistant" && m.chargedCredits !== undefined && m.balanceAfter !== undefined && (
-              <div className="mt-1 px-1 text-xs text-foreground-muted">
-                Списано: {m.chargedCredits} • Баланс: {m.balanceAfter}
-              </div>
-            )}
+            <div className="text-[11px] text-foreground-dim">
+              {model ? `Чат · ${model.min_credits} 💎 за запрос` : "Чат с нейросетью"}
+            </div>
           </div>
-        ))}
-        {sending && <Spinner size="s" />}
-      </div>
-
-      {pendingConfirmation && (
-        <div className="relative mx-3 mb-1 overflow-hidden rounded-lg border border-border-soft bg-surface p-[14px]">
-          <div className="absolute inset-x-0 top-0 h-[3px] bg-[image:var(--brand-gradient)]" />
-          <div className="text-[13px]">
-            Примерная стоимость: {pendingConfirmation.estimatedCredits} кредитов. Продолжить?
-          </div>
-          <div className="mt-2.5 flex gap-2">
-            <Button size="s" stretched onClick={() => send(true)}>
-              Отправить
-            </Button>
-            <Button size="s" stretched mode="gray" onClick={() => setPendingConfirmation(null)}>
-              Отмена
-            </Button>
-          </div>
+          <button
+            aria-label="Закрыть"
+            data-testid="chat-close"
+            onClick={() => router.back()}
+            className="press-scale flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full bg-white/[0.08] text-[13px] text-foreground"
+          >
+            ✕
+          </button>
         </div>
-      )}
 
-      <div className="flex gap-2 p-3">
-        <Textarea
-          className="flex-1"
-          rows={1}
-          placeholder="Сообщение..."
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-        />
-        <Button disabled={!model || !prompt.trim() || sending} onClick={() => send()}>
-          Отправить
-        </Button>
+        {/* Сегмент-переключатель моделей (реальные данные из api.models) */}
+        <div className="mb-3 flex-none">
+          <ModelPicker selectedModel={model} onSelect={setModel} preferredCode={preferredModelCode} />
+        </div>
+
+        {/* Лента сообщений */}
+        <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-1 pb-3">
+          <div
+            className="glass max-w-[84%] self-start rounded-[16px] rounded-bl-[5px] px-[13px] py-2.5 text-[12.5px] leading-[1.4]"
+            data-testid="chat-bubble"
+          >
+            Привет! О чём поговорим?
+          </div>
+          {messages.map((m, i) => (
+            <div
+              key={i}
+              className={`max-w-[84%] ${m.role === "user" ? "self-end" : "self-start"}`}
+              data-testid="chat-bubble"
+            >
+              <div
+                className={`whitespace-pre-wrap px-[13px] py-2.5 text-[12.5px] leading-[1.4] ${
+                  m.role === "user"
+                    ? "rounded-[16px] rounded-br-[5px] bg-[image:var(--brand-gradient)] text-white"
+                    : m.role === "error"
+                      ? "glass rounded-[16px] rounded-bl-[5px] text-red-400"
+                      : "glass rounded-[16px] rounded-bl-[5px] text-foreground"
+                }`}
+              >
+                {m.text}
+              </div>
+              {m.role === "assistant" && m.chargedCredits !== undefined && m.balanceAfter !== undefined && (
+                <div className="mt-1 px-1 text-[10.5px] text-foreground-dim">
+                  Списано: {m.chargedCredits} • Баланс: {m.balanceAfter}
+                </div>
+              )}
+            </div>
+          ))}
+          {sending && (
+            <div className="glass flex max-w-[84%] items-center self-start rounded-[16px] rounded-bl-[5px] px-[13px] py-2.5">
+              <Spinner size="s" />
+            </div>
+          )}
+        </div>
+
+        {/* 409-гейт: подтверждение стоимости перед дорогим запросом */}
+        {pendingConfirmation && (
+          <div className="glass relative mb-2.5 flex-none overflow-hidden rounded-[16px] p-[14px]" data-testid="chat-confirm">
+            <div className="absolute inset-x-0 top-0 h-[3px] bg-[image:var(--brand-gradient)]" />
+            <div className="text-[13px]">
+              Примерная стоимость: {pendingConfirmation.estimatedCredits} кредитов. Продолжить?
+            </div>
+            <div className="mt-2.5 flex gap-2">
+              <Button size="s" stretched onClick={() => send(true)} data-testid="chat-confirm-send">
+                Отправить
+              </Button>
+              <Button size="s" stretched mode="gray" onClick={() => setPendingConfirmation(null)} data-testid="chat-confirm-cancel">
+                Отмена
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Композер: поле ввода + круглая градиентная кнопка отправки */}
+        <div className="flex flex-none items-end gap-[9px]">
+          <div className="min-w-0 flex-1">
+            <Textarea
+              data-testid="chat-input"
+              rows={1}
+              placeholder="Сообщение…"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+          </div>
+          <Button
+            aria-label="Отправить"
+            data-testid="chat-send"
+            className="h-[42px] w-[42px] flex-none p-0 text-[16px]"
+            disabled={!model || !prompt.trim() || sending}
+            onClick={() => send()}
+          >
+            ➤
+          </Button>
+        </div>
       </div>
     </div>
   );

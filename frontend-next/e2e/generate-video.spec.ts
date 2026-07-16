@@ -48,8 +48,14 @@ test("generates a video end to end", async ({ page }) => {
 
   await page.goto("/generate-video");
 
-  await page.getByPlaceholder("Опишите видео, которое хотите создать").fill("a sunset over mountains");
-  await page.getByText("Создать видео").click();
+  await page.getByTestId("generate-prompt").fill("a sunset over mountains");
+  // Редизайн: кнопка «Создать видео» → «🎬 Создать · N 💎» (testid generate-submit);
+  // модель выбирается segmented-контролом автоматически (первая из списка).
+  await page.getByTestId("generate-submit").click();
 
-  await expect(page.locator("video")).toHaveAttribute("src", "https://cdn.example.com/out.mp4", { timeout: 15000 });
+  await expect(page.getByTestId("generate-result").locator("video")).toHaveAttribute(
+    "src",
+    "https://cdn.example.com/out.mp4",
+    { timeout: 15000 },
+  );
 });

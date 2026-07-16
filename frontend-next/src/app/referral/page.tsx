@@ -3,10 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Cell } from "@/components/ui/cell";
-import { List } from "@/components/ui/list";
 import { Placeholder } from "@/components/ui/placeholder";
-import { Section } from "@/components/ui/section";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type ReferralOut } from "@/api/client";
 import { haptic, openTelegramLink } from "@/lib/telegram";
@@ -43,31 +40,62 @@ export default function Referral() {
   }
 
   return (
-    <List>
-      <Section header="Реферальная программа" footer={data.link}>
-        <Cell subtitle="Приглашённые пользователи">{data.referred_count}</Cell>
-        <Cell subtitle="Начислены бонусы">{data.bonus_count}</Cell>
-      </Section>
-      <Section>
-        <Cell
-          after={
-            <Button size="s" onClick={share}>
-              Поделиться
-            </Button>
-          }
-        >
-          Пригласить друга
-        </Cell>
-        <Cell
-          after={
-            <Button size="s" mode="bezeled" onClick={copy}>
-              Скопировать
-            </Button>
-          }
-        >
-          Ссылка
-        </Cell>
-      </Section>
-    </List>
+    <div className="fade-in flex flex-col gap-3.5 px-4 pb-4">
+      <h1 className="heading-font pt-1 text-[22px] text-foreground">Приглашай друзей</h1>
+
+      {/* Промо-карточка. Размер бонуса бэкенд не отдаёт — конкретных чисел не печатаем. */}
+      <div
+        className="relative overflow-hidden rounded-[22px] border border-white/[0.14] px-[18px] py-[22px] text-center"
+        style={{ background: "linear-gradient(135deg, rgba(139,92,255,.35), rgba(53,224,230,.16))" }}
+        data-testid="referral-promo"
+      >
+        <div
+          aria-hidden
+          className="absolute -right-[20px] -top-[30px] h-[90px] w-[90px] rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(53,224,230,.55), transparent 70%)" }}
+        />
+        <div className="text-[34px]">🎁</div>
+        <div className="heading-font mt-2 text-[17px] text-foreground">
+          Бонусные кредиты за каждого друга
+        </div>
+        <div className="mt-1.5 text-[11.5px] leading-[1.4] text-foreground-muted">
+          Поделись ссылкой — приглашения и бонусы появятся здесь
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <div className="glass flex-1 rounded-[18px] p-4 text-center">
+          <div className="heading-font text-[24px] text-foreground" data-testid="referral-invited">
+            {data.referred_count}
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-foreground-muted">Приглашено</div>
+        </div>
+        <div className="glass flex-1 rounded-[18px] p-4 text-center">
+          <div className="heading-font text-[24px] text-foreground" data-testid="referral-earned">
+            {data.bonus_count}
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-foreground-muted">Бонусов начислено</div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={copy}
+        aria-label="Скопировать ссылку"
+        className="glass press-scale flex w-full items-center justify-between gap-3 rounded-[16px] px-[15px] py-3 text-left"
+        data-testid="referral-copy"
+      >
+        <span className="truncate text-[11.5px] text-foreground-muted" data-testid="referral-link">
+          {link}
+        </span>
+        <span aria-hidden className="shrink-0 text-[15px]">
+          📋
+        </span>
+      </button>
+
+      <Button size="l" stretched onClick={share} data-testid="referral-share">
+        Поделиться ссылкой
+      </Button>
+    </div>
   );
 }

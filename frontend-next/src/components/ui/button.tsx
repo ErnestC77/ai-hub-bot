@@ -10,14 +10,16 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   stretched?: boolean;
   loading?: boolean;
+  /** Glow color for mode="filled" CTAs. "cyan" is the video-CTA variant. Default: "violet". */
+  glow?: "violet" | "cyan";
 }
 
 const MODE_CLASSES: Record<ButtonMode, string> = {
-  filled: "bg-[image:var(--brand-gradient)] text-white shadow-glow border border-transparent",
-  bezeled: "bg-surface text-foreground border border-border-soft",
+  filled: "bg-[image:var(--brand-gradient)] text-white border border-transparent",
+  bezeled: "glass text-foreground",
   gray: "bg-surface-strong text-foreground border border-transparent",
   outline: "bg-transparent text-foreground border border-border-soft",
-  white: "bg-white text-brand-2 border border-transparent",
+  white: "bg-white/[0.92] text-[#160a2e] border border-transparent",
   plain: "bg-transparent text-foreground border border-transparent",
 };
 
@@ -28,7 +30,7 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { mode = "filled", size = "m", stretched, loading, disabled, className, children, ...rest },
+  { mode = "filled", size = "m", stretched, loading, glow = "violet", disabled, className, children, ...rest },
   ref,
 ) {
   return (
@@ -38,6 +40,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       className={cn(
         "press-scale inline-flex items-center justify-center rounded-full font-semibold disabled:opacity-40",
         MODE_CLASSES[mode],
+        mode === "filled" && (glow === "cyan" ? "shadow-glow-cyan" : "shadow-glow"),
         SIZE_CLASSES[size],
         stretched && "w-full",
         className,

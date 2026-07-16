@@ -12,10 +12,12 @@ export function Section({
   return (
     <div>
       {header && (
-        <div className="px-3 pb-1.5 text-xs font-medium uppercase tracking-wide text-foreground-muted">{header}</div>
+        <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground-dim">
+          {header}
+        </div>
       )}
-      <div className="overflow-hidden rounded-lg border border-border-soft bg-surface">{children}</div>
-      {footer && <div className="px-3 pt-1.5 text-xs text-foreground-muted">{footer}</div>}
+      <div className="glass overflow-hidden rounded-[16px]">{children}</div>
+      {footer && <div className="px-3 pt-1.5 text-xs text-foreground-dim">{footer}</div>}
     </div>
   );
 }

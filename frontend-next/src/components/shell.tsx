@@ -1,49 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { haptic, initTelegram, tg } from "@/lib/telegram";
+import { initTelegram, tg } from "@/lib/telegram";
 import { cn } from "@/lib/cn";
 
 const TABS = [
   { path: "/", text: "Home", icon: "🏠" },
   { path: "/trends", text: "Trends", icon: "✨" },
-  { path: "/account", text: "My Account", icon: "👤" },
+  { path: "/account", text: "Account", icon: "👤" },
 ];
 
 const FULLSCREEN_ROUTES = ["/chat", "/generate-image", "/generate-video"];
-
-function Fab() {
-  const router = useRouter();
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressed = useRef(false);
-
-  function startPress() {
-    longPressed.current = false;
-    pressTimer.current = setTimeout(() => {
-      longPressed.current = true;
-      haptic("medium");
-      router.push("/generate-video");
-    }, 500);
-  }
-
-  function endPress() {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
-    if (!longPressed.current) router.push("/chat");
-  }
-
-  return (
-    <button
-      onPointerDown={startPress}
-      onPointerUp={endPress}
-      onPointerLeave={() => pressTimer.current && clearTimeout(pressTimer.current)}
-      aria-label="Открыть чат с нейросетью (удержите для генерации видео)"
-      className="press-scale fixed bottom-20 right-4 z-[2] flex h-[58px] w-[58px] items-center justify-center rounded-full bg-[image:var(--brand-gradient)] text-2xl shadow-glow"
-    >
-      ✨
-    </button>
-  );
-}
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -71,35 +39,42 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className="min-h-screen" style={{ paddingBottom: isFullscreen ? 0 : 64 }}>
+      <div className="min-h-screen" style={{ paddingBottom: isFullscreen ? 0 : 96 }}>
         {children}
       </div>
 
-      {!isFullscreen && <Fab />}
-
       {!isFullscreen && (
-        <div className="fixed inset-x-0 bottom-0 z-[2] border-t border-white/[0.08] bg-black/72 backdrop-blur-xl">
-          <div className="flex">
-            {TABS.map((tab) => {
-              const selected = pathname === tab.path;
-              return (
-                <button
-                  key={tab.path}
-                  onClick={() => router.push(tab.path)}
-                  className="flex flex-1 flex-col items-center gap-0.5 py-2 text-xs text-foreground-muted"
+        <nav
+          className="fixed inset-x-4 z-[2] flex items-center gap-1 rounded-[22px] border border-white/10 bg-[rgba(20,14,36,0.6)] p-2 backdrop-blur-[20px]"
+          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}
+        >
+          {TABS.map((tab) => {
+            const selected = pathname === tab.path;
+            return (
+              <button
+                key={tab.path}
+                onClick={() => router.push(tab.path)}
+                className={cn(
+                  "press-scale flex flex-1 flex-col items-center gap-[3px] rounded-[15px] py-[7px] text-[11px] font-semibold",
+                  selected ? "text-white" : "text-foreground-dim",
+                )}
+                style={
+                  selected
+                    ? { background: "linear-gradient(135deg, rgba(139,92,255,0.4), rgba(53,224,230,0.25))" }
+                    : undefined
+                }
+              >
+                <span
+                  className="text-[17px]"
+                  style={selected ? { filter: "drop-shadow(0 0 6px rgba(139,92,255,0.8))" } : undefined}
                 >
-                  <span
-                    className={cn("text-xl transition-transform duration-200", selected && "scale-[1.12]")}
-                    style={selected ? { filter: "drop-shadow(0 0 8px rgba(255,45,120,0.6))" } : undefined}
-                  >
-                    {tab.icon}
-                  </span>
-                  <span className={selected ? "text-foreground" : undefined}>{tab.text}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+                  {tab.icon}
+                </span>
+                <span>{tab.text}</span>
+              </button>
+            );
+          })}
+        </nav>
       )}
     </>
   );

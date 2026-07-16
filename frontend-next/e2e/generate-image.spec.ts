@@ -8,13 +8,15 @@ test.beforeEach(async ({ page }) => {
 
 test("generate-image screen has a dark textarea and a generate button", async ({ page }) => {
   await page.goto("/generate-image");
-  const textarea = page.getByPlaceholder("Опишите, что хотите создать");
+  const textarea = page.getByTestId("generate-prompt");
   await expect(textarea).toBeVisible();
+  await expect(textarea).toHaveAttribute("placeholder", "Опишите, что хотите создать");
   const bg = await textarea.evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(bg).not.toBe("rgb(255, 255, 255)");
 
   // Кнопки 1K/2K/4K и aspect-чипы удалены вместе с мёртвой dall-e-3-веткой
-  // (фаза 3 generate). Проверяем оставшийся реальный UI -- кнопку генерации
-  // в нижней панели (задизейблена без модели/промпта, но видима).
-  await expect(page.getByRole("button", { name: "Generate" })).toBeVisible();
+  // (фаза 3 generate). Кнопка генерации внизу («✨ Создать · N 💎» после
+  // редизайна; задизейблена без модели/промпта, но видима).
+  await expect(page.getByTestId("generate-submit")).toBeVisible();
+  await expect(page.getByTestId("generate-submit")).toContainText("Создать");
 });

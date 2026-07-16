@@ -3,9 +3,6 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Cell } from "@/components/ui/cell";
-import { List } from "@/components/ui/list";
-import { Section } from "@/components/ui/section";
 import { Sheet } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiError, api, type CreditPackageOut } from "@/api/client";
@@ -85,68 +82,104 @@ export default function CreditPurchaseSheet({ onClose }: Props) {
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()} header={<Sheet.Header>Купить кредиты</Sheet.Header>}>
       {stage === "pick" && (
-        <List>
-          <Section header="Выберите пакет">
-            {packages === null && <Cell before={<Spinner size="s" />}>Загрузка…</Cell>}
-            {packages?.map((pkg) => (
-              <Cell
-                key={pkg.code}
-                subtitle={`${pkg.price_rub}₽ / ${pkg.price_stars}⭐`}
-                onClick={() => {
-                  setSelected(pkg);
-                  setStage("choose-method");
-                }}
-              >
-                {pkg.name}
-              </Cell>
-            ))}
-          </Section>
-        </List>
+        <div className="flex flex-col gap-3 px-4 pb-6 pt-2">
+          <div className="px-1 text-[10px] uppercase tracking-[0.08em] text-foreground-dim">Выберите пакет</div>
+
+          {packages === null && (
+            <div className="glass flex items-center justify-center gap-2.5 rounded-[18px] p-4 text-[13px] text-foreground-muted">
+              <Spinner size="s" />
+              Загрузка…
+            </div>
+          )}
+
+          {packages?.length === 0 && (
+            <div className="glass rounded-[18px] p-4 text-center text-[13px] text-foreground-muted">
+              Пакеты временно недоступны
+            </div>
+          )}
+
+          {packages?.map((pkg) => (
+            <button
+              key={pkg.code}
+              type="button"
+              data-testid="package-card"
+              onClick={() => {
+                setSelected(pkg);
+                setStage("choose-method");
+              }}
+              className="glass press-scale flex w-full items-center gap-3 rounded-[18px] p-[15px] text-left"
+            >
+              <div className="flex-1">
+                <div className="text-[14.5px] font-semibold">{pkg.name}</div>
+                <div className="mt-0.5 text-[11px] text-foreground-dim">
+                  💎 {pkg.credits} кредитов · ⭐ {pkg.price_stars}
+                </div>
+              </div>
+              <span className="rounded-full bg-[image:var(--brand-gradient)] px-[15px] py-2 text-[12.5px] font-bold text-white shadow-glow">
+                {pkg.price_rub}₽
+              </span>
+            </button>
+          ))}
+
+          <div className="mt-1 text-center text-[10.5px] leading-normal text-foreground-dim">
+            Оплата Telegram Stars или картой (ЮKassa)
+          </div>
+        </div>
       )}
 
       {stage === "choose-method" && selected && (
-        <List>
-          <Section header={`Оплата: ${selected.name}`}>
-            <Cell subtitle="Подходит для оплаты внутри Telegram" onClick={() => payWithStars(selected)}>
-              ⭐ Telegram Stars ({selected.price_stars})
-            </Cell>
-            <Cell subtitle="Оплата на защищённой странице ЮKassa" onClick={() => payWithYookassa(selected)}>
-              💳 Банковская карта / СБП
-            </Cell>
-          </Section>
-        </List>
+        <div className="flex flex-col gap-3 px-4 pb-6 pt-2">
+          <div className="px-1 text-[10px] uppercase tracking-[0.08em] text-foreground-dim">
+            Оплата: {selected.name}
+          </div>
+          <button
+            type="button"
+            data-testid="pay-stars"
+            onClick={() => payWithStars(selected)}
+            className="glass press-scale w-full rounded-[18px] p-[15px] text-left"
+          >
+            <div className="text-[13.5px] font-semibold">⭐ Telegram Stars ({selected.price_stars})</div>
+            <div className="mt-0.5 text-[11px] text-foreground-dim">Подходит для оплаты внутри Telegram</div>
+          </button>
+          <button
+            type="button"
+            data-testid="pay-yookassa"
+            onClick={() => payWithYookassa(selected)}
+            className="glass press-scale w-full rounded-[18px] p-[15px] text-left"
+          >
+            <div className="text-[13.5px] font-semibold">💳 Банковская карта / СБП</div>
+            <div className="mt-0.5 text-[11px] text-foreground-dim">Оплата на защищённой странице ЮKassa</div>
+          </button>
+        </div>
       )}
 
       {stage === "waiting" && (
-        <List>
-          <Section>
-            <Cell before={<Spinner size="s" />} subtitle="Обычно занимает несколько секунд">
-              Проверяем оплату…
-            </Cell>
-          </Section>
-        </List>
+        <div className="flex flex-col items-center gap-2 px-4 pb-8 pt-4 text-center">
+          <Spinner size="m" />
+          <div className="mt-1.5 text-sm font-semibold">Проверяем оплату…</div>
+          <div className="text-[11px] text-foreground-dim">Обычно занимает несколько секунд</div>
+        </div>
       )}
 
       {stage === "success" && (
-        <List>
-          <Section>
-            <Cell subtitle="Баланс обновлён">✅ Кредиты начислены</Cell>
-            <Button stretched onClick={onClose}>
-              Готово
-            </Button>
-          </Section>
-        </List>
+        <div className="flex flex-col gap-2 px-4 pb-6 pt-2 text-center">
+          <div className="text-[34px]">✅</div>
+          <div className="text-sm font-semibold">Кредиты начислены</div>
+          <div className="text-[11px] text-foreground-dim">Баланс обновлён</div>
+          <Button stretched className="mt-2" onClick={onClose}>
+            Готово
+          </Button>
+        </div>
       )}
 
       {stage === "error" && (
-        <List>
-          <Section>
-            <Cell subtitle={errorText}>Не получилось завершить оплату</Cell>
-            <Button stretched mode="bezeled" onClick={() => setStage("pick")}>
-              Попробовать снова
-            </Button>
-          </Section>
-        </List>
+        <div className="flex flex-col gap-2 px-4 pb-6 pt-2 text-center">
+          <div className="text-sm font-semibold">Не получилось завершить оплату</div>
+          <div className="text-[11px] text-foreground-dim">{errorText}</div>
+          <Button stretched mode="bezeled" className="mt-2" onClick={() => setStage("pick")}>
+            Попробовать снова
+          </Button>
+        </div>
       )}
     </Sheet>
   );

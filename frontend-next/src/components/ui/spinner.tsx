@@ -6,7 +6,7 @@ export function Spinner({ size = "m", className }: { size?: "s" | "m" | "l"; cla
   const px = SIZE_PX[size];
   return (
     <span
-      className={cn("inline-block animate-spin rounded-full border-2 border-border-soft border-t-brand-2", className)}
+      className={cn("inline-block animate-spin rounded-full border-2 border-border-soft border-t-brand-1", className)}
       style={{ width: px, height: px }}
       role="status"
       aria-label="Загрузка"
