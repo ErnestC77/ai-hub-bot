@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Placeholder } from "@/components/ui/placeholder";
 import { Spinner } from "@/components/ui/spinner";
 import TrendCard from "@/components/TrendCard";
+import DragScroll from "@/components/DragScroll";
 import { api, type ToolOut } from "@/api/client";
 
 interface Section {
@@ -96,8 +97,8 @@ export default function Trends() {
             {/* scroll-pl-4 обязателен рядом с px-4: snapport -- это padding box, поэтому
                 snap-start первой карточки выравнивается по краю контейнера и прокручивает
                 его на величину padding-left, съедая отступ (у HeroCarousel этого нет --
-                там snap-center). */}
-            <div className="flex snap-x scroll-pl-4 gap-[11px] overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                там snap-center). select-none + cursor-grab -- для drag-to-scroll мышью. */}
+            <DragScroll className="flex cursor-grab snap-x scroll-pl-4 gap-[11px] overflow-x-auto px-4 pb-1 select-none active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {sectionTools.map((tool) => (
                 <TrendCard
                   key={tool.slug}
@@ -109,7 +110,7 @@ export default function Trends() {
                   onClick={() => openTool(tool)}
                 />
               ))}
-            </div>
+            </DragScroll>
           </section>
         );
       })}

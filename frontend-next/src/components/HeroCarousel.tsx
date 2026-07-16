@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import type { BannerOut } from "@/api/client";
 import { openLink } from "@/lib/telegram";
+import { useDragScroll } from "@/lib/useDragScroll";
 import { cn } from "@/lib/cn";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 export default function HeroCarousel({ banners }: Props) {
   const router = useRouter();
   const trackRef = useRef<HTMLDivElement>(null);
+  const drag = useDragScroll(trackRef);
   const [active, setActive] = useState(0);
 
   if (banners.length === 0) return null;
@@ -38,7 +40,8 @@ export default function HeroCarousel({ banners }: Props) {
       <div
         ref={trackRef}
         onScroll={onScroll}
-        className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-4"
+        {...drag}
+        className="flex cursor-grab snap-x snap-mandatory gap-2.5 overflow-x-auto px-4 select-none active:cursor-grabbing"
       >
         {banners.map((banner) => (
           <button
