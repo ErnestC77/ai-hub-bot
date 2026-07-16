@@ -449,14 +449,17 @@ async def update_model_option(
         setattr(opt, field, value)
     try:
         await session.commit()
-    except IntegrityError:
-        # Гонка: два админа одновременно назначают дефолт одному (model_id, kind).
-        # Проигравший упирается в частичный уникальный индекс uq_model_option_default.
-        # Отдаём 409 (повторить), а не голый 500.
+    except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=409, detail="Опции изменены параллельно, повторите"
-        ) from None
+        # 409 -- ТОЛЬКО на гонку по дефолту (два админа назначают дефолт одному
+        # (model_id, kind), проигравший упирается в uq_model_option_default).
+        # Прочие IntegrityError (напр. NOT NULL от руками присланного null) --
+        # честный 500, а не ложное "повторите".
+        if "uq_model_option_default" in str(exc.orig):
+            raise HTTPException(
+                status_code=409, detail="Опции изменены параллельно, повторите"
+            ) from None
+        raise
 
     model = (
         await session.execute(select(AiModel).where(AiModel.id == opt.model_id))
