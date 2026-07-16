@@ -63,7 +63,16 @@ export default function Trends() {
   }
 
   function openTool(tool: ToolOut) {
-    router.push(`/chat?prefill=${encodeURIComponent(tool.prompt_prefix)}`);
+    // Категория пресета определяет экран: фото/видео-тренды ведут на свои
+    // генераторы (prefill в prompt), остальные -- в текстовый чат.
+    const prefill = encodeURIComponent(tool.prompt_prefix);
+    const path =
+      tool.recommended_category === "image"
+        ? "/generate-image"
+        : tool.recommended_category === "video"
+          ? "/generate-video"
+          : "/chat";
+    router.push(`${path}?prefill=${prefill}`);
   }
 
   return (

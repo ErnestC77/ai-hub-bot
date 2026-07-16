@@ -53,6 +53,50 @@ TOOLS: list[Tool] = [
         prompt_prefix="Придумай несколько идей на следующую тему: ",
         recommended_category="fast",
     ),
+    # Фото-тренды -- recommended_category="image": фронт роутит их на /generate-image.
+    Tool(
+        slug="ai-avatar",
+        title="AI-аватар",
+        description="Кинематографичный портрет по описанию",
+        prompt_prefix="AI-аватар в кинематографичном освещении, крупный детализированный портрет, ",
+        recommended_category="image",
+    ),
+    Tool(
+        slug="restyle-photo",
+        title="Фото в новом стиле",
+        description="Портрет в модном визуальном стиле",
+        prompt_prefix="Портрет в стиле неонового киберпанка, высокая детализация, ",
+        recommended_category="image",
+    ),
+    Tool(
+        slug="product-photo",
+        title="Товар на подиуме",
+        description="Предметная студийная съёмка товара",
+        prompt_prefix="Предметная съёмка товара на минималистичном фоне, студийный свет, ",
+        recommended_category="image",
+    ),
+    # Видео-тренды -- recommended_category="video": фронт роутит их на /generate-video.
+    Tool(
+        slug="animate-photo",
+        title="Оживить кадр",
+        description="Плавная анимация статичной сцены",
+        prompt_prefix="Плавная кинематографичная анимация сцены: ",
+        recommended_category="video",
+    ),
+    Tool(
+        slug="talking-avatar",
+        title="Говорящий аватар",
+        description="Видео с говорящим цифровым аватаром",
+        prompt_prefix="Видео с говорящим цифровым аватаром, ",
+        recommended_category="video",
+    ),
+    Tool(
+        slug="short-clip",
+        title="Вертикальный клип",
+        description="Короткий динамичный вертикальный клип",
+        prompt_prefix="Короткий вертикальный клип в динамичном стиле: ",
+        recommended_category="video",
+    ),
 ]
 
 
