@@ -36,6 +36,7 @@ from app.services.media_generation_service import (
     ConfirmationRequiredError,
     ModelNotFoundError,
     RequestInProgressError,
+    UnknownOptionError,
 )
 from app.webhooks import fal as fal_webhook
 
@@ -210,9 +211,9 @@ async def test_generate_success_returns_request_id_and_estimate(client, monkeypa
 
     assert response.status_code == 200
     assert response.json() == {"request_id": 7, "estimated_credits": 100}
-    # duration_seconds больше не форвардится в сервис (параметр удалён Task 6 --
-    # option_codes ещё не подключены к роуту, это Task 7).
-    assert mock.await_args.kwargs == {"image_url": None, "confirm": False}
+    assert mock.await_args.kwargs == {
+        "image_url": None, "option_codes": None, "confirm": False,
+    }
 
 
 async def test_generate_passes_media_params(client, monkeypatch):
@@ -221,18 +222,36 @@ async def test_generate_passes_media_params(client, monkeypatch):
 
     response = await client.post("/api/generate", json={
         "model_code": "vid", "prompt": "a bear", "image_url": "https://x/in.png",
-        "duration_seconds": 10, "confirm": True,
+        "option_codes": {"duration": "10s"}, "confirm": True,
     })
 
     assert response.status_code == 200
     assert mock.await_args.kwargs == {
-        "image_url": "https://x/in.png", "confirm": True,
+        "image_url": "https://x/in.png", "option_codes": {"duration": "10s"}, "confirm": True,
     }
 
 
 async def test_generate_request_schema_has_no_credit_cost_override():
     # Security-фикс фазы 3: клиентского поля стоимости в схеме нет вообще.
     assert "credit_cost_override" not in generate.GenerateRequest.model_fields
+
+
+async def test_generate_request_schema_has_no_duration_seconds():
+    # duration_seconds удалён -- длительность видео теперь выбирается через
+    # option_codes={"duration": "10s"}, а не сырое число секунд.
+    assert "duration_seconds" not in generate.GenerateRequest.model_fields
+
+
+async def test_generate_rejects_unknown_option_code(client, monkeypatch):
+    monkeypatch.setattr(
+        generate, "start_media_generation",
+        AsyncMock(side_effect=UnknownOptionError("duration", "99s")),
+    )
+    response = await client.post("/api/generate", json={
+        "model_code": "kling_video", "prompt": "x",
+        "option_codes": {"duration": "99s"},
+    })
+    assert response.status_code == 400
 
 
 async def test_generate_unknown_model_maps_to_404(client, monkeypatch):

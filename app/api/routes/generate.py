@@ -18,6 +18,7 @@ from app.services.media_generation_service import (
     ConfirmationRequiredError,
     ModelNotFoundError,
     RequestInProgressError,
+    UnknownOptionError,
     get_generation,
     start_media_generation,
 )
@@ -31,8 +32,11 @@ class GenerateRequest(BaseModel):
     # в JSON pydantic молча игнорирует.
     model_code: str
     prompt: str
-    image_url: str | None = None         # для image-edit
-    duration_seconds: int | None = None  # для video (per-second модели)
+    image_url: str | None = None  # для image-edit
+    # Коды опций: {"quality": "480p", "duration": "10s", "audio": "off"}.
+    # Именно коды, а не сырые значения -- иначе клиент пришлёт произвольный
+    # num_frames. Наборы задаёт модель, см. GET /api/models.
+    option_codes: dict[str, str] | None = None
     confirm: bool = False
 
 
@@ -58,10 +62,17 @@ async def generate(
         request = await start_media_generation(
             session, user, body.model_code, body.prompt,
             image_url=body.image_url,
+            option_codes=body.option_codes,
             confirm=body.confirm,
         )
     except ModelNotFoundError as exc:
         raise HTTPException(status_code=404, detail="model not found") from exc
+    except UnknownOptionError as exc:
+        # Неизвестный/неактивный/чужой код опции -> 400, а не тихий откат
+        # на дефолт (клиент прислал не то, что модель реально умеет).
+        raise HTTPException(
+            status_code=400, detail=f"unknown option {exc.kind}={exc.code}"
+        ) from exc
     except ConfirmationRequiredError as exc:
         # Тело ровно {"estimated_credits": N} (без "detail") -- конвенция фазы 2
         # (/api/chat): клиент отличает этот 409 от "запрос уже выполняется".
