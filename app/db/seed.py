@@ -51,52 +51,65 @@ CREDIT_PACKAGES = [
 
 # provider_model_id медиа-моделей проверены по схемам fal 2026-07-15 (см. спек
 # docs/superpowers/specs/2026-07-15-generation-quality-design.md).
-# Текстовые (OpenRouter) -- ВСЁ ЕЩЁ ПЛЕЙСХОЛДЕРЫ, не проверялись; цены = 0,
-# поэтому списание текста идёт по min_credits (защитный минимум).
+# Текстовые (OpenRouter): ID и цены токенов сверены с живым каталогом
+# openrouter.ai/api/v1/models 2026-07-16 (6 старых ID были мертвы -> обновлены).
+# input/output_price_usd_per_1m_tokens -- $/1M; calculate_text_credits считает из
+# них реальную себестоимость x маржу 30% (min_credits -- защитный пол).
 _TEXT = dict(provider=ModelProvider.openrouter, category=ModelCategory.text, cost_unit=CostUnit.tokens,
-             input_price_usd_per_1m_tokens=0, output_price_usd_per_1m_tokens=0, fixed_cost_usd=0,
-             max_context_tokens=128000, is_active=True, is_visible=True)
+             fixed_cost_usd=0, max_context_tokens=128000, is_active=True, is_visible=True)
 _MEDIA = dict(provider=ModelProvider.fal, input_price_usd_per_1m_tokens=0, output_price_usd_per_1m_tokens=0,
               fixed_cost_usd=0, max_context_tokens=4000, is_active=True, is_visible=True)
 
 AI_MODELS = [
-    # --- TEXT (OpenRouter), 12 моделей из ТЗ ---
+    # --- TEXT (OpenRouter), 12 моделей. Цены $/1M in/out с живого каталога 2026-07-16 ---
     dict(**_TEXT, code="deepseek_v3", display_name="DeepSeek V3", tier=ModelTier.economy,
-         provider_model_id="deepseek/deepseek-chat",  # PLACEHOLDER
+         provider_model_id="deepseek/deepseek-chat",
+         input_price_usd_per_1m_tokens=0.2, output_price_usd_per_1m_tokens=0.8,
          min_credits=3, recommended_credits=3, sort_order=10),
     dict(**_TEXT, code="llama_3_1_8b", display_name="Llama 3.1 8B", tier=ModelTier.economy,
-         provider_model_id="meta-llama/llama-3.1-8b-instruct",  # PLACEHOLDER
+         provider_model_id="meta-llama/llama-3.1-8b-instruct",
+         input_price_usd_per_1m_tokens=0.05, output_price_usd_per_1m_tokens=0.08,
          min_credits=3, recommended_credits=3, sort_order=20),
     dict(**_TEXT, code="qwen_plus", display_name="Qwen Plus", tier=ModelTier.economy,
-         provider_model_id="qwen/qwen-plus",  # PLACEHOLDER
+         provider_model_id="qwen/qwen3.7-plus",
+         input_price_usd_per_1m_tokens=0.32, output_price_usd_per_1m_tokens=1.28,
          min_credits=3, recommended_credits=6, sort_order=30),
     dict(**_TEXT, code="mistral_large", display_name="Mistral Large", tier=ModelTier.economy,
-         provider_model_id="mistralai/mistral-large",  # PLACEHOLDER
+         provider_model_id="mistralai/mistral-large",
+         input_price_usd_per_1m_tokens=2.0, output_price_usd_per_1m_tokens=6.0,
          min_credits=3, recommended_credits=6, sort_order=40),
     dict(**_TEXT, code="gpt_mini", display_name="GPT Mini", tier=ModelTier.standard,
-         provider_model_id="openai/gpt-4o-mini",  # PLACEHOLDER
+         provider_model_id="openai/gpt-4o-mini",
+         input_price_usd_per_1m_tokens=0.15, output_price_usd_per_1m_tokens=0.6,
          min_credits=5, recommended_credits=6, sort_order=50),
     dict(**_TEXT, code="qwen_max", display_name="Qwen Max", tier=ModelTier.standard,
-         provider_model_id="qwen/qwen-max",  # PLACEHOLDER
+         provider_model_id="qwen/qwen3.7-max",
+         input_price_usd_per_1m_tokens=1.475, output_price_usd_per_1m_tokens=4.425,
          min_credits=10, recommended_credits=15, sort_order=60),
     dict(**_TEXT, code="grok", display_name="Grok", tier=ModelTier.standard,
-         provider_model_id="x-ai/grok-2",  # PLACEHOLDER
+         provider_model_id="x-ai/grok-4.5",
+         input_price_usd_per_1m_tokens=2.0, output_price_usd_per_1m_tokens=6.0,
          min_credits=10, recommended_credits=15, sort_order=70),
     dict(**_TEXT, code="gpt_premium", display_name="GPT Premium", tier=ModelTier.premium,
-         provider_model_id="openai/gpt-4o",  # PLACEHOLDER
+         provider_model_id="openai/gpt-4o",
+         input_price_usd_per_1m_tokens=2.5, output_price_usd_per_1m_tokens=10.0,
          min_credits=20, recommended_credits=30, sort_order=80,
          fallback_model_code="gemini_flash"),
     dict(**_TEXT, code="gemini_flash", display_name="Gemini Flash", tier=ModelTier.premium,
-         provider_model_id="google/gemini-flash-1.5",  # PLACEHOLDER
+         provider_model_id="google/gemini-2.5-flash",
+         input_price_usd_per_1m_tokens=0.3, output_price_usd_per_1m_tokens=2.5,
          min_credits=20, recommended_credits=30, sort_order=90),
     dict(**_TEXT, code="gemini_pro", display_name="Gemini Pro", tier=ModelTier.premium,
-         provider_model_id="google/gemini-pro-1.5",  # PLACEHOLDER
+         provider_model_id="google/gemini-2.5-pro",
+         input_price_usd_per_1m_tokens=1.25, output_price_usd_per_1m_tokens=10.0,
          min_credits=30, recommended_credits=40, sort_order=100),
     dict(**_TEXT, code="claude_sonnet", display_name="Claude Sonnet", tier=ModelTier.pro,
-         provider_model_id="anthropic/claude-3.5-sonnet",  # PLACEHOLDER
+         provider_model_id="anthropic/claude-sonnet-5",
+         input_price_usd_per_1m_tokens=2.0, output_price_usd_per_1m_tokens=10.0,
          min_credits=40, recommended_credits=50, sort_order=110),
     dict(**_TEXT, code="claude_opus", display_name="Claude Opus", tier=ModelTier.ultra,
-         provider_model_id="anthropic/claude-3-opus",  # PLACEHOLDER
+         provider_model_id="anthropic/claude-opus-4.8",
+         input_price_usd_per_1m_tokens=5.0, output_price_usd_per_1m_tokens=25.0,
          min_credits=70, recommended_credits=90, sort_order=120,
          fallback_model_code="claude_sonnet"),
     # --- IMAGE (fal.ai), 4 модели ---
