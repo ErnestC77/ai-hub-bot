@@ -22,6 +22,7 @@ export default function AdminModelOptions() {
   const [models, setModels] = useState<AdminModelOut[] | null>(null);
   const [selected, setSelected] = useState<string>("");
   const [options, setOptions] = useState<AdminModelOptionOut[] | null>(null);
+  const [optionsForModel, setOptionsForModel] = useState<string | undefined>(undefined);
   const [error, setError] = useState("");
 
   // Только медиа-модели: у текстовых опций нет.
@@ -36,11 +37,17 @@ export default function AdminModelOptions() {
       .catch(() => setModels([]));
   }, []);
 
+  // Сброс опций при смене модели -- во время рендера, а не в эффекте (derived
+  // state, React docs "Adjusting state when a prop changes"; тот же приём, что
+  // в generate-image). Иначе на кадр показались бы опции прежней модели под
+  // именем новой.
+  if (selected && selected !== optionsForModel) {
+    setOptionsForModel(selected);
+    setOptions(null);
+  }
+
   useEffect(() => {
     if (!selected) return;
-    // Сброс перед перезагрузкой при смене модели -- намеренно, не производное состояние.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOptions(null);
     adminApi
       .modelOptions(selected)
       .then(setOptions)
