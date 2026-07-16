@@ -8,6 +8,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { api, type BannerOut, type ModelOut } from "@/api/client";
 import HeroCarousel from "@/components/HeroCarousel";
 import ImageStack from "@/components/ImageStack";
+import ModelCard from "@/components/ModelCard";
+import DragScroll from "@/components/DragScroll";
 import { modelStyle, modelVariant } from "@/lib/modelStyles";
 import { useMe } from "@/context/MeContext";
 import CreditPurchaseSheet from "@/components/account/CreditPurchaseSheet";
@@ -137,9 +139,9 @@ export default function Home() {
               snap-start первой карточки выравнивается по краю контейнера и прокручивает
               его на величину padding-left, съедая отступ. scroll-padding двигает границу
               snapport внутрь, и отступ остаётся видимым. */}
-          <div
+          <DragScroll
             data-testid="home-models"
-            className="flex snap-x scroll-pl-4 gap-[11px] overflow-x-auto px-4 pb-1"
+            className="flex cursor-grab snap-x scroll-pl-4 gap-[11px] overflow-x-auto px-4 pb-1 select-none active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {models === null
               ? [0, 1, 2, 3].map((i) => (
@@ -157,26 +159,18 @@ export default function Home() {
                     ? `${variant} · ${CATEGORY_LABEL[model.category]}`
                     : CATEGORY_LABEL[model.category];
                   return (
-                    <button
+                    <ModelCard
                       key={model.code}
-                      data-testid="model-card"
+                      title={title}
+                      tag={tag}
+                      tagClass={TAG_CLASSES[model.category]}
+                      gradient={gradient}
+                      previewUrl={model.preview_url}
                       onClick={() => openModel(model)}
-                      className="press-scale relative h-[150px] w-[118px] flex-none snap-start overflow-hidden rounded-[18px] p-0 text-left"
-                      style={{ background: gradient }}
-                    >
-                      <div className="absolute inset-0 bg-[image:radial-gradient(80%_60%_at_30%_20%,rgba(255,255,255,0.18),transparent)]" />
-                      <div className="absolute inset-x-[11px] bottom-[11px]">
-                        <div className="text-[13px] font-semibold text-white">{title}</div>
-                        <div
-                          className={`mt-[5px] inline-block rounded-full px-2 py-[3px] text-[9.5px] font-semibold ${TAG_CLASSES[model.category]}`}
-                        >
-                          {tag}
-                        </div>
-                      </div>
-                    </button>
+                    />
                   );
                 })}
-          </div>
+          </DragScroll>
         </div>
       )}
 

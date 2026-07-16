@@ -123,6 +123,7 @@ async def test_models_returns_visible_active_text_models_sorted(client, db_sessi
         "tier": "economy",
         "min_credits": 3,
         "recommended_credits": 5,
+        "preview_url": "/models/first.jpg",
         "min_charge_credits": 3,  # текст: пол = min_credits
         "options": [],  # у модели без опций -- пустой список, не отсутствие ключа
         "edit_multiplier": None,  # текстовая модель редактирование не поддерживает
@@ -153,6 +154,7 @@ async def test_models_category_image_returns_only_visible_active_image_models(cl
         "tier": "standard",
         "min_credits": 3,
         "recommended_credits": 5,
+        "preview_url": "/models/img_a.jpg",
         "min_charge_credits": 3,  # image: пол = min_credits (VIDEO_MIN_CREDITS только для видео)
         "options": [],
         "edit_multiplier": None,  # img_a без i2i-маршрута -> редактирование не поддерживает
