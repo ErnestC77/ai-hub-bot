@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getTrendStyle } from "@/lib/trendStyles";
 
@@ -23,6 +23,24 @@ interface Props {
 export default function TrendCard({ slug, title, description, badge, previewUrl, onClick }: Props) {
   const style = getTrendStyle(slug);
   const [videoFailed, setVideoFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Играет только видимая в карусели карточка: 12 одновременных autoplay-лупов
+  // тяжелы на мобильных. Невидимые -- на паузе (preload="metadata" оставляет
+  // отрисованным первый кадр, так что карточка не пустая).
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) el.play().catch(() => {});
+        else el.pause();
+      },
+      { threshold: 0.5 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [previewUrl, videoFailed]);
 
   return (
     <button
@@ -39,13 +57,14 @@ export default function TrendCard({ slug, title, description, badge, previewUrl,
         {style.emoji}
       </span>
 
-      {/* Превью-видео поверх градиента+эмодзи; muted-autoplay разрешён на мобильных.
-          onError -> скрываем, плейсхолдер снизу остаётся. */}
+      {/* Превью-видео поверх градиента+эмодзи; play/pause -- по видимости (см.
+          IntersectionObserver выше), поэтому autoPlay не ставим. muted нужен для
+          политики автоплея. onError -> скрываем, плейсхолдер снизу остаётся. */}
       {previewUrl && !videoFailed && (
         <video
+          ref={videoRef}
           data-testid="trend-video"
           src={previewUrl}
-          autoPlay
           loop
           muted
           playsInline
