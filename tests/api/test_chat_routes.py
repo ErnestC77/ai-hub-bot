@@ -15,13 +15,14 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.deps import current_user, get_db
 from app.api.routes import chat, me
 from app.db.base import Base
-from app.db.enums import CostUnit, ModelCategory, ModelProvider, ModelTier
-from app.db.models import AiModel, User
+from app.db.enums import CostUnit, ModelCategory, ModelOptionKind, ModelProvider, ModelTier
+from app.db.models import AiModel, ModelOption, User
 from app.services.ai.base import AIError
 from app.services.credit_service import InsufficientBalanceError
 from app.services.antifraud_service import (
@@ -89,6 +90,15 @@ def _text_model(code, *, sort_order, tier=ModelTier.economy, is_active=True, is_
     )
 
 
+def _option(model_id, kind, code, *, sort_order, multiplier=1.0, is_default=False,
+            is_active=True) -> ModelOption:
+    return ModelOption(
+        model_id=model_id, kind=kind, code=code, label=code,
+        provider_params={}, credits_multiplier=multiplier,
+        is_default=is_default, is_active=is_active, sort_order=sort_order,
+    )
+
+
 # --- GET /api/models ---
 
 async def test_models_returns_visible_active_text_models_sorted(client, db_sessionmaker):
@@ -113,6 +123,8 @@ async def test_models_returns_visible_active_text_models_sorted(client, db_sessi
         "tier": "economy",
         "min_credits": 3,
         "recommended_credits": 5,
+        "options": [],  # у модели без опций -- пустой список, не отсутствие ключа
+        "edit_multiplier": None,  # текстовая модель редактирование не поддерживает
     }
     # provider_model_id никогда не уходит наружу (ТЗ).
     assert "provider_model_id" not in response.text
@@ -140,6 +152,8 @@ async def test_models_category_image_returns_only_visible_active_image_models(cl
         "tier": "standard",
         "min_credits": 3,
         "recommended_credits": 5,
+        "options": [],
+        "edit_multiplier": None,  # img_a без i2i-маршрута -> редактирование не поддерживает
     }
 
 
@@ -148,6 +162,82 @@ async def test_models_invalid_category_is_422(client):
     # (спека в скобках говорит "400", фактическое поведение FastAPI -- 422).
     response = await client.get("/api/models", params={"category": "audio"})
     assert response.status_code == 422
+
+
+async def test_models_endpoint_exposes_options(client, db_sessionmaker):
+    # Фронт рисует сегменты ИЗ ПРИШЕДШИХ опций: у модели без ручки размера
+    # (nano_banana) секции качества не будет вовсе.
+    async with db_sessionmaker() as s:
+        s.add_all([
+            _text_model("kling_video", sort_order=10, category=ModelCategory.video),
+            _text_model("nano_banana", sort_order=20, category=ModelCategory.video),
+        ])
+        await s.flush()
+        kling = (await s.execute(
+            select(AiModel).where(AiModel.code == "kling_video")
+        )).scalar_one()
+        s.add_all([
+            _option(kling.id, ModelOptionKind.duration, "5s", sort_order=1,
+                    multiplier=1.0, is_default=True),
+            _option(kling.id, ModelOptionKind.duration, "10s", sort_order=2,
+                    multiplier=2.0),
+        ])
+        await s.commit()
+
+    body = (await client.get("/api/models", params={"category": "video"})).json()
+
+    kling = next(m for m in body if m["code"] == "kling_video")
+    assert [o["code"] for o in kling["options"]] == ["5s", "10s"]
+    assert kling["options"][0]["is_default"] is True
+    assert kling["options"][0]["kind"] == "duration"
+    assert float(kling["options"][1]["credits_multiplier"]) == 2.0
+
+    nano_banana = next(m for m in body if m["code"] == "nano_banana")
+    assert nano_banana["options"] == []
+    # provider_params клиенту не отдаём -- ни в каком виде.
+    assert "provider_params" not in (await client.get(
+        "/api/models", params={"category": "video"}
+    )).text
+
+
+async def test_models_endpoint_exposes_edit_multiplier_only_for_edit_capable(client, db_sessionmaker):
+    """edit_multiplier != null <=> у модели есть i2i-маршрут. Фронт по нему решает,
+    показывать ли фото-бокс и на сколько дороже CTA с фото; само число (1.5) живёт
+    на бэке, чтобы фронт его не хардкодил."""
+    async with db_sessionmaker() as s:
+        edit = _text_model("nano_banana_pro", sort_order=10, category=ModelCategory.image)
+        edit.provider_model_id_edit = "fal-ai/nano-banana-pro/edit"
+        s.add_all([
+            edit,
+            _text_model("qwen_image", sort_order=20, category=ModelCategory.image),  # без edit
+        ])
+        await s.commit()
+
+    body = (await client.get("/api/models", params={"category": "image"})).json()
+
+    pro = next(m for m in body if m["code"] == "nano_banana_pro")
+    qwen = next(m for m in body if m["code"] == "qwen_image")
+    assert pro["edit_multiplier"] == 1.5
+    assert qwen["edit_multiplier"] is None
+
+
+async def test_models_endpoint_hides_inactive_options(client, db_sessionmaker):
+    async with db_sessionmaker() as s:
+        s.add(_text_model("wan_video", sort_order=10, category=ModelCategory.video))
+        await s.flush()
+        wan = (await s.execute(
+            select(AiModel).where(AiModel.code == "wan_video")
+        )).scalar_one()
+        s.add_all([
+            _option(wan.id, ModelOptionKind.quality, "480p", sort_order=1, is_default=True),
+            _option(wan.id, ModelOptionKind.quality, "720p", sort_order=2, is_active=False),
+        ])
+        await s.commit()
+
+    body = (await client.get("/api/models", params={"category": "video"})).json()
+
+    wan = next(m for m in body if m["code"] == "wan_video")
+    assert [o["code"] for o in wan["options"]] == ["480p"]
 
 
 # --- POST /api/chat ---

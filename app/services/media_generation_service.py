@@ -18,8 +18,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.enums import ModelCategory, RequestStatus
-from app.db.models import AIRequest, AiModel, User
+from app.db.enums import ModelCategory, ModelOptionKind, RequestStatus
+from app.db.models import AIRequest, AiModel, ModelOption, User
 from app.redis_client import redis_client
 from app.services.ai.base import AIError
 from app.services.ai.fal_client import FalClient, extract_result_url
@@ -81,6 +81,59 @@ def _webhook_url() -> str:
     return f"{settings.backend_public_url}/api/fal/webhook?secret={settings.fal_webhook_secret}"
 
 
+class UnknownOptionError(Exception):
+    """Клиент прислал код опции, которого у модели нет или который выключен."""
+
+    def __init__(self, kind: str, code: str):
+        self.kind = kind
+        self.code = code
+        super().__init__(f"unknown option {kind}={code}")
+
+
+async def _resolve_options(
+    session: AsyncSession, model: AiModel, option_codes: dict[str, str] | None
+) -> tuple[float, dict]:
+    """Коды опций -> (произведение множителей, слитые provider_params).
+
+    Коды, а не сырые значения: иначе клиент пришлёт произвольный num_frames.
+    Неизвестный код -> UnknownOptionError (400), а НЕ тихий откат на дефолт:
+    молчаливая подмена вернула бы нас к контролу, который делает не то,
+    что показывает.
+    """
+    rows = (
+        await session.execute(
+            select(ModelOption)
+            .where(ModelOption.model_id == model.id, ModelOption.is_active.is_(True))
+            .order_by(ModelOption.sort_order)
+        )
+    ).scalars().all()
+
+    by_kind: dict[ModelOptionKind, list[ModelOption]] = {}
+    for row in rows:
+        by_kind.setdefault(row.kind, []).append(row)
+
+    requested = option_codes or {}
+    for kind_str in requested:
+        if kind_str not in {k.value for k in by_kind}:
+            raise UnknownOptionError(kind_str, requested[kind_str])
+
+    multiplier = 1.0
+    params: dict = {}
+    for kind, options in by_kind.items():
+        code = requested.get(kind.value)
+        if code is None:
+            chosen = next((o for o in options if o.is_default), None)
+            if chosen is None:
+                continue  # у вида нет дефолта -- ничего не навязываем
+        else:
+            chosen = next((o for o in options if o.code == code), None)
+            if chosen is None:
+                raise UnknownOptionError(kind.value, code)
+        multiplier *= float(chosen.credits_multiplier)
+        params.update(chosen.provider_params or {})
+    return multiplier, params
+
+
 async def _get_media_model(session: AsyncSession, model_code: str) -> AiModel:
     model = (
         await session.execute(
@@ -102,7 +155,7 @@ async def start_media_generation(
     prompt: str,
     *,
     image_url: str | None = None,
-    duration_seconds: int | None = None,
+    option_codes: dict[str, str] | None = None,
     confirm: bool = False,
 ) -> AIRequest:
     model = await _get_media_model(session, model_code)
@@ -112,26 +165,32 @@ async def start_media_generation(
     if not confirm:
         # confirm=True -- осознанный повтор после 409 ConfirmationRequired:
         # он приходит внутри cooldown-окна и не должен блокироваться дедупом.
-        await check_duplicate_request(user.id, model_code, prompt, settings=af_settings)
+        await check_duplicate_request(
+            user.id, model_code, prompt, option_codes=option_codes, settings=af_settings
+        )
     await check_rate_limits(user.id, model.code, settings=af_settings)
     await check_tier_allowed(user, model)
 
     # category зафиксирована в строке каталога -- клиент её не выбирает.
-    # Для image множитель редактирования включается всегда, когда передан
-    # image_url, без проверки "поддерживает ли модель edit" (см. спеку фазы 3).
+    options_multiplier, provider_params = await _resolve_options(session, model, option_codes)
+
     if model.category == ModelCategory.image:
+        # Наценка за редактирование (x1.5) -- только если у модели есть отдельный
+        # i2i-маршрут. Иначе фото провайдером не используется (qwen_image/seedream
+        # не имеют edit-эндпоинта), и брать за него +50% -- значит списывать за
+        # то, чего не произошло. Фронт таким моделям и фото-бокс не показывает.
+        is_edit = image_url is not None and model.provider_model_id_edit is not None
         estimated = calculate_image_credits(
-            model, quantity=1, megapixels=1.0, is_edit=image_url is not None
+            model, quantity=1, megapixels=1.0, is_edit=is_edit,
+            options_multiplier=options_multiplier,
         )
         provider_cost_usd = calculate_image_api_cost_usd(model, quantity=1, megapixels=1.0)
         threshold = IMAGE_CONFIRM_THRESHOLD_CREDITS
     else:
-        estimated = calculate_video_credits(
-            model, duration_seconds or VIDEO_DEFAULT_DURATION_SECONDS
-        )
-        provider_cost_usd = calculate_video_api_cost_usd(
-            model, duration_seconds or VIDEO_DEFAULT_DURATION_SECONDS
-        )
+        estimated = calculate_video_credits(model, options_multiplier=options_multiplier)
+        # Себестоимость провайдера считается по дефолтной длительности --
+        # отдельная забота от пользовательской цены (см. calculate_video_api_cost_usd).
+        provider_cost_usd = calculate_video_api_cost_usd(model, VIDEO_DEFAULT_DURATION_SECONDS)
         threshold = VIDEO_CONFIRM_THRESHOLD_CREDITS
 
     # Antifraud (фаза 5): free-tier cap и дневной лимит -- после оценки, ДО
@@ -191,14 +250,12 @@ async def start_media_generation(
         client = FalClient(api_key=api_key)
         if model.category == ModelCategory.image:
             fal_request_id = await client.submit_image(
-                model, prompt, image_url=image_url, webhook_url=_webhook_url()
+                model, prompt, image_url=image_url, provider_params=provider_params,
+                webhook_url=_webhook_url(),
             )
         else:
             fal_request_id = await client.submit_video(
-                model,
-                prompt,
-                duration_seconds=duration_seconds or VIDEO_DEFAULT_DURATION_SECONDS,
-                webhook_url=_webhook_url(),
+                model, prompt, provider_params=provider_params, webhook_url=_webhook_url(),
             )
     except Exception as exc:
         # Резерв уже закоммичен -- возвращаем его и снимаем лок.

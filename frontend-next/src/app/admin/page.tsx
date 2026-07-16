@@ -6,6 +6,7 @@ import { Placeholder } from "@/components/ui/placeholder";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useMe } from "@/context/MeContext";
 import AdminBanners from "@/screens/admin/AdminBanners";
+import AdminModelOptions from "@/screens/admin/AdminModelOptions";
 import AdminModels from "@/screens/admin/AdminModels";
 import AdminPackages from "@/screens/admin/AdminPackages";
 import AdminPayments from "@/screens/admin/AdminPayments";
@@ -18,6 +19,7 @@ const TABS = [
   { key: "users", label: "Пользователи" },
   { key: "payments", label: "Платежи" },
   { key: "models", label: "Модели" },
+  { key: "options", label: "Опции" },
   { key: "packages", label: "Пакеты" },
   { key: "settings", label: "Настройки" },
   { key: "banners", label: "Карусель" },
@@ -50,6 +52,7 @@ export default function AdminPanel() {
       {tab === "users" && <AdminUsers />}
       {tab === "payments" && <AdminPayments />}
       {tab === "models" && <AdminModels />}
+      {tab === "options" && <AdminModelOptions />}
       {tab === "packages" && <AdminPackages />}
       {tab === "settings" && <AdminSettings />}
       {tab === "banners" && <AdminBanners />}

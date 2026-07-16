@@ -58,12 +58,32 @@ export interface MeOut {
   total_credits_spent: number;
 }
 
+export type ModelOptionKind = "quality" | "duration" | "audio";
+
+export interface ModelOptionOut {
+  kind: ModelOptionKind;
+  code: string;
+  label: string;
+  /** Во сколько раз опция дороже дефолта. Выведен из замеров провайдера. */
+  credits_multiplier: number;
+  is_default: boolean;
+  sort_order: number;
+}
+
 export interface ModelOut {
   code: string;
   display_name: string;
   tier: "economy" | "standard" | "premium" | "pro" | "ultra";
   min_credits: number;
   recommended_credits: number;
+  /** Наборы задаёт модель. Пусто -- у провайдера нет соответствующей ручки. */
+  options: ModelOptionOut[];
+  /**
+   * Множитель за генерацию по фото (i2i), либо null если модель редактирование
+   * не поддерживает. null -> фото-бокс не показываем; иначе CTA с фото дороже
+   * в edit_multiplier раз. Число с бэка (не хардкодим, чтобы не разъехалось).
+   */
+  edit_multiplier: number | null;
 }
 
 export interface ChatResponse {
@@ -133,14 +153,21 @@ export const api = {
       body: JSON.stringify({ model_code: modelCode, prompt, confirm }),
     }),
   tools: () => request<ToolOut[]>("/api/tools"),
-  generate: (modelCode: string, prompt: string, imageUrl?: string, durationSeconds?: number, confirm = false) =>
+  generate: (
+    modelCode: string,
+    prompt: string,
+    imageUrl?: string,
+    optionCodes?: Record<string, string>,
+    confirm = false,
+  ) =>
     request<{ request_id: number; estimated_credits: number }>("/api/generate", {
       method: "POST",
       body: JSON.stringify({
         model_code: modelCode,
         prompt,
         image_url: imageUrl ?? null,
-        duration_seconds: durationSeconds ?? null,
+        // Коды опций, не сырые значения: наборы задаёт модель, см. ModelOut.options.
+        option_codes: optionCodes ?? null,
         confirm,
       }),
     }),
@@ -259,6 +286,19 @@ export interface AdminModelOut {
   sort_order: number;
 }
 
+export interface AdminModelOptionOut {
+  id: number;
+  model_code: string;
+  kind: ModelOptionKind;
+  code: string;
+  label: string;
+  provider_params: Record<string, unknown>;
+  credits_multiplier: number;
+  is_default: boolean;
+  sort_order: number;
+  is_active: boolean;
+}
+
 export interface AdminBannerOut {
   id: number;
   title: string;
@@ -313,6 +353,16 @@ export const adminApi = {
     code: string,
     patch: Partial<Pick<AdminModelOut, "is_active" | "is_visible" | "min_credits" | "recommended_credits" | "sort_order">>,
   ) => request<AdminModelOut>(`/api/admin/models/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  modelOptions: (code: string) =>
+    request<AdminModelOptionOut[]>(`/api/admin/models/${encodeURIComponent(code)}/options`),
+  updateOption: (
+    id: number,
+    patch: Partial<Pick<AdminModelOptionOut, "label" | "credits_multiplier" | "sort_order" | "is_active" | "is_default">>,
+  ) =>
+    request<AdminModelOptionOut>(`/api/admin/options/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
   packages: () => request<AdminPackageOut[]>("/api/admin/packages"),
   updatePackage: (code: string, patch: Partial<Pick<AdminPackageOut, "credits" | "price_rub" | "price_stars" | "is_active">>) =>
     request<AdminPackageOut>(`/api/admin/packages/${code}`, { method: "PATCH", body: JSON.stringify(patch) }),

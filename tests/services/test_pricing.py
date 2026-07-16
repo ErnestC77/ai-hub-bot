@@ -3,6 +3,7 @@ import pytest
 from app.db.enums import CostUnit, ModelCategory, ModelProvider, ModelTier
 from app.db.models import AiModel
 from app.services.pricing import (
+    VIDEO_MIN_CREDITS,
     PricingSettings,
     calculate_api_cost_usd,
     calculate_image_api_cost_usd,
@@ -109,34 +110,56 @@ def test_image_rejects_non_image_cost_unit():
 
 
 # --- calculate_video_credits ---
+# duration_seconds удалён из формулы (Task 4): работу деления на "базовые 5с"
+# теперь делает options_multiplier конкретной опции длительности. cost_unit
+# (second/video) больше НЕ влияет на расчёт кредитов -- признак ниже это
+# фиксирует явно, чтобы никто случайно не вернул старое ветвление.
 
-def test_video_cost_unit_second_scales_by_duration():
-    # ceil(7/5 * 600) = ceil(840.0) = 840.
-    model = _media_model(CostUnit.second, recommended=600, min_credits=600, category=ModelCategory.video)
-    assert calculate_video_credits(model, duration_seconds=7) == 840
-
-
-def test_video_short_duration_floors_to_model_min():
-    # ceil(3/5 * 600) = 360 < min_credits 600 -> 600.
-    model = _media_model(CostUnit.second, recommended=600, min_credits=600, category=ModelCategory.video)
-    assert calculate_video_credits(model, duration_seconds=3) == 600
-
-
-def test_video_cost_unit_video_is_flat():
-    model = _media_model(CostUnit.video, recommended=500, min_credits=500, category=ModelCategory.video)
-    assert calculate_video_credits(model, duration_seconds=30) == 500
+def test_video_cost_unit_is_irrelevant_to_credits():
+    # second и video с одинаковыми recommended/min дают одинаковый результат --
+    # раньше second ещё требовал duration_seconds, теперь формула единая.
+    per_second = _media_model(CostUnit.second, recommended=600, min_credits=600, category=ModelCategory.video)
+    flat = _media_model(CostUnit.video, recommended=600, min_credits=600, category=ModelCategory.video)
+    assert calculate_video_credits(per_second) == calculate_video_credits(flat) == 600
 
 
 def test_video_global_minimum_500():
     # recommended 300, min_credits 0 -> глобальный минимум видео 500.
     model = _media_model(CostUnit.video, recommended=300, min_credits=0, category=ModelCategory.video)
-    assert calculate_video_credits(model, duration_seconds=5) == 500
+    assert calculate_video_credits(model) == 500
 
 
-def test_video_rejects_non_video_cost_unit():
-    model = _media_model(CostUnit.image, recommended=500, min_credits=500, category=ModelCategory.video)
-    with pytest.raises(ValueError):
-        calculate_video_credits(model, duration_seconds=5)
+def test_options_multiplier_applies_before_floors():
+    """Порядок обязателен: множитель ДО минимумов. Иначе дешёвая опция
+    пробьёт пол и станет бесплатной, а дорогая -- недоплаченной."""
+    model = _media_model(CostUnit.video, recommended=1000, min_credits=400, category=ModelCategory.video)
+    # 0.5 * 1000 = 500 -- выше пола 400, пол не срабатывает
+    assert calculate_video_credits(model, options_multiplier=0.5) == 500
+    # 0.1 * 1000 = 100 -- ниже пола: возвращается пол, а не 100
+    assert calculate_video_credits(model, options_multiplier=0.1) == max(400, VIDEO_MIN_CREDITS)
+
+
+def test_default_multiplier_equals_recommended_credits():
+    """Дефолтная комбинация стоит ровно recommended_credits."""
+    model = _media_model(CostUnit.video, recommended=3220, min_credits=3220, category=ModelCategory.video)
+    assert calculate_video_credits(model, options_multiplier=1.0) == 3220
+
+
+def test_kling_ten_seconds_doubles():
+    """Нелинейность провайдера ($1.40 за 5с, $2.80 за 10с) выражена множителем."""
+    kling = _media_model(CostUnit.video, recommended=3220, min_credits=3220, category=ModelCategory.video)
+    assert calculate_video_credits(kling, options_multiplier=2.0) == 6440
+
+
+def test_image_options_multiplier_composes_with_edit():
+    """2K (×4) на редактировании (×1.5) -- множители перемножаются."""
+    model = _media_model(CostUnit.megapixel, recommended=50, min_credits=50)
+    plain = calculate_image_credits(model, quantity=1, megapixels=1.0, options_multiplier=4.0)
+    assert plain == 200
+    edited = calculate_image_credits(
+        model, quantity=1, megapixels=1.0, is_edit=True, options_multiplier=4.0
+    )
+    assert edited == 300  # ceil(200 * 1.5)
 
 
 # --- calculate_api_cost_usd (text, фаза 6) ---
@@ -186,7 +209,8 @@ def test_image_api_cost_rejects_non_image_cost_unit():
 # --- calculate_video_api_cost_usd (фаза 6) ---
 
 def test_video_api_cost_unit_second_scales_by_duration():
-    # 7/5 * 0.5 = 0.7 -- fixed_cost_usd задан "за VIDEO_BASE_SECONDS", как recommended_credits.
+    # 7/5 * 0.5 = 0.7 -- fixed_cost_usd задан "за 5 секунд" (реальный биллинг
+    # провайдера, эта функция Task 4 не трогает -- см. calculate_video_credits).
     model = _media_model(CostUnit.second, recommended=600, min_credits=600,
                          category=ModelCategory.video, fixed_cost_usd=0.5)
     assert calculate_video_api_cost_usd(model, duration_seconds=7) == pytest.approx(0.7)

@@ -3,8 +3,8 @@ import asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.enums import CostUnit, ModelCategory, ModelProvider, ModelTier
-from app.db.models import AiModel, Banner, CreditPackage, Setting
+from app.db.enums import CostUnit, ModelCategory, ModelOptionKind, ModelProvider, ModelTier
+from app.db.models import AiModel, Banner, CreditPackage, ModelOption, Setting
 from app.db.session import get_session
 
 SETTINGS_ROWS = [
@@ -116,6 +116,15 @@ AI_MODELS = [
          provider_model_id="fal-ai/nano-banana",
          provider_model_id_edit="fal-ai/nano-banana/edit",
          min_credits=100, recommended_credits=100, sort_order=160),
+    # Gemini 3 Pro Image. Единственная модель каталога с настоящим селектором
+    # 1K/2K/4K (resolution в схеме) -- тем самым, что рисовал дизайн-макет.
+    # Измерено 2026-07-15: 1K=$0.15, 2K=$0.15 (бесплатно!), 4K=$0.30.
+    # $0.15 * 2300 = 345. Вчетверо дороже обычной nano_banana ($0.0398).
+    dict(**_MEDIA, category=ModelCategory.image, code="nano_banana_pro",
+         display_name="Nano Banana Pro", tier=ModelTier.pro, cost_unit=CostUnit.image,
+         provider_model_id="fal-ai/nano-banana-pro",
+         provider_model_id_edit="fal-ai/nano-banana-pro/edit",
+         min_credits=345, recommended_credits=345, sort_order=165),
     # --- VIDEO (fal.ai), 4 модели (recommended_credits -- цена за дефолтную комбинацию модели) ---
     dict(**_MEDIA, category=ModelCategory.video, code="ovi_video", display_name="Ovi Video",
          tier=ModelTier.economy, cost_unit=CostUnit.video,
@@ -142,6 +151,111 @@ AI_MODELS = [
          # дефолт 8с со звуком: $0.40/с * 8 = $3.20 -> 7360.
          # пол: 4с без звука $0.20/с * 4 = $0.80 -> 1840.
          min_credits=1840, recommended_credits=7360, sort_order=200),
+]
+
+# Опции моделей. Каждый множитель ВЫВЕДЕН из замера живого fal 2026-07-15
+# (списание с баланса), а не назначен -- см. спек, раздел «Цены».
+# provider_params сверены со схемами fal: типы значений обязаны совпадать
+# (Kling ждёт duration строкой, Wan -- num_frames числом).
+MODEL_OPTIONS = [
+    # --- Wan: две независимые оси качества (resolution + video_quality) ---
+    # 480p $0.04/с, 580p $0.06/с, 720p $0.08/с -> 0.5 / 0.75 / 1.0
+    dict(model_code="wan_video", kind=ModelOptionKind.quality, code="480p", label="480p",
+         provider_params={"resolution": "480p", "video_quality": "high"},
+         credits_multiplier=0.5, is_default=False, sort_order=10),
+    dict(model_code="wan_video", kind=ModelOptionKind.quality, code="580p", label="580p",
+         provider_params={"resolution": "580p", "video_quality": "high"},
+         credits_multiplier=0.75, is_default=False, sort_order=20),
+    dict(model_code="wan_video", kind=ModelOptionKind.quality, code="720p", label="720p",
+         # video_quality оставлен на дефолте fal "high" -- эффект этого параметра
+         # на цену НЕ замерялся (замер варьировал только resolution), поэтому
+         # менять его на "maximum" нельзя без отдельного замера.
+         provider_params={"resolution": "720p", "video_quality": "high"},
+         credits_multiplier=1.0, is_default=True, sort_order=30),
+    # У Wan поля duration нет: длина = num_frames / frames_per_second.
+    # 81/16 = 5.0625с (дефолт модели), 161/16 = 10.0625с -> 10.0625/5.0625 = 1.988.
+    dict(model_code="wan_video", kind=ModelOptionKind.duration, code="5s", label="5 сек",
+         provider_params={"num_frames": 81, "frames_per_second": 16},
+         credits_multiplier=1.0, is_default=True, sort_order=10),
+    dict(model_code="wan_video", kind=ModelOptionKind.duration, code="10s", label="10 сек",
+         provider_params={"num_frames": 161, "frames_per_second": 16},
+         credits_multiplier=1.988, is_default=False, sort_order=20),
+    # --- Kling: duration СТРОКОЙ, размером управлять нельзя (только aspect_ratio) ---
+    # $1.40 за 5с, $2.80 за 10с -> 2.0 (нелинейно по секундам: $1.40 + $0.28/с,
+    # формулой не выражается -- ровно поэтому множитель, а не расчёт).
+    dict(model_code="kling_video", kind=ModelOptionKind.duration, code="5s", label="5 сек",
+         provider_params={"duration": "5"},
+         credits_multiplier=1.0, is_default=True, sort_order=10),
+    dict(model_code="kling_video", kind=ModelOptionKind.duration, code="10s", label="10 сек",
+         provider_params={"duration": "10"},
+         credits_multiplier=2.0, is_default=False, sort_order=20),
+    # --- Veo: duration строкой с суффиксом; звук удваивает цену ---
+    # $0.40/с со звуком, $0.20/с без (оба измерены) -> off = 0.5.
+    dict(model_code="veo_video", kind=ModelOptionKind.duration, code="4s", label="4 сек",
+         provider_params={"duration": "4s"},
+         credits_multiplier=0.5, is_default=False, sort_order=10),
+    dict(model_code="veo_video", kind=ModelOptionKind.duration, code="6s", label="6 сек",
+         provider_params={"duration": "6s"},
+         credits_multiplier=0.75, is_default=False, sort_order=20),
+    dict(model_code="veo_video", kind=ModelOptionKind.duration, code="8s", label="8 сек",
+         provider_params={"duration": "8s"},
+         credits_multiplier=1.0, is_default=True, sort_order=30),
+    dict(model_code="veo_video", kind=ModelOptionKind.audio, code="on", label="Со звуком",
+         provider_params={"generate_audio": True},
+         credits_multiplier=1.0, is_default=True, sort_order=10),
+    dict(model_code="veo_video", kind=ModelOptionKind.audio, code="off", label="Без звука",
+         provider_params={"generate_audio": False},
+         credits_multiplier=0.5, is_default=False, sort_order=20),
+    # Разрешение Veo измерено (3 генерации 4с без звука): 720p $0.80, 1080p $0.80, 4k $1.60.
+    # 1080p БЕСПЛАТЕН -- стоит ровно как 720p. Дорожает только 4K, ровно вдвое.
+    dict(model_code="veo_video", kind=ModelOptionKind.quality, code="720p", label="720p",
+         provider_params={"resolution": "720p"},
+         credits_multiplier=1.0, is_default=True, sort_order=10),
+    dict(model_code="veo_video", kind=ModelOptionKind.quality, code="1080p", label="1080p",
+         provider_params={"resolution": "1080p"},
+         credits_multiplier=1.0, is_default=False, sort_order=20),
+    dict(model_code="veo_video", kind=ModelOptionKind.quality, code="4k", label="4K",
+         provider_params={"resolution": "4k"},
+         credits_multiplier=2.0, is_default=False, sort_order=30),
+    # --- qwen_image: image_size пресетом или объектом ---
+    # $0.02/МП. square_hd = 1024^2 = 1.05 МП (дефолт), 2048^2 = 4.19 МП -> 4.0.
+    dict(model_code="qwen_image", kind=ModelOptionKind.quality, code="1k", label="1K",
+         provider_params={"image_size": "square_hd"},
+         credits_multiplier=1.0, is_default=True, sort_order=10),
+    dict(model_code="qwen_image", kind=ModelOptionKind.quality, code="2k", label="2K",
+         provider_params={"image_size": {"width": 2048, "height": 2048}},
+         credits_multiplier=4.0, is_default=False, sort_order=20),
+    # --- seedream v4: разрешение бесплатно ---
+    # Измерено: square_hd, auto_2K и auto_4K списали ровно $0.09 на троих, т.е.
+    # $0.03 за картинку независимо от разрешения (cost_unit=image -- плоский тариф).
+    # Множители 1.0: 2K и 4K достаются пользователю даром.
+    dict(model_code="seedream", kind=ModelOptionKind.quality, code="1k", label="1K",
+         provider_params={"image_size": "square_hd"},
+         credits_multiplier=1.0, is_default=True, sort_order=10),
+    dict(model_code="seedream", kind=ModelOptionKind.quality, code="2k", label="2K",
+         provider_params={"image_size": "auto_2K"},
+         credits_multiplier=1.0, is_default=False, sort_order=20),
+    dict(model_code="seedream", kind=ModelOptionKind.quality, code="4k", label="4K",
+         provider_params={"image_size": "auto_4K"},
+         credits_multiplier=1.0, is_default=False, sort_order=30),
+    # --- nano_banana_pro: тот самый селектор 1K/2K/4K из дизайн-макета ---
+    # Измерено: 1K $0.15, 2K $0.15, 4K $0.30. 2K БЕСПЛАТЕН -- ровно как 1K;
+    # дорожает только 4K, вдвое. Тот же узор, что у Veo (720p = 1080p < 4k x2).
+    # Здравый смысл сказал бы 1/2/4 -- и мы брали бы вдвое лишнего за 2K.
+    dict(model_code="nano_banana_pro", kind=ModelOptionKind.quality, code="1k", label="1K",
+         provider_params={"resolution": "1K"},
+         credits_multiplier=1.0, is_default=True, sort_order=10),
+    dict(model_code="nano_banana_pro", kind=ModelOptionKind.quality, code="2k", label="2K",
+         provider_params={"resolution": "2K"},
+         credits_multiplier=1.0, is_default=False, sort_order=20),
+    dict(model_code="nano_banana_pro", kind=ModelOptionKind.quality, code="4k", label="4K",
+         provider_params={"resolution": "4K"},
+         credits_multiplier=2.0, is_default=False, sort_order=30),
+    # НЕ заведены намеренно:
+    #  - ovi: цена плоская ($0.20/видео), но влияние resolution не мерили; длительность
+    #    не управляется вовсе (в схеме нет ни duration, ни num_frames);
+    #  - flux_kontext_pro, nano_banana (обычная), kling quality: у провайдера НЕТ ручки
+    #    размера, только aspect_ratio.
 ]
 
 # Banner-сиды переносятся как есть (не относятся к кредитной системе).
@@ -200,6 +314,30 @@ async def apply_seed(session: AsyncSession) -> None:
     for data in BANNERS:
         if data["title"] not in existing_banner_titles:
             session.add(Banner(**data))
+
+    # Опции вставляем после моделей: model_id известен только после их flush.
+    await session.flush()
+    model_ids = {
+        row[0]: row[1]
+        for row in (await session.execute(select(AiModel.code, AiModel.id))).all()
+    }
+    existing_options = {
+        (row[0], row[1], row[2])
+        for row in (
+            await session.execute(
+                select(ModelOption.model_id, ModelOption.kind, ModelOption.code)
+            )
+        ).all()
+    }
+    for data in MODEL_OPTIONS:
+        model_id = model_ids.get(data["model_code"])
+        if model_id is None:
+            continue  # модель скрыта/удалена -- опции ей не нужны
+        key = (model_id, data["kind"], data["code"])
+        if key in existing_options:
+            continue
+        payload = {k: v for k, v in data.items() if k != "model_code"}
+        session.add(ModelOption(model_id=model_id, **payload))
 
     await session.commit()
 

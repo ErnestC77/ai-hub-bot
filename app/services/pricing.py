@@ -10,7 +10,6 @@ from app.db.models import AiModel
 IMAGE_EDIT_MULTIPLIER = 1.5
 IMAGE_EDIT_MIN_CREDITS = 100
 VIDEO_MIN_CREDITS = 500
-VIDEO_BASE_SECONDS = 5  # recommended_credits видео-моделей заданы "за 5 секунд"
 
 
 @dataclass(frozen=True)
@@ -40,7 +39,8 @@ def calculate_text_credits(
 
 
 def calculate_image_credits(
-    model: AiModel, quantity: int, megapixels: float, *, is_edit: bool = False
+    model: AiModel, quantity: int, megapixels: float, *, is_edit: bool = False,
+    options_multiplier: float = 1.0,
 ) -> int:
     if model.cost_unit == CostUnit.image:
         credits = quantity * model.recommended_credits
@@ -48,19 +48,23 @@ def calculate_image_credits(
         credits = math.ceil(quantity * megapixels * model.recommended_credits)
     else:
         raise ValueError(f"model {model.code}: cost_unit {model.cost_unit!r} не поддерживается для image")
+    # Множитель опций -- ДО минимумов (см. ниже).
+    credits = math.ceil(credits * options_multiplier)
     credits = max(credits, model.min_credits)
     if is_edit:
         credits = max(math.ceil(credits * IMAGE_EDIT_MULTIPLIER), IMAGE_EDIT_MIN_CREDITS)
     return credits
 
 
-def calculate_video_credits(model: AiModel, duration_seconds: int) -> int:
-    if model.cost_unit == CostUnit.second:
-        credits = math.ceil(duration_seconds / VIDEO_BASE_SECONDS * model.recommended_credits)
-    elif model.cost_unit == CostUnit.video:
-        credits = model.recommended_credits
-    else:
-        raise ValueError(f"model {model.code}: cost_unit {model.cost_unit!r} не поддерживается для video")
+def calculate_video_credits(model: AiModel, *, options_multiplier: float = 1.0) -> int:
+    """recommended_credits -- цена ДЕФОЛТНОЙ комбинации опций модели.
+    Длительность больше не параметр формулы: её задаёт опция, и её же множитель
+    выражает разницу в цене. Прежнее `duration/5` было неверным вдвойне --
+    5 секунд не производит ни одна модель каталога (Kling умеет 5 или 10,
+    Veo 4/6/8, Wan считает кадрами, Ovi не управляется), а у Wan и Ovi
+    длительность вообще не уходила провайдеру: юзер платил за 15с и получал 5.
+    """
+    credits = math.ceil(model.recommended_credits * options_multiplier)
     return max(credits, model.min_credits, VIDEO_MIN_CREDITS)
 
 
@@ -85,10 +89,14 @@ def calculate_image_api_cost_usd(model: AiModel, quantity: int, megapixels: floa
 
 
 def calculate_video_api_cost_usd(model: AiModel, duration_seconds: int) -> float:
-    """Себестоимость video-генерации в USD -- структура 1:1 с
-    calculate_video_credits, но fixed_cost_usd вместо recommended_credits."""
+    """Себестоимость video-генерации в USD -- реальная цена провайдера, не
+    трогается этой задачей (в отличие от calculate_video_credits). fixed_cost_usd
+    для cost_unit=second задан провайдером буквально "за 5 секунд" -- это факт
+    о биллинге API, а не про кредитную формулу выше, поэтому здесь остаётся
+    литералом 5, а не общей константой уровня модуля (прежняя такая константа
+    удалена вместе с её больше-не-верным комментарием про recommended_credits)."""
     if model.cost_unit == CostUnit.second:
-        return duration_seconds / VIDEO_BASE_SECONDS * float(model.fixed_cost_usd)
+        return duration_seconds / 5 * float(model.fixed_cost_usd)
     if model.cost_unit == CostUnit.video:
         return float(model.fixed_cost_usd)
     raise ValueError(f"model {model.code}: cost_unit {model.cost_unit!r} не поддерживается для video")

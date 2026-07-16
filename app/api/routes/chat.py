@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_user, get_db
 from app.db.enums import ModelCategory
-from app.db.models import AiModel, User
+from app.db.models import AiModel, ModelOption, User
+from app.services.pricing import IMAGE_EDIT_MULTIPLIER
 from app.services.ai.base import AIError
 from app.services.antifraud_service import (
     DailySpendLimitExceededError,
@@ -39,12 +40,30 @@ class ChatResponse(BaseModel):
     balance_after: int
 
 
+class ModelOptionOut(BaseModel):
+    kind: str
+    code: str
+    label: str
+    credits_multiplier: float
+    is_default: bool
+    sort_order: int
+
+
 class ModelOut(BaseModel):
     code: str
     display_name: str
     tier: str
     min_credits: int
     recommended_credits: int
+    # Наборы значений диктует модель: у nano_banana опций качества не будет
+    # вовсе (у fal нет ручки размера), у Wan их три. provider_params наружу
+    # НЕ отдаём -- клиент шлёт код, а не сырые параметры.
+    options: list[ModelOptionOut] = []
+    # Множитель за генерацию по фото (i2i), либо null если модель редактирование
+    # не поддерживает. Фронт по нему решает, показывать ли фото-бокс, и на сколько
+    # дороже станет CTA с фото. Само число -- на бэке (IMAGE_EDIT_MULTIPLIER),
+    # чтобы фронт его не хардкодил и они не разъехались.
+    edit_multiplier: float | None = None
 
 
 @router.get("/models", response_model=list[ModelOut])
@@ -67,6 +86,29 @@ async def list_models(
         .scalars()
         .all()
     )
+
+    # Опции всех моделей выдачи -- ОДНИМ запросом (не по модели на строку,
+    # иначе N+1 на списке моделей).
+    options_by_model_id: dict[int, list[ModelOption]] = {}
+    model_ids = [m.id for m in models]
+    if model_ids:
+        option_rows = (
+            (
+                await session.execute(
+                    select(ModelOption)
+                    .where(
+                        ModelOption.model_id.in_(model_ids),
+                        ModelOption.is_active.is_(True),
+                    )
+                    .order_by(ModelOption.sort_order)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for opt in option_rows:
+            options_by_model_id.setdefault(opt.model_id, []).append(opt)
+
     # provider_model_id намеренно не отдаётся клиенту (ТЗ).
     return [
         ModelOut(
@@ -75,6 +117,19 @@ async def list_models(
             tier=m.tier.value,
             min_credits=m.min_credits,
             recommended_credits=m.recommended_credits,
+            options=[
+                ModelOptionOut(
+                    kind=o.kind.value,
+                    code=o.code,
+                    label=o.label,
+                    credits_multiplier=float(o.credits_multiplier),
+                    is_default=o.is_default,
+                    sort_order=o.sort_order,
+                )
+                for o in options_by_model_id.get(m.id, [])
+            ],
+            # edit-множитель только для моделей с i2i-маршрутом; у остальных null.
+            edit_multiplier=IMAGE_EDIT_MULTIPLIER if m.provider_model_id_edit else None,
         )
         for m in models
     ]

@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
+import OptionPicker from "@/components/generate/OptionPicker";
+import { defaultOptionCodes, estimatedCredits } from "@/lib/optionPricing";
 import { useMe } from "@/context/MeContext";
 import { resolveModel } from "@/lib/resolveModel";
 import { haptic } from "@/lib/telegram";
@@ -20,6 +22,7 @@ interface PendingConfirmation {
   prompt: string;
   modelCode: string;
   imageUrl: string | undefined;
+  optionCodes: Record<string, string>;
   estimatedCredits: number;
 }
 
@@ -32,11 +35,15 @@ function GenerateImageScreen() {
   const [model, setModel] = useState<ModelOut | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
   const [prompt, setPrompt] = useState("");
+  const [optionCodes, setOptionCodes] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  // Модель приходит асинхронно; отслеживаем последний код, для которого уже
+  // выставлены дефолтные опции, чтобы пересчитать их при смене модели.
+  const [optionCodesForModel, setOptionCodesForModel] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     api
@@ -48,29 +55,58 @@ function GenerateImageScreen() {
       .catch(() => setModels([]));
   }, [preferredModelCode, me?.default_model_code]);
 
-  // Единственный источник отображаемых цен -- выбранная модель с бэкенда
-  // (ModelOut.recommended_credits / min_credits). Точную сумму списания даёт
-  // 409-гейт (ConfirmationRequiredError.estimatedCredits). Никаких формул.
-  const cost = model?.recommended_credits ?? 0;
+  // Дефолтные коды опций выставляем во время рендера, а не в эффекте --
+  // это derived state (React docs: "Adjusting state when a prop changes"),
+  // без него смена модели на кадр показывала бы опции старой модели.
+  if (model?.code !== optionCodesForModel) {
+    setOptionCodesForModel(model?.code);
+    setOptionCodes(defaultOptionCodes(model));
+  }
+
+  // Модель поддерживает генерацию по фото (i2i), только если бэк прислал
+  // edit_multiplier. Для остальных (qwen_image/seedream) фото-бокс не
+  // показываем: их провайдер фото не использует, а прежде бэк ещё и брал за
+  // него +50%.
+  const supportsEdit = model?.edit_multiplier != null;
+  const hasPhoto = photos.length > 0;
+
+  // Цена -- recommended_credits x множители опций, а с прикреплённым фото ещё
+  // x edit_multiplier (тем же порядком, что бэк: ceil после множителя).
+  // Число edit_multiplier -- с бэка, не хардкод. Точную сумму даёт 409-гейт.
+  // Остаточное расхождение: бэк добивает edit-цену полом IMAGE_EDIT_MIN_CREDITS
+  // (100), а мы его не моделируем. Сегодня спит -- у всех edit-моделей
+  // min_credits >= 100, так что base x1.5 всегда выше пола. Если заведут дешёвую
+  // edit-модель (min_credits < 67), CTA недо-покажет на <=34 кредита; это ниже
+  // порога подтверждения, 409 не сработает. Тогда пол надо будет вывести в API,
+  // как и edit_multiplier. То же с VIDEO_MIN_CREDITS для видео.
+  const baseCost = estimatedCredits(model, optionCodes);
+  const cost =
+    supportsEdit && hasPhoto
+      ? Math.ceil(baseCost * (model!.edit_multiplier as number))
+      : baseCost;
 
   async function generate(confirm = false) {
     let question: string;
     let modelCode: string;
     let imageUrl: string | undefined;
+    let codes: Record<string, string>;
 
     if (confirm) {
       // Повторная отправка после баннера: фото уже загружено при первой
       // попытке (файл лежит на бэкенде), повторный upload не нужен --
-      // переиспользуем сохранённый url.
+      // переиспользуем сохранённый url; коды опций тоже берём сохранённые,
+      // чтобы подтверждалась ровно та цена, которую показали.
       if (!pendingConfirmation || generating) return;
       question = pendingConfirmation.prompt;
       modelCode = pendingConfirmation.modelCode;
       imageUrl = pendingConfirmation.imageUrl;
+      codes = pendingConfirmation.optionCodes;
       setPendingConfirmation(null);
     } else {
       if (!model || !prompt.trim() || generating) return;
       question = prompt.trim();
       modelCode = model.code;
+      codes = optionCodes;
       // Новый запуск отменяет неподтверждённый предыдущий.
       setPendingConfirmation(null);
     }
@@ -80,13 +116,15 @@ function GenerateImageScreen() {
     setResultUrl(null);
 
     try {
-      if (!confirm && photos.length > 0) {
-        // Бэкенд принимает один image_url -- используется только ПЕРВОЕ фото
-        // (известное упрощение спеки).
+      if (!confirm && supportsEdit && photos.length > 0) {
+        // Фото шлём только edit-capable модели: у прочих провайдер его не берёт.
+        // supportsEdit -- страховка на случай, если модель сменили после
+        // прикрепления (фото-бокс скрыт, но photos ещё в стейте).
+        // Бэкенд принимает один image_url -- берётся только ПЕРВОЕ фото.
         imageUrl = (await api.uploadImage(photos[0])).url;
       }
 
-      const { request_id } = await api.generate(modelCode, question, imageUrl, undefined, confirm);
+      const { request_id } = await api.generate(modelCode, question, imageUrl, codes, confirm);
 
       for (let i = 0; i < POLL_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -106,7 +144,13 @@ function GenerateImageScreen() {
     } catch (err) {
       if (err instanceof ConfirmationRequiredError) {
         // Не ошибка: показываем баннер, повторный вызов уйдёт с confirm=true.
-        setPendingConfirmation({ prompt: question, modelCode, imageUrl, estimatedCredits: err.estimatedCredits });
+        setPendingConfirmation({
+          prompt: question,
+          modelCode,
+          imageUrl,
+          optionCodes: codes,
+          estimatedCredits: err.estimatedCredits,
+        });
       } else {
         setError(err instanceof ApiError ? err.message : "Не удалось сгенерировать изображение");
       }
@@ -143,7 +187,9 @@ function GenerateImageScreen() {
         </div>
 
         <div className="flex flex-col gap-3.5">
-          <PhotoUploadBox photos={photos} onChange={setPhotos} />
+          {/* Фото-бокс -- только для моделей с i2i-маршрутом (edit_multiplier != null).
+              Прочим фото не нужно: провайдер его не использует. */}
+          {supportsEdit && <PhotoUploadBox photos={photos} onChange={setPhotos} />}
 
           <div className="flex flex-col gap-1.5">
             <Textarea
@@ -192,6 +238,14 @@ function GenerateImageScreen() {
               </div>
             ) : null}
           </div>
+
+          <OptionPicker
+            model={model}
+            kind="quality"
+            label="Качество"
+            selected={optionCodes.quality}
+            onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
+          />
 
           {generating && (
             <div className="flex justify-center p-6">

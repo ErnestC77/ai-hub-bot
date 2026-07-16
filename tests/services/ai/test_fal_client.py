@@ -132,7 +132,7 @@ async def test_submit_image_without_image_url_never_uses_edit_route():
 
 
 @respx.mock
-async def test_submit_video_includes_duration():
+async def test_submit_video_includes_provider_params():
     route = respx.post(host="queue.fal.run", path="/fal-ai/kling-video/v2/master").mock(
         return_value=httpx.Response(200, json={"request_id": "req-125"})
     )
@@ -141,13 +141,61 @@ async def test_submit_video_includes_duration():
     request_id = await client.submit_video(
         _model(code="kling", provider_model_id="fal-ai/kling-video/v2/master",
                category=ModelCategory.video),
-        "a bear runs", duration_seconds=10,
+        "a bear runs", provider_params={"duration": "10"},
         webhook_url="https://backend.example.com/api/fal/webhook?secret=s",
     )
 
     assert request_id == "req-125"
     body = json.loads(route.calls.last.request.content)
-    assert body == {"prompt": "a bear runs", "duration": 10}
+    assert body == {"prompt": "a bear runs", "duration": "10"}
+
+
+@respx.mock
+async def test_submit_video_merges_provider_params_preserving_types():
+    """Типы обязаны пережить merge: Kling ждёт duration СТРОКОЙ "10",
+    Wan -- num_frames числом. Прежний код слал {"duration": <int>} --
+    Veo такой запрос отвергает, Wan молча игнорирует."""
+    route = respx.post(host="queue.fal.run", path="/fal-ai/kling").mock(
+        return_value=httpx.Response(200, json={"request_id": "req-1"})
+    )
+    client = FalClient("k")
+    await client.submit_video(
+        _model(provider_model_id="fal-ai/kling"), "a cube",
+        provider_params={"duration": "10"}, webhook_url="https://wh",
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"prompt": "a cube", "duration": "10"}
+    assert isinstance(body["duration"], str)
+
+
+@respx.mock
+async def test_submit_video_without_params_sends_only_prompt():
+    """Опций нет (Ovi) -- шлём голый промпт, а не выдуманные поля."""
+    route = respx.post(host="queue.fal.run", path="/fal-ai/ovi").mock(
+        return_value=httpx.Response(200, json={"request_id": "req-1"})
+    )
+    await FalClient("k").submit_video(
+        _model(provider_model_id="fal-ai/ovi"), "a cube", webhook_url="https://wh"
+    )
+    assert json.loads(route.calls.last.request.content) == {"prompt": "a cube"}
+
+
+@respx.mock
+async def test_submit_image_merges_params_and_keeps_edit_route():
+    """Опции не должны сломать выбор i2i-маршрута (сделан прошлым планом)."""
+    edit = respx.post(host="queue.fal.run", path="/fal-ai/kontext").mock(
+        return_value=httpx.Response(200, json={"request_id": "req-edit"})
+    )
+    await FalClient("k").submit_image(
+        _model(provider_model_id="fal-ai/kontext/text-to-image",
+               provider_model_id_edit="fal-ai/kontext"),
+        "make it night", image_url="https://img",
+        provider_params={"image_size": {"width": 2048, "height": 2048}},
+        webhook_url="https://wh",
+    )
+    body = json.loads(edit.calls.last.request.content)
+    assert body["image_url"] == "https://img"
+    assert body["image_size"] == {"width": 2048, "height": 2048}
 
 
 @respx.mock
