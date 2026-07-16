@@ -96,3 +96,29 @@ async def test_one_side_disabled_grants_only_other(session):
     await session.commit()
     assert (await session.get(User, referrer.id)).credits_balance == 20
     assert (await session.get(User, referred.id)).credits_balance == 0
+
+
+async def test_earned_credits_only_referrer_role(session):
+    # A позвал B; C позвал A. earned_credits(A) = бонус за B, без собственного бонуса A.
+    a = User(telegram_id=1, username="a", credits_balance=0)
+    b = User(telegram_id=2, username="b", credits_balance=0)
+    c = User(telegram_id=3, username="c", credits_balance=0)
+    session.add_all([a, b, c])
+    session.add_all([
+        Setting(key="referral_bonus_referrer_credits", value="20", type="int"),
+        Setting(key="referral_bonus_referred_credits", value="20", type="int"),
+    ])
+    await session.flush()
+    session.add_all([
+        Referral(referrer_user_id=a.id, referred_user_id=b.id),  # A пригласил B
+        Referral(referrer_user_id=c.id, referred_user_id=a.id),  # C пригласил A
+    ])
+    await session.commit()
+
+    await maybe_grant_referral_bonus(session, b.id)  # A получает бонус за B
+    await maybe_grant_referral_bonus(session, a.id)  # A получает бонус как приглашённый
+    await session.commit()
+
+    from app.services.referral_service import get_referral_stats
+    stats = await get_referral_stats(session, await session.get(User, a.id))
+    assert stats.earned_credits == 20  # только за B, НЕ собственный бонус приглашённого

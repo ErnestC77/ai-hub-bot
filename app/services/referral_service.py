@@ -14,18 +14,24 @@ from app.services.settings_service import get_setting
 class ReferralStats:
     referred_count: int
     bonus_count: int
+    earned_credits: int
 
 
 async def get_referral_stats(session: AsyncSession, user: User) -> ReferralStats:
+    # earned_credits -- SUM(bonus_credits) в этом же агрегате, по роли ПРИГЛАСИВШЕГО
+    # (referrer_user_id). НЕ SUM по credit_transactions: там же лежит и собственный
+    # бонус пользователя как приглашённого (если его самого кто-то позвал), что
+    # исказило бы цифру рядом с "Приглашено N". coalesce -- пустой результат = 0, не NULL.
     row = (
         await session.execute(
             select(
                 func.count(Referral.id),
                 func.count(Referral.id).filter(Referral.bonus_granted.is_(True)),
+                func.coalesce(func.sum(Referral.bonus_credits), 0),
             ).where(Referral.referrer_user_id == user.id)
         )
     ).one()
-    return ReferralStats(referred_count=row[0], bonus_count=row[1])
+    return ReferralStats(referred_count=row[0], bonus_count=row[1], earned_credits=row[2])
 
 
 async def record_referral(session: AsyncSession, referrer_telegram_id: int, referred_user: User) -> None:
