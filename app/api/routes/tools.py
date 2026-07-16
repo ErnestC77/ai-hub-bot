@@ -13,8 +13,11 @@ class ToolOut(BaseModel):
     description: str
     prompt_prefix: str
     recommended_category: str
+    # 3-сек превью-луп карточки; файл лежит в frontend public/trends/<slug>.mp4
+    # (фронт резолвит по своему origin). Единый шаблон -- имя = slug.
+    preview_url: str
 
 
 @router.get("/tools", response_model=list[ToolOut])
 async def get_tools() -> list[ToolOut]:
-    return [ToolOut(**vars(t)) for t in list_tools()]
+    return [ToolOut(**vars(t), preview_url=f"/trends/{t.slug}.mp4") for t in list_tools()]

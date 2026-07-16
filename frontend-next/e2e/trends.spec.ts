@@ -11,6 +11,8 @@ test("trends screen lists tool cards and opens chat with a prefilled prompt", as
   await expect(page.getByTestId("trends-page")).toBeVisible();
   // Redesign copy: «✨ Photo & Text Trends» → «✨ Тренды».
   await expect(page.getByText("✨ Тренды")).toBeVisible();
+  // Каждая карточка несёт превью-видео (preview_url из /api/tools).
+  await expect(page.getByTestId("trend-video").first()).toBeAttached();
   // Текст-тренд ведёт в чат (recommended_category ни image, ни video).
   await page.getByTestId("trends-text").getByTestId("trend-card").first().click();
   await expect(page).toHaveURL(/\/chat\?prefill=/);

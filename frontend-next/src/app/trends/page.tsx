@@ -105,6 +105,7 @@ export default function Trends() {
                   title={tool.title}
                   description={tool.description}
                   badge={section.badge}
+                  previewUrl={tool.preview_url}
                   onClick={() => openTool(tool)}
                 />
               ))}
