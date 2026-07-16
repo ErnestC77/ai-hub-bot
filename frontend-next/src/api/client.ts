@@ -105,6 +105,8 @@ export interface ToolOut {
   description: string;
   prompt_prefix: string;
   recommended_category: ModelCategory;
+  /** 3-сек превью-луп карточки (public/trends/<slug>.mp4). */
+  preview_url: string;
 }
 
 export interface ReferralOut {

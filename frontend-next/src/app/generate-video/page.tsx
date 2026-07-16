@@ -30,11 +30,13 @@ function GenerateVideoScreen() {
   const router = useRouter();
   const { me } = useMe();
   // ?model= ставят карточки моделей на Home; резолв приоритетов -- в lib/resolveModel.
-  const preferredModelCode = useSearchParams().get("model");
+  // ?prefill= приходит от видео-трендов (/trends) -- стартовый текст промпта.
+  const searchParams = useSearchParams();
+  const preferredModelCode = searchParams.get("model");
   const [models, setModels] = useState<ModelOut[] | null>(null);
   const [model, setModel] = useState<ModelOut | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(searchParams.get("prefill") ?? "");
   const [optionCodes, setOptionCodes] = useState<Record<string, string>>({});
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);

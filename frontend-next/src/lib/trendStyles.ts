@@ -17,6 +17,14 @@ const STYLES_BY_SLUG: Record<string, TrendStyle> = {
   "write-code": { gradient: "linear-gradient(150deg, #7a5cff, #20123f)", emoji: "💻" },
   "product-description": { gradient: "linear-gradient(150deg, #c9a06a, #5c4326)", emoji: "🛍️" },
   brainstorm: { gradient: "linear-gradient(150deg, #a86bff, #35205f)", emoji: "💡" },
+  // Фото-тренды
+  "ai-avatar": { gradient: "linear-gradient(150deg, #ff9a6b, #7a2fd6)", emoji: "🧑‍🎨" },
+  "restyle-photo": { gradient: "linear-gradient(150deg, #35e0e6, #6b3fd6)", emoji: "🖼️" },
+  "product-photo": { gradient: "linear-gradient(150deg, #ffd36b, #b5622a)", emoji: "📸" },
+  // Видео-тренды
+  "animate-photo": { gradient: "linear-gradient(150deg, #8b5cff, #1c1040)", emoji: "🎞️" },
+  "talking-avatar": { gradient: "linear-gradient(150deg, #4facfe, #2a1f6f)", emoji: "🗣️" },
+  "short-clip": { gradient: "linear-gradient(150deg, #ff6fae, #5c1f8f)", emoji: "🎬" },
 };
 
 export function getTrendStyle(slug: string): TrendStyle {

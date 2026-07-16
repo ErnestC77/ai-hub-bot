@@ -17,10 +17,10 @@ interface Section {
 }
 
 /**
- * Design has photo/video carousels; the backend (`/api/tools`) today ships
- * only text presets. Sections are derived from `recommended_category`, so
- * photo/video rows appear automatically once such tools exist — empty
- * sections are not rendered (never invent data).
+ * Design has photo/video/text carousels. Sections are derived from a tool's
+ * `recommended_category` ('image' / 'video' / anything else → text); empty
+ * sections are not rendered (never invent data), so a row appears only while
+ * the catalog actually ships tools of that category.
  */
 const SECTIONS: Section[] = [
   {
@@ -46,6 +46,13 @@ const SECTIONS: Section[] = [
   },
 ];
 
+// Категория пресета определяет экран: фото/видео-тренды ведут на свои
+// генераторы (prefill в prompt), остальные (текст) -- в чат.
+const PATH_BY_CATEGORY: Record<string, string> = {
+  image: "/generate-image",
+  video: "/generate-video",
+};
+
 export default function Trends() {
   const [tools, setTools] = useState<ToolOut[] | null>(null);
   const router = useRouter();
@@ -63,7 +70,8 @@ export default function Trends() {
   }
 
   function openTool(tool: ToolOut) {
-    router.push(`/chat?prefill=${encodeURIComponent(tool.prompt_prefix)}`);
+    const path = PATH_BY_CATEGORY[tool.recommended_category] ?? "/chat";
+    router.push(`${path}?prefill=${encodeURIComponent(tool.prompt_prefix)}`);
   }
 
   return (
@@ -97,6 +105,7 @@ export default function Trends() {
                   title={tool.title}
                   description={tool.description}
                   badge={section.badge}
+                  previewUrl={tool.preview_url}
                   onClick={() => openTool(tool)}
                 />
               ))}
