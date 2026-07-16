@@ -165,7 +165,9 @@ async def start_media_generation(
     if not confirm:
         # confirm=True -- осознанный повтор после 409 ConfirmationRequired:
         # он приходит внутри cooldown-окна и не должен блокироваться дедупом.
-        await check_duplicate_request(user.id, model_code, prompt, settings=af_settings)
+        await check_duplicate_request(
+            user.id, model_code, prompt, option_codes=option_codes, settings=af_settings
+        )
     await check_rate_limits(user.id, model.code, settings=af_settings)
     await check_tier_allowed(user, model)
 

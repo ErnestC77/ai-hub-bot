@@ -5,6 +5,7 @@
 """
 
 import hashlib
+import json
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,7 +21,7 @@ DAILY_SPEND_TTL_SECONDS = 25 * 60 * 60  # 25ч -- страховка повер�
 
 
 class DuplicateRequestError(Exception):
-    """Повтор идентичного (model_code, prompt) в окне duplicate_cooldown_seconds."""
+    """Повтор идентичного (model_code, prompt, option_codes) в окне duplicate_cooldown_seconds."""
 
 
 class RateLimitExceededError(Exception):
@@ -88,9 +89,22 @@ def _daily_spend_key(user_id: int) -> str:
 
 
 async def check_duplicate_request(
-    user_id: int, model_code: str, prompt: str, *, settings: AntifraudSettings
+    user_id: int,
+    model_code: str,
+    prompt: str,
+    *,
+    option_codes: dict[str, str] | None = None,
+    settings: AntifraudSettings,
 ) -> None:
-    digest = hashlib.sha256((model_code + prompt).encode("utf-8")).hexdigest()[:16]
+    # option_codes входят в отпечаток: один промпт в 480p и 720p -- это два
+    # разных запроса. Без них смена качества внутри cooldown ловила бы ложный
+    # DuplicateRequestError. sort_keys канонизирует порядок ключей, чтобы
+    # {quality,audio} и {audio,quality} совпадали. Текст опций не шлёт ->
+    # option_codes=None -> отпечаток как раньше (обратная совместимость).
+    fingerprint = model_code + prompt
+    if option_codes:
+        fingerprint += json.dumps(option_codes, sort_keys=True, ensure_ascii=False)
+    digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:16]
     key = f"dup:{user_id}:{digest}"
     # SET NX EX: проверка и захват cooldown-окна -- одна атомарная операция.
     acquired = await redis_client.set(key, "1", nx=True, ex=settings.duplicate_cooldown_seconds)

@@ -163,6 +163,33 @@ async def test_duplicate_passes_again_after_ttl_expiry(fake_redis):
     await check_duplicate_request(1, "deepseek_v3", "привет", settings=DEFAULTS)
 
 
+async def test_duplicate_different_option_codes_pass(fake_redis):
+    """Один промпт в 480p и 720p -- это ДВА разных запроса, а не дубль.
+    Опции теперь то, что юзер итерирует, и дедуп обязан их различать,
+    иначе смена качества внутри cooldown ловит ложный DuplicateRequestError."""
+    await check_duplicate_request(
+        1, "wan_video", "кот", option_codes={"quality": "480p"}, settings=DEFAULTS
+    )
+    # тот же промпт, другое качество -- проходит
+    await check_duplicate_request(
+        1, "wan_video", "кот", option_codes={"quality": "720p"}, settings=DEFAULTS
+    )
+
+
+async def test_duplicate_same_option_codes_raise_regardless_of_key_order(fake_redis):
+    """Один и тот же выбор опций = дубль, даже если ключи пришли в другом
+    порядке (хеш канонизирует по sort_keys)."""
+    await check_duplicate_request(
+        1, "veo_video", "кот",
+        option_codes={"quality": "4k", "audio": "off"}, settings=DEFAULTS,
+    )
+    with pytest.raises(DuplicateRequestError):
+        await check_duplicate_request(
+            1, "veo_video", "кот",
+            option_codes={"audio": "off", "quality": "4k"}, settings=DEFAULTS,
+        )
+
+
 # --- check_rate_limits ---
 
 async def test_rate_limit_user_allows_up_to_limit_then_raises(fake_redis, monkeypatch):
