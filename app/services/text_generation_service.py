@@ -204,8 +204,12 @@ async def generate_text(
             # выравниваем дневной счётчик на разницу.
             await record_daily_spend(user.id, request.charged_credits - estimated)
 
-        # Реферальный бонус -- после состоявшегося settle, ВНЕ try: его падение
-        # не должно откатывать уже списанный запрос. Та же транзакция, до commit.
+        # Реферальный бонус -- ВНЕ try вокруг settle: там любое исключение уходит
+        # в except -> refund_request -> commit, что ОТМЕНИЛО бы уже состоявшееся
+        # списание (= бесплатная генерация). Здесь settle лишь flush'нут; если бонус
+        # бросит, вся транзакция (вместе с settle) откатится целиком -- ни списания,
+        # ни начисления, запрос повиснет reserved и подчистится refund_stale_*.
+        # Та же транзакция, до commit -- balance_after уже с учётом бонуса.
         await maybe_grant_referral_bonus(session, request.user_id)
 
         charged = request.charged_credits
