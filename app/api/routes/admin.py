@@ -2,7 +2,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_admin, get_db
@@ -12,6 +12,7 @@ from app.db.models import (
     Banner,
     CreditPackage,
     CreditTransaction,
+    ModelOption,
     Payment,
     Setting,
     User,
@@ -353,6 +354,104 @@ async def update_model(
     await session.commit()
 
     return _to_model_out(model)
+
+
+# --- model options -----------------------------------------------------------
+
+class AdminModelOptionOut(BaseModel):
+    id: int
+    model_code: str
+    kind: str
+    code: str
+    label: str
+    provider_params: dict
+    credits_multiplier: float
+    is_default: bool
+    sort_order: int
+    is_active: bool
+
+
+def _to_option_out(opt: ModelOption, model_code: str) -> AdminModelOptionOut:
+    return AdminModelOptionOut(
+        id=opt.id, model_code=model_code, kind=opt.kind.value, code=opt.code,
+        label=opt.label, provider_params=opt.provider_params or {},
+        credits_multiplier=float(opt.credits_multiplier), is_default=opt.is_default,
+        sort_order=opt.sort_order, is_active=opt.is_active,
+    )
+
+
+@router.get("/models/{code}/options", response_model=list[AdminModelOptionOut])
+async def list_model_options(
+    code: str, session: AsyncSession = Depends(get_db)
+) -> list[AdminModelOptionOut]:
+    model = (
+        await session.execute(select(AiModel).where(AiModel.code == code))
+    ).scalar_one_or_none()
+    if model is None:
+        raise HTTPException(status_code=404, detail="Модель не найдена")
+    # Админу -- ВСЕ опции, включая неактивные (публичный /api/models их скрывает).
+    options = (
+        await session.execute(
+            select(ModelOption)
+            .where(ModelOption.model_id == model.id)
+            .order_by(ModelOption.kind, ModelOption.sort_order)
+        )
+    ).scalars().all()
+    return [_to_option_out(o, model.code) for o in options]
+
+
+class ModelOptionUpdateRequest(BaseModel):
+    # provider_params/kind/code/model_id НЕ здесь -- это контракт провайдера,
+    # правится миграцией. Правка сырого JSON из UI = произвольный запрос к fal.
+    label: str | None = None
+    credits_multiplier: float | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+    is_default: bool | None = None
+
+
+@router.patch("/options/{option_id}", response_model=AdminModelOptionOut)
+async def update_model_option(
+    option_id: int, body: ModelOptionUpdateRequest, session: AsyncSession = Depends(get_db)
+) -> AdminModelOptionOut:
+    opt = (
+        await session.execute(select(ModelOption).where(ModelOption.id == option_id))
+    ).scalar_one_or_none()
+    if opt is None:
+        raise HTTPException(status_code=404, detail="Опция не найдена")
+
+    patch = body.model_dump(exclude_unset=True)
+
+    if "is_default" in patch:
+        if patch["is_default"] is False and opt.is_default:
+            # Нельзя оставить (model, kind) без дефолта: recommended_credits =
+            # цена дефолтной комбинации, она обязана существовать.
+            raise HTTPException(
+                status_code=400,
+                detail="Нельзя снять дефолт с единственной дефолтной опции -- "
+                       "сначала назначьте дефолтом другую опцию этого вида",
+            )
+        if patch["is_default"] is True and not opt.is_default:
+            # Снимаем флаг с прежнего дефолта того же (model_id, kind) в ЭТОЙ же
+            # транзакции -- иначе частичный уникальный индекс уронит вставку.
+            await session.execute(
+                update(ModelOption)
+                .where(
+                    ModelOption.model_id == opt.model_id,
+                    ModelOption.kind == opt.kind,
+                    ModelOption.is_default.is_(True),
+                )
+                .values(is_default=False)
+            )
+
+    for field, value in patch.items():
+        setattr(opt, field, value)
+    await session.commit()
+
+    model = (
+        await session.execute(select(AiModel).where(AiModel.id == opt.model_id))
+    ).scalar_one()
+    return _to_option_out(opt, model.code)
 
 
 # --- packages ---------------------------------------------------------------

@@ -15,8 +15,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.api.deps import current_admin, get_db
 from app.api.routes import admin
 from app.db.base import Base
-from app.db.enums import CostUnit, CreditTxType, ModelCategory, ModelProvider, ModelTier
-from app.db.models import AiModel, CreditPackage, CreditTransaction, Setting, User
+from app.db.enums import (
+    CostUnit,
+    CreditTxType,
+    ModelCategory,
+    ModelOptionKind,
+    ModelProvider,
+    ModelTier,
+)
+from app.db.models import AiModel, CreditPackage, CreditTransaction, ModelOption, Setting, User
 
 app = FastAPI()
 app.include_router(admin.router, prefix="/api")
@@ -362,3 +369,146 @@ async def test_tariffs_endpoints_are_gone(client):
     assert (
         await client.post("/api/admin/users/100/grant-credits", json={"amount": 1})
     ).status_code == 404
+
+
+# --- GET /api/admin/models/{code}/options, PATCH /api/admin/options/{id} ---
+
+def _media_model(code: str, category=ModelCategory.video) -> AiModel:
+    return AiModel(
+        provider=ModelProvider.fal, category=category, code=code,
+        display_name=code.upper(), provider_model_id=f"fal-ai/{code}",
+        tier=ModelTier.standard, cost_unit=CostUnit.second,
+        min_credits=100, recommended_credits=500,
+    )
+
+
+async def test_admin_lists_model_options_including_inactive(client, db_sessionmaker):
+    """Админ видит ВСЕ опции, включая выключенные -- в отличие от публичного
+    /api/models, который скрывает is_active=false."""
+    async with db_sessionmaker() as s:
+        m = _media_model("wan_video", category=ModelCategory.video)  # хелпер файла
+        s.add(m)
+        await s.flush()
+        s.add_all([
+            ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="480p",
+                        label="480p", provider_params={"resolution": "480p"},
+                        credits_multiplier=0.5, is_default=False, sort_order=10, is_active=True),
+            ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="720p",
+                        label="720p", provider_params={"resolution": "720p"},
+                        credits_multiplier=1.0, is_default=True, sort_order=20, is_active=True),
+            ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="580p",
+                        label="580p", provider_params={"resolution": "580p"},
+                        credits_multiplier=0.75, is_default=False, sort_order=15, is_active=False),
+        ])
+        await s.commit()
+
+    body = (await client.get("/api/admin/models/wan_video/options")).json()
+
+    assert [o["code"] for o in body] == ["480p", "580p", "720p"]  # по sort_order, вкл. неактивную
+    assert body[1]["is_active"] is False
+    assert body[2]["is_default"] is True
+    # provider_params админу отдаём (на чтение)
+    assert body[0]["provider_params"] == {"resolution": "480p"}
+    assert body[0]["model_code"] == "wan_video"
+
+
+async def test_admin_options_unknown_model_404(client):
+    resp = await client.get("/api/admin/models/nope/options")
+    assert resp.status_code == 404
+
+
+async def test_admin_patch_option_updates_editable_fields(client, db_sessionmaker):
+    async with db_sessionmaker() as s:
+        m = _media_model("wan_video", category=ModelCategory.video)
+        s.add(m)
+        await s.flush()
+        opt = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="480p",
+                          label="480p", provider_params={"resolution": "480p"},
+                          credits_multiplier=0.5, is_default=False, sort_order=10, is_active=True)
+        s.add(opt)
+        await s.commit()
+        oid = opt.id
+
+    resp = await client.patch(f"/api/admin/options/{oid}",
+                              json={"label": "480p (эконом)", "credits_multiplier": 0.4,
+                                    "sort_order": 5, "is_active": False})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["label"] == "480p (эконом)"
+    assert float(body["credits_multiplier"]) == 0.4
+    assert body["sort_order"] == 5
+    assert body["is_active"] is False
+
+
+async def test_admin_patch_option_ignores_forbidden_fields(client, db_sessionmaker):
+    """kind/code/provider_params/model_id править нельзя -- это контракт провайдера."""
+    async with db_sessionmaker() as s:
+        m = _media_model("wan_video", category=ModelCategory.video)
+        s.add(m)
+        await s.flush()
+        opt = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="480p",
+                          label="480p", provider_params={"resolution": "480p"},
+                          credits_multiplier=0.5, is_default=False, sort_order=10, is_active=True)
+        s.add(opt)
+        await s.commit()
+        oid = opt.id
+
+    resp = await client.patch(f"/api/admin/options/{oid}",
+                              json={"code": "hacked", "provider_params": {"resolution": "9000p"},
+                                    "kind": "audio"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == "480p"                                   # не изменилось
+    assert body["provider_params"] == {"resolution": "480p"}        # не изменилось
+    assert body["kind"] == "quality"                                # не изменилось
+
+
+async def test_admin_setting_default_moves_flag_atomically(client, db_sessionmaker):
+    """is_default=true снимает флаг с прежнего дефолта в одной транзакции --
+    иначе частичный уникальный индекс uq_model_option_default уронит запрос."""
+    async with db_sessionmaker() as s:
+        m = _media_model("wan_video", category=ModelCategory.video)
+        s.add(m)
+        await s.flush()
+        old = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="720p",
+                          label="720p", provider_params={}, credits_multiplier=1.0,
+                          is_default=True, sort_order=20, is_active=True)
+        new = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="480p",
+                          label="480p", provider_params={}, credits_multiplier=0.5,
+                          is_default=False, sort_order=10, is_active=True)
+        s.add_all([old, new])
+        await s.commit()
+        old_id, new_id = old.id, new.id
+
+    resp = await client.patch(f"/api/admin/options/{new_id}", json={"is_default": True})
+    assert resp.status_code == 200
+    assert resp.json()["is_default"] is True
+
+    # прежний дефолт перестал быть дефолтом
+    body = (await client.get("/api/admin/models/wan_video/options")).json()
+    by_id = {o["id"]: o for o in body}
+    assert by_id[new_id]["is_default"] is True
+    assert by_id[old_id]["is_default"] is False
+
+
+async def test_admin_cannot_unset_last_default(client, db_sessionmaker):
+    """Снять is_default с единственной дефолтной опции нельзя: recommended_credits
+    (цена дефолтной комбинации) станет неопределённой. Ожидаем 400."""
+    async with db_sessionmaker() as s:
+        m = _media_model("wan_video", category=ModelCategory.video)
+        s.add(m)
+        await s.flush()
+        opt = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="720p",
+                          label="720p", provider_params={}, credits_multiplier=1.0,
+                          is_default=True, sort_order=20, is_active=True)
+        s.add(opt)
+        await s.commit()
+        oid = opt.id
+
+    resp = await client.patch(f"/api/admin/options/{oid}", json={"is_default": False})
+    assert resp.status_code == 400
+
+
+async def test_admin_patch_option_404(client):
+    resp = await client.patch("/api/admin/options/999999", json={"label": "x"})
+    assert resp.status_code == 404
