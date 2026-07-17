@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,15 @@ import { useMe } from "@/context/MeContext";
 import { haptic } from "@/lib/telegram";
 import ChatMarkdown from "@/components/chat/ChatMarkdown";
 import ModelPicker from "@/components/chat/ModelPicker";
+import { clearChatHistory, readChatHistory, saveChatHistory } from "@/lib/chatHistory";
 
 interface ChatMessage {
   role: "user" | "assistant" | "error";
   text: string;
   chargedCredits?: number;
   balanceAfter?: number;
+  /** id ответа модели -- для дедупа при восстановлении из /api/chat/recent. */
+  id?: string;
 }
 
 interface PendingConfirmation {
@@ -38,6 +41,45 @@ function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+
+  // Восстанавливаем историю при открытии + подтягиваем ответы, сохранённые
+  // сервером (chat_recent): если юзер закрыл приложение во время генерации,
+  // ответ дошёл до Redis, но не до клиента -- добираем его сюда, дедуп по id.
+  // Гонки нет: ответ сохранён в момент генерации, независимо от HTTP-доставки.
+  useEffect(() => {
+    let cancelled = false;
+    const saved = readChatHistory();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved.length > 0) setMessages(saved);
+
+    api
+      .chatRecent()
+      .then((recent) => {
+        if (cancelled || recent.length === 0) return;
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id).filter(Boolean));
+          // recent приходит newest-first -> разворачиваем, чтобы дописать в конец
+          // в хронологическом порядке; берём только неизвестные id.
+          const missing = [...recent]
+            .reverse()
+            .filter((r) => !seen.has(r.id))
+            .map((r): ChatMessage => ({ role: "assistant", text: r.answer, id: r.id }));
+          return missing.length > 0 ? [...prev, ...missing] : prev;
+        });
+      })
+      .catch(() => {
+        /* восстановление -- не критичный путь; тихо */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Сохраняем на каждое изменение (ошибки отфильтровываются в saveChatHistory).
+  useEffect(() => {
+    saveChatHistory(messages);
+  }, [messages]);
 
   async function send(confirm = false) {
     let question: string;
@@ -71,6 +113,7 @@ function ChatScreen() {
           text: result.answer,
           chargedCredits: result.charged_credits,
           balanceAfter: result.balance_after,
+          id: result.message_id,
         },
       ]);
       // Глобальный баланс (пилюля на Home, «Баланс» на генерациях) без этого
@@ -126,6 +169,20 @@ function ChatScreen() {
             >
               {me.credits_balance} 💎
             </div>
+          )}
+          {messages.length > 0 && (
+            <button
+              aria-label="Новый чат"
+              data-testid="chat-new"
+              onClick={() => {
+                setMessages([]);
+                clearChatHistory();
+                setPendingConfirmation(null);
+              }}
+              className="press-scale flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full bg-white/[0.08] text-[13px] text-foreground"
+            >
+              🗑
+            </button>
           )}
           <button
             aria-label="Закрыть"

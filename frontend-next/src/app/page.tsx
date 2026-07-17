@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Placeholder } from "@/components/ui/placeholder";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type BannerOut, type ModelOut } from "@/api/client";
+import ActiveGenerationBanner from "@/components/ActiveGenerationBanner";
 import HeroCarousel from "@/components/HeroCarousel";
 import ActionThumb from "@/components/ActionThumb";
 import ImageStack from "@/components/ImageStack";
@@ -124,6 +125,9 @@ export default function Home() {
           {me.credits_balance} 💎
         </div>
       </div>
+
+      {/* Активная генерация: возврат к незаконченной генерации, если юзер вышел. */}
+      <ActiveGenerationBanner />
 
       {/* Banners (admin-managed, kept by decision) */}
       <HeroCarousel banners={banners ?? []} />

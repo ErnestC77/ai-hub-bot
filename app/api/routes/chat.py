@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -16,7 +16,11 @@ from app.services.antifraud_service import (
     RateLimitExceededError,
     TierNotAllowedError,
 )
+import uuid
+
+from app.services.chat_recovery_service import get_recent_answers, store_recent_answer
 from app.services.credit_service import InsufficientBalanceError
+from app.services.notification_service import send_chat_answer
 from app.services.text_generation_service import (
     ConfirmationRequiredError,
     ModelNotFoundError,
@@ -38,6 +42,16 @@ class ChatResponse(BaseModel):
     answer: str
     charged_credits: int
     balance_after: int
+    # Уникальный id ответа: клиент хранит его с сообщением и по нему дедупит
+    # восстановление (GET /api/chat/recent), чтобы уже показанный ответ не
+    # всплыл повторно.
+    message_id: str
+
+
+class RecentAnswer(BaseModel):
+    id: str
+    prompt: str
+    answer: str
 
 
 class ModelOptionOut(BaseModel):
@@ -148,6 +162,7 @@ async def list_models(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     body: ChatRequest,
+    request: Request,
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_db),
 ) -> ChatResponse | JSONResponse:
@@ -192,8 +207,29 @@ async def chat(
             status_code=502, detail="Модель временно недоступна, попробуйте позже"
         ) from exc
 
+    # Ответ сохраняем на сервере СРАЗУ (Redis, короткий TTL) -- без гонки: даже
+    # если клиент закрылся и HTTP-ответ не дошёл, приложение заберёт ответ при
+    # открытии (GET /api/chat/recent), дедуп по message_id.
+    message_id = uuid.uuid4().hex
+    await store_recent_answer(user.id, message_id, body.prompt, result.answer)
+
+    # Дополнительно: если клиент реально ушёл (разрыв) -- дублируем в бот, на
+    # случай что он вообще не вернётся в приложение (Redis-запись истечёт
+    # непрочитанной). Never-raise внутри send_chat_answer.
+    if await request.is_disconnected():
+        await send_chat_answer(user.telegram_id, body.prompt, result.answer)
+
     return ChatResponse(
         answer=result.answer,
         charged_credits=result.charged_credits,
         balance_after=result.balance_after,
+        message_id=message_id,
     )
+
+
+@router.get("/chat/recent", response_model=list[RecentAnswer])
+async def chat_recent(user: User = Depends(current_user)) -> list[RecentAnswer]:
+    """Недавние ответы юзера для восстановления при открытии чата. Клиент
+    отбрасывает те, что уже есть в локальной истории (по id) -- остаётся ровно
+    ответ, пропущенный из-за закрытия приложения во время генерации."""
+    return [RecentAnswer(**a) for a in await get_recent_answers(user.id)]
