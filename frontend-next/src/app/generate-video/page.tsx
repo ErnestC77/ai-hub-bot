@@ -28,7 +28,7 @@ interface PendingConfirmation {
 
 function GenerateVideoScreen() {
   const router = useRouter();
-  const { me } = useMe();
+  const { me, refresh } = useMe();
   // ?model= ставят карточки моделей на Home; резолв приоритетов -- в lib/resolveModel.
   // ?prefill= приходит от видео-трендов (/trends) -- стартовый текст промпта.
   const searchParams = useSearchParams();
@@ -112,6 +112,9 @@ function GenerateVideoScreen() {
 
       const { request_id } = await api.generate(modelCode, question, imageUrl, codes, confirm);
       pollCancelledRef.current = false;
+      // Резерв уже списал кредиты -- перечитываем профиль, иначе баланс на
+      // экранах живёт до перезапуска приложения.
+      void refresh();
 
       for (let i = 0; i < POLL_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -127,11 +130,13 @@ function GenerateVideoScreen() {
         }
         if (status.status === "completed") {
           setResultUrl(status.result_url);
+          void refresh(); // settle мог вернуть часть резерва
           haptic("medium");
           return;
         }
         if (status.status === "failed" || status.status === "refunded") {
           setError(status.error_message ?? "Не удалось сгенерировать видео");
+          void refresh(); // рефанд вернул кредиты
           return;
         }
         // pending / reserved / processing -- продолжаем поллинг.
