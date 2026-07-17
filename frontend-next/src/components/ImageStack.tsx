@@ -11,16 +11,27 @@ const DEFAULT_GRADIENTS = [
 ];
 
 interface Props {
-  /** Optional photo URLs; when omitted, the design's gradient duo is shown. */
+  /**
+   * Optional photo URLs, filling tiles from the front. Fewer images than the
+   * gradient duo keeps the remaining tiles as gradients (so the design's stack
+   * survives a single preview); more images simply add tiles. The gradient also
+   * stays behind each photo, so a failed load degrades to the original look.
+   */
   images?: string[];
   tileWidth?: number;
   tileHeight?: number;
 }
 
 export default function ImageStack({ images, tileWidth = 38, tileHeight = 48 }: Props) {
-  const tiles: Array<{ key: string; image?: string; gradient?: string }> = images?.length
-    ? images.map((src) => ({ key: src, image: src }))
-    : DEFAULT_GRADIENTS.map((gradient) => ({ key: gradient, gradient }));
+  const tileCount = Math.max(DEFAULT_GRADIENTS.length, images?.length ?? 0);
+  // Плитки перекрываются, и поздние рисуются поверх ранних -- значит передняя
+  // плитка это последняя. Фото раскладываем с конца, иначе градиент накрывает их.
+  const firstPhoto = tileCount - (images?.length ?? 0);
+  const tiles = Array.from({ length: tileCount }, (_, i) => ({
+    key: images?.[i - firstPhoto] ?? `gradient-${i}`,
+    image: i >= firstPhoto ? images?.[i - firstPhoto] : undefined,
+    gradient: DEFAULT_GRADIENTS[i % DEFAULT_GRADIENTS.length],
+  }));
 
   return (
     <div className="flex" aria-hidden>
