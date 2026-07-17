@@ -1,4 +1,5 @@
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -25,14 +26,26 @@ async def get_or_create_user(
             is_admin=telegram_id in settings.admin_id_list,
         )
         session.add(user)
-    else:
-        user.username = username
-        user.first_name = first_name
-        if language_code:
-            user.language_code = language_code
-        # Ре-синхрон с ADMIN_IDS: снятие/добавление ID отражается на флаге (для
-        # витрины). Авторизация всё равно сверяет env напрямую (current_admin).
-        user.is_admin = telegram_id in settings.admin_id_list
+        try:
+            await session.commit()
+            return user
+        except IntegrityError:
+            # Гонка первого входа: webapp открылась и /start пришёл одновременно ->
+            # оба вставляют по unique telegram_id, проигравший ловит здесь.
+            # Перечитываем чужую строку и идём в общую ветку обновления полей.
+            await session.rollback()
+            user = (
+                await session.execute(select(User).where(User.telegram_id == telegram_id))
+            ).scalar_one()
+
+    # Обновляем поля существующего (или созданного параллельно) юзера.
+    user.username = username
+    user.first_name = first_name
+    if language_code:
+        user.language_code = language_code
+    # Ре-синхрон с ADMIN_IDS: снятие/добавление ID отражается на флаге (для
+    # витрины). Авторизация всё равно сверяет env напрямую (current_admin).
+    user.is_admin = telegram_id in settings.admin_id_list
 
     await session.commit()
     return user

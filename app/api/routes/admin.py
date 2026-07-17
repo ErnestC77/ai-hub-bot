@@ -423,6 +423,26 @@ async def update_model_option(
 
     patch = body.model_dump(exclude_unset=True)
 
+    # Инвариант ценообразования (аудит pricing I1): recommended_credits модели =
+    # цена ДЕФОЛТНОЙ комбинации, а _resolve_options домножает и на множитель
+    # дефолтной опции -> дефолт ОБЯЗАН иметь множитель 1.0 и быть активным, иначе
+    # витрина и списание разъедутся. Проверяем ПОСТ-патч состояние.
+    new_is_default = patch.get("is_default", opt.is_default)
+    new_multiplier = patch.get("credits_multiplier", float(opt.credits_multiplier))
+    new_is_active = patch.get("is_active", opt.is_active)
+    if new_is_default and abs(new_multiplier - 1.0) > 1e-9:
+        raise HTTPException(
+            status_code=400,
+            detail="Дефолтная опция обязана иметь множитель 1.0 "
+                   "(recommended_credits = цена дефолтной комбинации)",
+        )
+    if new_is_default and not new_is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя деактивировать дефолтную опцию -- сначала назначьте "
+                   "дефолтом другую активную опцию этого вида",
+        )
+
     if "is_default" in patch:
         if patch["is_default"] is False and opt.is_default:
             # Нельзя оставить (model, kind) без дефолта: recommended_credits =
