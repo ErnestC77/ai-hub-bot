@@ -298,16 +298,8 @@ BANNERS = [
         action_value="Сгенерируй изображение: ",
         sort_order=1,
     ),
-    dict(
-        title="Кредиты поверх тарифа",
-        subtitle="Докупайте запросы, когда лимит закончился",
-        badge_text=None,
-        cta_text="Подробнее",
-        image_url="https://picsum.photos/seed/ai-hub-banner-3/800/450",
-        action_type="prompt",
-        action_value="Как работают кредиты в этом боте?",
-        sort_order=2,
-    ),
+    # Баннер «Кредиты поверх тарифа» удалён (тарифов/лимитов нет -- вводил в
+    # заблуждение). Из прод-БД снимается миграцией a4b5c6d7e8f9.
 ]
 
 
