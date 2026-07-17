@@ -169,6 +169,11 @@ export interface CreditPackageOut {
 
 export const api = {
   me: () => request<MeOut>("/api/me"),
+  setDefaultModel: (modelCode: string) =>
+    request<MeOut>("/api/me/default-model", {
+      method: "PUT",
+      body: JSON.stringify({ model_code: modelCode }),
+    }),
   models: (category: "text" | "image" | "video" = "text") =>
     request<ModelOut[]>(`/api/models?category=${category}`),
   chat: (modelCode: string, prompt: string, confirm = false) =>

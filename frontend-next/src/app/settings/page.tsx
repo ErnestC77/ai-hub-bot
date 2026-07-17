@@ -1,5 +1,6 @@
 "use client";
 
+import DefaultModelSetting from "@/components/settings/DefaultModelSetting";
 import { Cell } from "@/components/ui/cell";
 import { List } from "@/components/ui/list";
 import { Section } from "@/components/ui/section";
@@ -16,6 +17,9 @@ export default function Settings() {
     <div className="fade-in">
       <h1 className="heading-font px-4 pb-3.5 pt-1 text-[22px] text-foreground">Настройки</h1>
       <List>
+        <Section header="Модель по умолчанию" footer="С неё открывается чат, если вы не выбрали другую">
+          <DefaultModelSetting />
+        </Section>
         <Section header="Поддержка">
           <div data-testid="settings-support">
             <Cell

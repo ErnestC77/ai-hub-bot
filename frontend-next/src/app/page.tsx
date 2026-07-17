@@ -11,6 +11,7 @@ import ActionThumb from "@/components/ActionThumb";
 import ImageStack from "@/components/ImageStack";
 import ModelCard from "@/components/ModelCard";
 import DragScroll from "@/components/DragScroll";
+import { modelDescription } from "@/lib/modelDescriptions";
 import { modelStyle, modelVariant } from "@/lib/modelStyles";
 import { useMe } from "@/context/MeContext";
 import CreditPurchaseSheet from "@/components/account/CreditPurchaseSheet";
@@ -167,6 +168,7 @@ export default function Home() {
                       tag={tag}
                       tagClass={TAG_CLASSES[model.category]}
                       gradient={gradient}
+                      description={modelDescription(model.code, brand)}
                       onClick={() => openModel(model)}
                     />
                   );

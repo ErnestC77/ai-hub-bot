@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import DragScroll from "@/components/DragScroll";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type ModelOut } from "@/api/client";
 import { useMe } from "@/context/MeContext";
+import { cn } from "@/lib/cn";
+import { modelDescription } from "@/lib/modelDescriptions";
+import { modelStyle } from "@/lib/modelStyles";
 import { resolveModel } from "@/lib/resolveModel";
 
 interface Props {
@@ -16,13 +19,16 @@ interface Props {
 }
 
 /**
- * Сегмент-переключатель текстовых моделей (дизайн Aurora Glass, chat sheet).
- * Модели приходят из api.models("text") и управляются админкой — ничего не хардкодим.
- * Если моделей больше, чем помещается, ряд скроллится по горизонтали.
+ * Переключатель текстовых моделей в чате (Aurora Glass). Модели приходят из
+ * api.models("text") и управляются админкой -- ничего не хардкодим. Ряд
+ * скроллится по горизонтали, мышью тоже (DragScroll -- иначе на десктопе его
+ * не потащить). Под рядом -- описание выбранной модели и кнопка сделать её
+ * моделью по умолчанию.
  */
 export default function ModelPicker({ selectedModel, onSelect, preferredCode }: Props) {
-  const { me } = useMe();
+  const { me, refresh } = useMe();
   const [models, setModels] = useState<ModelOut[] | null>(null);
+  const [savingDefault, setSavingDefault] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,24 +61,76 @@ export default function ModelPicker({ selectedModel, onSelect, preferredCode }: 
     );
   }
 
-  // Нет доступных моделей — не рисуем ничего (данных нет, не выдумываем).
+  // Нет доступных моделей -- не рисуем ничего (данных нет, не выдумываем).
   if (models.length === 0) return null;
 
+  const isDefault = !!selectedModel && me?.default_model_code === selectedModel.code;
+  const description = selectedModel
+    ? modelDescription(selectedModel.code, modelStyle(selectedModel.code).brand)
+    : "";
+
+  async function makeDefault() {
+    if (!selectedModel || savingDefault) return;
+    setSavingDefault(true);
+    try {
+      await api.setDefaultModel(selectedModel.code);
+      await refresh();
+    } catch {
+      // тихо: не критично, юзер может повторить
+    } finally {
+      setSavingDefault(false);
+    }
+  }
+
   return (
-    <div className="overflow-x-auto" data-testid="chat-model-picker">
-      <div className="w-max min-w-full">
-        <SegmentedControl>
-          {models.map((m) => (
-            <SegmentedControl.Item
-              key={m.code}
-              selected={selectedModel?.code === m.code}
-              onClick={() => onSelect(m)}
+    <div data-testid="chat-model-picker">
+      <DragScroll
+        data-testid="chat-model-row"
+        className="flex cursor-grab select-none gap-1.5 overflow-x-auto rounded-[16px] bg-white/[0.05] p-1 active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {models.map((m) => (
+          <button
+            key={m.code}
+            data-testid="chat-model-item"
+            onClick={() => onSelect(m)}
+            className={cn(
+              "press-scale flex-none whitespace-nowrap rounded-[12px] px-3 py-2 text-[12px] font-semibold transition-colors",
+              selectedModel?.code === m.code
+                ? "bg-[image:var(--brand-gradient)] text-white"
+                : "text-foreground-muted",
+            )}
+          >
+            {m.display_name}
+          </button>
+        ))}
+      </DragScroll>
+
+      {/* Описание выбранной модели + кнопка «по умолчанию». Пустое описание
+          (незнакомый код) строку не рисует -- не оставляем висящий блок. */}
+      {selectedModel && (description || !isDefault) && (
+        <div className="mt-1.5 flex items-center gap-2 px-1">
+          {description && (
+            <span className="min-w-0 flex-1 truncate text-[11px] text-foreground-dim">
+              {description}
+            </span>
+          )}
+          {isDefault ? (
+            <span className="flex-none text-[10.5px] text-foreground-dim" data-testid="chat-is-default">
+              ★ по умолчанию
+            </span>
+          ) : (
+            <button
+              type="button"
+              data-testid="chat-make-default"
+              onClick={makeDefault}
+              disabled={savingDefault}
+              className="press-scale flex-none rounded-full bg-white/[0.08] px-2.5 py-1 text-[10.5px] font-medium text-foreground-muted disabled:opacity-50"
             >
-              <span className="whitespace-nowrap">{m.display_name}</span>
-            </SegmentedControl.Item>
-          ))}
-        </SegmentedControl>
-      </div>
+              ☆ сделать по умолчанию
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
