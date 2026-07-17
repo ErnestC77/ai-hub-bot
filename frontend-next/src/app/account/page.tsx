@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Placeholder } from "@/components/ui/placeholder";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type ReferralOut } from "@/api/client";
+import DefaultModelSetting from "@/components/settings/DefaultModelSetting";
 import { useMe } from "@/context/MeContext";
 import { openTelegramLink } from "@/lib/telegram";
 import CreditPurchaseSheet from "@/components/account/CreditPurchaseSheet";
@@ -62,13 +63,15 @@ export default function MyAccount() {
           <span data-testid="account-spent">{me.total_credits_spent}</span>
         </div>
 
-        {me.default_model_code && (
-          <div className="mt-3 flex flex-wrap gap-1.5 text-[10.5px]">
-            <span className="glass rounded-full px-2.5 py-1" data-testid="account-default-model">
-              Модель по умолчанию · {me.default_model_code}
-            </span>
-          </div>
-        )}
+      </div>
+
+      {/* Модель по умолчанию: тот же селектор, что в Настройках (raw-код в бейдже
+          нарушал правило «не показывать сырые коды» и не давал сменить выбор). */}
+      <div className="mb-4">
+        <div className={CAPS_LABEL}>Модель по умолчанию</div>
+        <div className="glass overflow-hidden rounded-2xl" data-testid="account-default-model">
+          <DefaultModelSetting />
+        </div>
       </div>
 
       {isTrial && (

@@ -13,6 +13,8 @@ interface Props {
   tag: string;
   tagClass: string;
   gradient: string;
+  /** Короткое «что и для чего»; пустая строка -- подпись не рисуется. */
+  description?: string;
   onClick: () => void;
 }
 
@@ -28,18 +30,18 @@ function monogram(brand: string | null, title: string): string {
  * Марка одноцветная (белая) на фирменном градиенте: так карточки читаются как
  * один набор, а не как коллаж из чужих логотипов.
  */
-export default function ModelCard({ title, brand, tag, tagClass, gradient, onClick }: Props) {
+export default function ModelCard({ title, brand, tag, tagClass, gradient, description, onClick }: Props) {
   const logoPath = brand ? BRAND_LOGO_PATHS[brand] : undefined;
 
   return (
     <button
       data-testid="model-card"
       onClick={onClick}
-      className="press-scale relative h-[150px] w-[118px] flex-none snap-start overflow-hidden rounded-[18px] p-0"
+      className="press-scale relative h-[186px] w-[124px] flex-none snap-start overflow-hidden rounded-[18px] p-0"
       style={{ background: gradient }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[image:radial-gradient(80%_60%_at_30%_20%,rgba(255,255,255,0.18),transparent)]" />
-      <div className="relative flex h-full flex-col items-center justify-center gap-2.5 px-2.5">
+      <div className="relative flex h-full flex-col items-center gap-2 px-2.5 pt-[18px]">
         <div className="flex h-[46px] w-[46px] flex-none items-center justify-center rounded-[14px] bg-white/[0.16] ring-1 ring-white/25 ring-inset">
           {logoPath ? (
             <svg viewBox="0 0 24 24" aria-hidden className="h-[26px] w-[26px] fill-white">
@@ -58,6 +60,9 @@ export default function ModelCard({ title, brand, tag, tagClass, gradient, onCli
           >
             {tag}
           </div>
+          {description && (
+            <p className="mt-1.5 line-clamp-3 text-[10px] leading-[1.3] text-white/70">{description}</p>
+          )}
         </div>
       </div>
     </button>
