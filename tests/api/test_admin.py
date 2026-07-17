@@ -473,8 +473,9 @@ async def test_admin_setting_default_moves_flag_atomically(client, db_sessionmak
         old = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="720p",
                           label="720p", provider_params={}, credits_multiplier=1.0,
                           is_default=True, sort_order=20, is_active=True)
-        new = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="480p",
-                          label="480p", provider_params={}, credits_multiplier=0.5,
+        # Кандидат в дефолты обязан иметь множитель 1.0 (инвариант pricing I1).
+        new = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="580p",
+                          label="580p", provider_params={}, credits_multiplier=1.0,
                           is_default=False, sort_order=10, is_active=True)
         s.add_all([old, new])
         await s.commit()
@@ -489,6 +490,42 @@ async def test_admin_setting_default_moves_flag_atomically(client, db_sessionmak
     by_id = {o["id"]: o for o in body}
     assert by_id[new_id]["is_default"] is True
     assert by_id[old_id]["is_default"] is False
+
+
+async def test_admin_cannot_make_non_unit_multiplier_option_default(client, db_sessionmaker):
+    # Инвариант pricing I1: дефолт обязан иметь множитель 1.0.
+    async with db_sessionmaker() as s:
+        m = _media_model("wan_video", category=ModelCategory.video)
+        s.add(m)
+        await s.flush()
+        s.add(ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="720p",
+                          label="720p", provider_params={}, credits_multiplier=1.0,
+                          is_default=True, sort_order=20, is_active=True))
+        cheap = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="480p",
+                            label="480p", provider_params={}, credits_multiplier=0.5,
+                            is_default=False, sort_order=10, is_active=True)
+        s.add(cheap)
+        await s.commit()
+        cheap_id = cheap.id
+
+    resp = await client.patch(f"/api/admin/options/{cheap_id}", json={"is_default": True})
+    assert resp.status_code == 400
+
+
+async def test_admin_cannot_deactivate_default_option(client, db_sessionmaker):
+    async with db_sessionmaker() as s:
+        m = _media_model("wan_video", category=ModelCategory.video)
+        s.add(m)
+        await s.flush()
+        default = ModelOption(model_id=m.id, kind=ModelOptionKind.quality, code="720p",
+                              label="720p", provider_params={}, credits_multiplier=1.0,
+                              is_default=True, sort_order=20, is_active=True)
+        s.add(default)
+        await s.commit()
+        default_id = default.id
+
+    resp = await client.patch(f"/api/admin/options/{default_id}", json={"is_active": False})
+    assert resp.status_code == 400
 
 
 async def test_admin_cannot_unset_last_default(client, db_sessionmaker):

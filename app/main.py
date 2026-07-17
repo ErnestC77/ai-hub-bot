@@ -1,12 +1,16 @@
 import asyncio
 import hmac
+import logging
+import uuid
 from contextlib import asynccontextmanager
 
 from aiogram.types import MenuButtonWebApp, Update, WebAppInfo
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+
+logger = logging.getLogger(__name__)
 
 from app.api.routes import admin, banners, chat, generate, me, payments, referral, tools, upload
 from app.bot.instance import bot
@@ -55,6 +59,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Централизованный лог необработанных исключений с trace-id для корреляции
+    (аудит I10). HTTPException и валидацию FastAPI обрабатывает сама -- сюда
+    попадает только по-настоящему непойманное. Стектрейс наружу не отдаём."""
+    trace_id = uuid.uuid4().hex[:12]
+    logger.exception("unhandled error [%s] %s %s", trace_id, request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Внутренняя ошибка сервера", "trace_id": trace_id},
+    )
 
 app.add_middleware(
     CORSMiddleware,
