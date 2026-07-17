@@ -15,7 +15,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       <textarea
         ref={ref}
         className={cn(
-          "w-full rounded-[16px] border border-border-soft bg-white/[0.05] px-3.5 py-2.5 text-[15px] text-foreground placeholder:text-foreground-dim focus:outline-none focus:ring-2 focus:ring-brand-1/70",
+          // 16px минимум: поля мельче 16px iOS зумит при фокусе (второй рубеж
+          // обороны после viewport maximum-scale=1 в layout.tsx).
+          "w-full rounded-[16px] border border-border-soft bg-white/[0.05] px-3.5 py-2.5 text-[16px] text-foreground placeholder:text-foreground-dim focus:outline-none focus:ring-2 focus:ring-brand-1/70",
           className,
         )}
         {...rest}

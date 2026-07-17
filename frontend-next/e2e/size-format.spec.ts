@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 
 test("два ряда: смена размера держит формат, цена растёт от размера", async ({ page }) => {
   // Матрица qwen_image как в сиде: 1k x1 (дефолт 1k__1_1), 2k x4.
-  const combos = [];
+  const combos: Array<Record<string, unknown>> = [];
   let so = 10;
   for (const [size, mult] of [["1k", 1], ["2k", 4]] as const) {
     for (const fmt of ["1_1", "16_9", "9_16", "4_3", "3_4"]) {
