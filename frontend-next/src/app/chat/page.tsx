@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { useMe } from "@/context/MeContext";
 import { haptic } from "@/lib/telegram";
 import ChatMarkdown from "@/components/chat/ChatMarkdown";
 import ModelPicker from "@/components/chat/ModelPicker";
+import { clearChatHistory, readChatHistory, saveChatHistory } from "@/lib/chatHistory";
 
 interface ChatMessage {
   role: "user" | "assistant" | "error";
@@ -38,6 +39,19 @@ function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+
+  // Восстанавливаем историю при открытии -- переписка переживает закрытие
+  // приложения, можно продолжить с того же места.
+  useEffect(() => {
+    const saved = readChatHistory();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved.length > 0) setMessages(saved);
+  }, []);
+
+  // Сохраняем на каждое изменение (ошибки отфильтровываются в saveChatHistory).
+  useEffect(() => {
+    saveChatHistory(messages);
+  }, [messages]);
 
   async function send(confirm = false) {
     let question: string;
@@ -126,6 +140,20 @@ function ChatScreen() {
             >
               {me.credits_balance} 💎
             </div>
+          )}
+          {messages.length > 0 && (
+            <button
+              aria-label="Новый чат"
+              data-testid="chat-new"
+              onClick={() => {
+                setMessages([]);
+                clearChatHistory();
+                setPendingConfirmation(null);
+              }}
+              className="press-scale flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full bg-white/[0.08] text-[13px] text-foreground"
+            >
+              🗑
+            </button>
           )}
           <button
             aria-label="Закрыть"
