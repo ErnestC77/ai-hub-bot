@@ -72,7 +72,10 @@ async def test_generate_success_returns_answer_and_usage():
     body = json.loads(request.content)
     assert body["model"] == "deepseek/deepseek-chat"  # provider_model_id, НЕ model.code
     assert body["max_tokens"] == 1000
-    assert body["messages"] == [{"role": "user", "content": "hi"}]
+    # Системный промпт (язык ответа) идёт первым, затем вопрос пользователя.
+    assert body["messages"][0]["role"] == "system"
+    assert "русск" in body["messages"][0]["content"].lower()
+    assert body["messages"][1] == {"role": "user", "content": "hi"}
 
 
 @respx.mock
