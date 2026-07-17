@@ -10,9 +10,12 @@ import { Placeholder } from "@/components/ui/placeholder";
 import { Section } from "@/components/ui/section";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import ActionError from "@/components/admin/ActionError";
+import { useActionError } from "@/components/admin/useActionError";
 
 export default function AdminPackages() {
   const [packages, setPackages] = useState<AdminPackageOut[] | null>(null);
+  const { error, run } = useActionError();
 
   useEffect(() => {
     adminApi.packages().then(setPackages).catch(() => setPackages([]));
@@ -23,11 +26,15 @@ export default function AdminPackages() {
   }
 
   async function updateField(code: string, patch: Partial<Pick<AdminPackageOut, "credits" | "price_rub" | "price_stars">>) {
-    applyUpdate(await adminApi.updatePackage(code, patch));
+    await run(async () => {
+      applyUpdate(await adminApi.updatePackage(code, patch));
+    });
   }
 
   async function toggle(code: string, isActive: boolean) {
-    applyUpdate(await adminApi.updatePackage(code, { is_active: isActive }));
+    await run(async () => {
+      applyUpdate(await adminApi.updatePackage(code, { is_active: isActive }));
+    });
   }
 
   if (packages === null) {
@@ -40,6 +47,7 @@ export default function AdminPackages() {
 
   return (
     <List>
+      <ActionError error={error} />
       <Section header="Пакеты">
         {packages.map((p) => (
           <Cell

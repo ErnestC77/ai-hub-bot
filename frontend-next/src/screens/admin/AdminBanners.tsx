@@ -12,6 +12,8 @@ import { Section } from "@/components/ui/section";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import ActionError from "@/components/admin/ActionError";
+import { useActionError } from "@/components/admin/useActionError";
 
 const EMPTY_FORM: BannerWriteFields = {
   title: "",
@@ -29,6 +31,7 @@ export default function AdminBanners() {
   const [banners, setBanners] = useState<AdminBannerOut[] | null>(null);
   const [form, setForm] = useState<BannerWriteFields>(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
+  const { error, run } = useActionError();
 
   function load() {
     adminApi.banners().then(setBanners).catch(() => setBanners([]));
@@ -37,19 +40,23 @@ export default function AdminBanners() {
   useEffect(load, []);
 
   async function toggleActive(banner: AdminBannerOut) {
-    const updated = await adminApi.updateBanner(banner.id, { is_active: !banner.is_active });
-    setBanners((prev) => prev?.map((b) => (b.id === banner.id ? updated : b)) ?? null);
+    await run(async () => {
+      const updated = await adminApi.updateBanner(banner.id, { is_active: !banner.is_active });
+      setBanners((prev) => prev?.map((b) => (b.id === banner.id ? updated : b)) ?? null);
+    });
   }
 
   async function remove(banner: AdminBannerOut) {
-    await adminApi.deleteBanner(banner.id);
-    setBanners((prev) => prev?.filter((b) => b.id !== banner.id) ?? null);
+    await run(async () => {
+      await adminApi.deleteBanner(banner.id);
+      setBanners((prev) => prev?.filter((b) => b.id !== banner.id) ?? null);
+    });
   }
 
   async function submitNew() {
     if (!form.title.trim() || !form.image_url.trim() || !form.action_value.trim()) return;
     setCreating(true);
-    try {
+    await run(async () => {
       const created = await adminApi.createBanner({
         ...form,
         subtitle: form.subtitle || null,
@@ -57,9 +64,8 @@ export default function AdminBanners() {
       });
       setBanners((prev) => [...(prev ?? []), created]);
       setForm(EMPTY_FORM);
-    } finally {
-      setCreating(false);
-    }
+    });
+    setCreating(false);
   }
 
   if (banners === null) {
@@ -72,6 +78,7 @@ export default function AdminBanners() {
 
   return (
     <List>
+      <ActionError error={error} />
       <Section header="Карусель на главной">
         {banners.map((b) => (
           <Cell

@@ -10,9 +10,12 @@ import { Placeholder } from "@/components/ui/placeholder";
 import { Section } from "@/components/ui/section";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import ActionError from "@/components/admin/ActionError";
+import { useActionError } from "@/components/admin/useActionError";
 
 export default function AdminModels() {
   const [models, setModels] = useState<AdminModelOut[] | null>(null);
+  const { error, run } = useActionError();
 
   useEffect(() => {
     adminApi.models().then(setModels).catch(() => setModels([]));
@@ -26,11 +29,15 @@ export default function AdminModels() {
     code: string,
     patch: Partial<Pick<AdminModelOut, "min_credits" | "recommended_credits" | "sort_order">>,
   ) {
-    applyUpdate(await adminApi.updateModel(code, patch));
+    await run(async () => {
+      applyUpdate(await adminApi.updateModel(code, patch));
+    });
   }
 
   async function toggle(code: string, field: "is_active" | "is_visible", value: boolean) {
-    applyUpdate(await adminApi.updateModel(code, { [field]: value }));
+    await run(async () => {
+      applyUpdate(await adminApi.updateModel(code, { [field]: value }));
+    });
   }
 
   if (models === null) {
@@ -43,6 +50,7 @@ export default function AdminModels() {
 
   return (
     <List>
+      <ActionError error={error} />
       <Section header="Модели">
         {models.map((m) => (
           <Cell
