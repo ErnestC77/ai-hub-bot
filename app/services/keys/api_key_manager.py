@@ -11,61 +11,17 @@ from app.services.keys.exceptions import (
 logger = logging.getLogger(__name__)
 
 # provider -> {purpose: имя поля на app.config.<Provider>Settings}.
-# Провайдеры с одним "боевым" ключом на несколько смежных задач (DeepSeek,
-# Perplexity, Replicate, OpenRouter, Stability, Luma) сознательно не разбиты
-# на под-ключи — доп. деление добавляется по мере реального использования.
+# Реально используются только fal (медиа) + OpenRouter (текст). Прежние ~11
+# провайдеров удалены как мёртвый код; новый провайдер добавляется сюда + свой
+# Settings-класс в app.config по мере реального использования.
 _PURPOSE_ATTR: dict[Provider, dict[KeyPurpose, str]] = {
-    Provider.OPENAI: {
-        KeyPurpose.TEXT: "text_key",
-        KeyPurpose.IMAGE: "image_key",
-        KeyPurpose.AUDIO: "audio_key",
-    },
-    Provider.ANTHROPIC: {
-        KeyPurpose.TEXT: "prod_key",
-        KeyPurpose.PREMIUM: "premium_key",
-    },
-    Provider.GEMINI: {
-        KeyPurpose.TEXT: "text_key",
-        KeyPurpose.IMAGE: "image_key",
-        KeyPurpose.VIDEO: "video_key",
-        KeyPurpose.AUDIO: "audio_key",
-        KeyPurpose.MUSIC: "music_key",
-    },
-    Provider.DEEPSEEK: {
-        KeyPurpose.TEXT: "prod_key",
-    },
-    Provider.PERPLEXITY: {
-        KeyPurpose.SEARCH: "search_key",
-    },
-    Provider.ELEVENLABS: {
-        KeyPurpose.AUDIO: "tts_key",
-        KeyPurpose.PREMIUM: "voice_agent_key",
-    },
-    Provider.RUNWAY: {
-        KeyPurpose.FAST_VIDEO: "fast_video_key",
-        KeyPurpose.VIDEO: "premium_video_key",
-        KeyPurpose.PREMIUM: "premium_video_key",
-    },
-    Provider.STABILITY: {
-        KeyPurpose.IMAGE: "image_key",
-    },
     Provider.FAL: {
         KeyPurpose.IMAGE: "image_key",
-        KeyPurpose.VIDEO: "video_key",
-    },
-    Provider.REPLICATE: {
-        KeyPurpose.FALLBACK: "prod_key",
-    },
-    Provider.LUMA: {
         KeyPurpose.VIDEO: "video_key",
     },
     Provider.OPENROUTER: {
         KeyPurpose.TEXT: "api_key",
         KeyPurpose.FALLBACK: "fallback_key",
-    },
-    Provider.PIAPI: {
-        KeyPurpose.IMAGE: "api_key",
-        KeyPurpose.VIDEO: "api_key",
     },
 }
 
