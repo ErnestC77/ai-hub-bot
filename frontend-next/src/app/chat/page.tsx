@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import { useMe } from "@/context/MeContext";
 import { haptic } from "@/lib/telegram";
+import ChatMarkdown from "@/components/chat/ChatMarkdown";
 import ModelPicker from "@/components/chat/ModelPicker";
 
 interface ChatMessage {
@@ -156,15 +157,17 @@ function ChatScreen() {
               data-testid="chat-bubble"
             >
               <div
-                className={`whitespace-pre-wrap px-[13px] py-2.5 text-[12.5px] leading-[1.4] ${
+                className={`px-[13px] py-2.5 text-[12.5px] leading-[1.4] ${
                   m.role === "user"
-                    ? "rounded-[16px] rounded-br-[5px] bg-[image:var(--brand-gradient)] text-white"
+                    ? "whitespace-pre-wrap rounded-[16px] rounded-br-[5px] bg-[image:var(--brand-gradient)] text-white"
                     : m.role === "error"
-                      ? "glass rounded-[16px] rounded-bl-[5px] text-red-400"
+                      ? "whitespace-pre-wrap glass rounded-[16px] rounded-bl-[5px] text-red-400"
                       : "glass rounded-[16px] rounded-bl-[5px] text-foreground"
                 }`}
               >
-                {m.text}
+                {/* Ответ модели -- markdown (заголовки, жирный, списки
+                    рендерятся, а не торчат звёздочками); юзер и ошибки -- как есть. */}
+                {m.role === "assistant" ? <ChatMarkdown text={m.text} /> : m.text}
               </div>
               {m.role === "assistant" && m.chargedCredits !== undefined && m.balanceAfter !== undefined && (
                 <div className="mt-1 px-1 text-[10.5px] text-foreground-dim">
