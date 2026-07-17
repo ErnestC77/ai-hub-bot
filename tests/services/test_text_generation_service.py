@@ -118,6 +118,16 @@ def fake_redis(monkeypatch):
     return fake
 
 
+@pytest.fixture(autouse=True)
+def _stub_referral_after_commit(monkeypatch):
+    # Отдельная сессия бонуса идёт в реальную БД -- в тестах по умолчанию no-op;
+    # referral-тест переопределяет вызовом по своей тестовой сессии.
+    async def _noop(uid: int) -> None:
+        return None
+
+    monkeypatch.setattr(tgs, "grant_referral_bonus_after_commit", _noop)
+
+
 def _model(code="cheap", *, tier=ModelTier.economy, price=1, min_credits=3,
            recommended=3, is_active=True, fallback=None) -> AiModel:
     return AiModel(
@@ -189,8 +199,16 @@ async def test_success_reserves_settles_and_returns_result(session, fake_redis, 
 # --- Task 3: реферальный бонус по успешной генерации ---
 
 async def test_success_grants_referral_bonus_to_referrer(session, fake_redis, monkeypatch):
-    """Приглашённый (Referral на него) делает первый успешный запрос ->
-    пригласившему начисляется бонус (вне try/except settle, та же транзакция)."""
+    """Приглашённый делает первый успешный запрос -> пригласившему начисляется
+    бонус. В проде -- в отдельной транзакции после commit (аудит I4); здесь
+    подменяем на вызов по тестовой сессии."""
+    from app.services.referral_service import maybe_grant_referral_bonus
+
+    async def _grant_on_test_session(uid: int) -> None:
+        await maybe_grant_referral_bonus(session, uid)
+
+    monkeypatch.setattr(tgs, "grant_referral_bonus_after_commit", _grant_on_test_session)
+
     referrer = User(telegram_id=999, username="referrer", credits_balance=0)
     session.add(referrer)
     await session.flush()

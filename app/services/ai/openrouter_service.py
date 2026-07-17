@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+# Явный таймаут < TTL per-user лока (AI_LOCK_TTL_SECONDS=120 в
+# text_generation_service). Дефолт AsyncOpenAI -- 600с: запрос мог пережить лок,
+# тот истекал по TTL, второй запрос брал новый лок, а finally первого удалял
+# ЧУЖОЙ лок -> single-flight ломался (аудит I3). С таймаутом запрос не переживёт лок.
+OPENROUTER_TIMEOUT_SECONDS = 110.0
+
 _clients: dict[str, AsyncOpenAI] = {}
 
 
@@ -18,7 +24,9 @@ def _get_client() -> AsyncOpenAI:
     api_key = get_key_manager().get_key(Provider.OPENROUTER, KeyPurpose.TEXT)
     client = _clients.get(api_key)
     if client is None:
-        client = AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)
+        client = AsyncOpenAI(
+            api_key=api_key, base_url=OPENROUTER_BASE_URL, timeout=OPENROUTER_TIMEOUT_SECONDS
+        )
         _clients[api_key] = client
     return client
 

@@ -13,28 +13,36 @@ def extract_result_url(payload: dict | None) -> str | None:
     формы по порядку; None, если ничего не подошло (по образцу удалённого
     piapi_client.extract_result_url).
 
-    Подтверждённые формы:
-    - image-модели: {"images": [{"url": ...}, ...]}
-    - video-модели: {"video": {"url": ...}}
+    Подтверждённые формы (image -> {"images":[{"url"}]}, video -> {"video":{"url"}})
+    плюс защитный набор запасных форм, чтобы непокрытая модель не давала None
+    (что вело бы к рефанду успешной генерации, аудит I2). Непойманная форма
+    логируется на error в handle_fal_webhook -> дополняем перебор по факту.
 
     Вызывается напрямую на непроверенном теле вебхука без обёртки try/except,
     поэтому обязана не бросать исключения ни при каких «мусорных» входных
     данных (None, не-dict, не-list и т.п.) — каждый шаг разбора проверяется
     isinstance перед использованием.
-
-    PLACEHOLDER: перед продакшн-запуском уточнить формы ответа всех 8 моделей
-    каталога (fal-ai/*) и дополнить перебор.
     """
     if not isinstance(payload, dict):
         return None
 
-    images = payload.get("images")
-    if isinstance(images, list) and images and isinstance(images[0], dict) and images[0].get("url"):
-        return images[0]["url"]
+    # 1. Списки объектов с url: images / video / audio / files (элементы -- dict).
+    for key in ("images", "video", "audio", "files"):
+        val = payload.get(key)
+        if isinstance(val, list) and val and isinstance(val[0], dict) and isinstance(val[0].get("url"), str):
+            return val[0]["url"]
 
-    video = payload.get("video") or {}
-    if isinstance(video, dict) and video.get("url"):
-        return video["url"]
+    # 2. Вложенный объект с url: video / image / audio.
+    for key in ("video", "image", "audio"):
+        val = payload.get(key)
+        if isinstance(val, dict) and isinstance(val.get("url"), str):
+            return val["url"]
+
+    # 3. Плоские url-поля.
+    for key in ("video_url", "image_url", "audio_url", "url"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
 
     return None
 

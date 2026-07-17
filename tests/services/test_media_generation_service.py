@@ -158,6 +158,17 @@ def fake_redis(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _stub_referral_after_commit(monkeypatch):
+    # grant_referral_bonus_after_commit открывает отдельную сессию (реальную БД) --
+    # в тестах по умолчанию no-op; referral-тест переопределяет вызовом по своей
+    # тестовой сессии.
+    async def _noop(uid: int) -> None:
+        return None
+
+    monkeypatch.setattr(mgs, "grant_referral_bonus_after_commit", _noop)
+
+
+@pytest.fixture(autouse=True)
 def fal(monkeypatch):
     fake = FakeFalClient()
     monkeypatch.setattr(mgs, "FalClient", fake)
@@ -531,6 +542,17 @@ def _ok_payload(request_id="fal-req-1", url="https://cdn.fal.media/out.png") -> 
     return {"request_id": request_id, "status": "OK", "payload": {"images": [{"url": url}]}}
 
 
+async def test_webhook_unknown_request_id_returns_false_for_retry(session):
+    # request_id нет в БД (вебхук опередил commit) -> False -> роут отдаст 404 ->
+    # fal доставит повторно (backend-аудит I1). До фикса возвращался 200 -> потеря.
+    assert await handle_fal_webhook(session, _ok_payload(request_id="never-seen")) is False
+
+
+async def test_webhook_missing_request_id_returns_true(session):
+    # мусорный payload без request_id -- ретрай не поможет, отвечаем 200 (True).
+    assert await handle_fal_webhook(session, {"status": "OK", "payload": {}}) is True
+
+
 async def test_webhook_ok_settles_and_stores_result_url(session, fake_redis, fal):
     user = await _seed(session, _image_model())
     request = await start_media_generation(session, user, "img", "a bear")
@@ -553,9 +575,19 @@ async def test_webhook_ok_settles_and_stores_result_url(session, fake_redis, fal
 
 # --- Task 3: реферальный бонус по успешному вебхуку ---
 
-async def test_webhook_ok_grants_referral_bonus_to_referrer(session, fake_redis, fal):
-    """Приглашённый (Referral на него) успешно завершает генерацию через
-    вебхук OK -> пригласившему начисляется бонус в ТОЙ ЖЕ транзакции (до commit)."""
+async def test_webhook_ok_grants_referral_bonus_to_referrer(session, fake_redis, fal, monkeypatch):
+    """Приглашённый успешно завершает генерацию через вебхук OK -> пригласившему
+    начисляется бонус. В проде бонус идёт в отдельной транзакции после commit
+    (аудит I4, deadlock-safe); здесь подменяем её на вызов по тестовой сессии
+    (отдельное соединение = пустая in-memory sqlite)."""
+    from app.services import media_generation_service as mgs
+    from app.services.referral_service import maybe_grant_referral_bonus
+
+    async def _grant_on_test_session(uid: int) -> None:
+        await maybe_grant_referral_bonus(session, uid)
+
+    monkeypatch.setattr(mgs, "grant_referral_bonus_after_commit", _grant_on_test_session)
+
     referrer = User(telegram_id=999, username="referrer", credits_balance=0)
     session.add(referrer)
     await session.flush()
