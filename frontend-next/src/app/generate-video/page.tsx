@@ -236,6 +236,13 @@ function GenerateVideoScreen() {
           />
           <OptionPicker
             model={model}
+            kind="aspect_ratio"
+            label="Формат кадра"
+            selected={optionCodes.aspect_ratio}
+            onSelect={(code) => setOptionCodes((p) => ({ ...p, aspect_ratio: code }))}
+          />
+          <OptionPicker
+            model={model}
             kind="duration"
             label="Длительность"
             selected={optionCodes.duration}

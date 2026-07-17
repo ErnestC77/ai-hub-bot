@@ -72,7 +72,7 @@ export interface MeOut {
   total_credits_spent: number;
 }
 
-export type ModelOptionKind = "quality" | "duration" | "audio";
+export type ModelOptionKind = "quality" | "duration" | "audio" | "aspect_ratio";
 
 export interface ModelOptionOut {
   kind: ModelOptionKind;

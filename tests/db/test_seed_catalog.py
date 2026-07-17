@@ -301,6 +301,22 @@ def test_default_option_multiplier_is_one():
             assert o["credits_multiplier"] == 1.0, o["model_code"]
 
 
+def test_every_media_model_offers_frame_format():
+    """Формат кадра доступен у ВСЕХ фото/видео-моделей каталога: либо своя ось
+    aspect_ratio, либо форматные пресеты внутри оси quality (qwen/seedream, где
+    аспект и размер -- одно поле image_size у провайдера). Новая медиа-модель
+    без формата кадра -- регресс витрины, а не «просто нет опций»."""
+    media_codes = {m["code"] for m in AI_MODELS
+                   if m["category"] in (ModelCategory.image, ModelCategory.video)}
+    with_aspect_axis = {o["model_code"] for o in MODEL_OPTIONS
+                        if o["kind"] == ModelOptionKind.aspect_ratio}
+    format_codes = {"16_9", "9_16", "4_3", "3_4"}
+    with_quality_formats = {o["model_code"] for o in MODEL_OPTIONS
+                            if o["kind"] == ModelOptionKind.quality and o["code"] in format_codes}
+    missing = media_codes - (with_aspect_axis | with_quality_formats)
+    assert not missing, f"медиа-модели без формата кадра: {missing}"
+
+
 def test_no_options_for_models_without_provider_knobs():
     """У flux-pro/kontext, nano-banana и kling нет ручки размера (только
     aspect_ratio) -- опций качества у них быть не должно. У Ovi нет и длительности.
@@ -344,19 +360,27 @@ def test_nano_banana_pro_resolution_multipliers_match_measurements():
 def test_seedream_resolution_is_free():
     """Измерено: square_hd + auto_2K + auto_4K = ровно $0.09 на троих, т.е. $0.03
     за картинку независимо от разрешения (cost_unit=image -- плоский тариф).
-    Множители 1.0: 2K и 4K достаются пользователю даром."""
+    Множители 1.0: 2K, 4K и форматные пресеты достаются пользователю даром
+    (форматы живут в этой же оси: аспект и размер -- одно поле image_size)."""
     by = {o["code"]: o for o in MODEL_OPTIONS
           if o["model_code"] == "seedream" and o["kind"] == ModelOptionKind.quality}
-    assert set(by) == {"1k", "2k", "4k"}
+    assert set(by) == {"1k", "2k", "4k", "16_9", "9_16", "4_3", "3_4"}
     assert all(o["credits_multiplier"] == 1.0 for o in by.values())
 
 
 def test_unmeasured_options_are_absent():
     """НЕ заводим то, чего не мерили. Опция с выдуманным множителем хуже
-    отсутствующей -- она молча ошибётся в деньгах. Ovi: цена плоская, но влияние
-    resolution не измеряли; длительность у него не управляется вовсе."""
-    ovi = {o["code"] for o in MODEL_OPTIONS if o["model_code"] == "ovi_video"}
-    assert ovi == set(), "влияние resolution на цену ovi не измерено"
+    отсутствующей -- она молча ошибётся в деньгах. Ovi: длительность не
+    управляется вовсе, quality не заводим; resolution заведён ТОЛЬКО как формат
+    кадра с 1.0 -- это безопасно и БЕЗ замера, потому что все пары пикселей fal
+    одного бюджета (507904..518400, разброс ~2%): даже если тариф по пикселям,
+    смена формата цену не сдвинет."""
+    ovi = [o for o in MODEL_OPTIONS if o["model_code"] == "ovi_video"]
+    assert {o["kind"] for o in ovi} == {ModelOptionKind.aspect_ratio}
+    assert all(o["credits_multiplier"] == 1.0 for o in ovi)
+    for o in ovi:
+        w, h = map(int, o["provider_params"]["resolution"].split("x"))
+        assert abs(w * h - 512 * 992) / (512 * 992) < 0.05, o["code"]
 
 
 async def test_apply_seed_inserts_options_and_is_idempotent(session):
@@ -367,23 +391,27 @@ async def test_apply_seed_inserts_options_and_is_idempotent(session):
 
 
 def test_option_migration_matches_seed_constants():
-    """Миграция сида опций (`d4e5f6a9b0c1` в исходном плане переименован в
-    `bb51258925d4`, т.к. `d4e5f6a9b0c1` коллизировал с уже применёнными ревизиями
-    после пересчёта плана) должна вставлять РОВНО те же строки, что MODEL_OPTIONS.
-    Импортируем модуль миграции (а не читаем файл как текст) -- подстрока не
-    отличает `_OPTIONS` от случайного совпадения в другой константе."""
+    """Опционные миграции (bb51258925d4 -- исходный сид, e8f9a0b1c2d3 -- формат
+    кадра) в сумме должны вставлять РОВНО те же строки, что MODEL_OPTIONS: сид
+    и миграции -- два пути к одной таблице, расхождение = разные каталоги на
+    чистой и мигрированной БД. Импортируем модули миграций (а не читаем файлы
+    как текст) -- подстрока не отличает `_OPTIONS` от случайного совпадения."""
     import importlib.util, json
     from pathlib import Path
 
-    path = Path("alembic/versions/bb51258925d4_seed_model_options.py")
-    spec_ = importlib.util.spec_from_file_location("seed_options_migration", path)
-    mod = importlib.util.module_from_spec(spec_)
-    spec_.loader.exec_module(mod)
+    from_migration = {}
+    for path in (
+        Path("alembic/versions/bb51258925d4_seed_model_options.py"),
+        Path("alembic/versions/e8f9a0b1c2d3_aspect_ratio_options.py"),
+    ):
+        spec_ = importlib.util.spec_from_file_location(path.stem, path)
+        mod = importlib.util.module_from_spec(spec_)
+        spec_.loader.exec_module(mod)
+        for o in mod._OPTIONS:
+            key = (o["model_code"], o["kind"], o["code"])
+            assert key not in from_migration, f"дубль между миграциями: {key}"
+            from_migration[key] = (float(o["mult"]), json.loads(o["params"]), o["is_default"])
 
-    from_migration = {
-        (o["model_code"], o["kind"], o["code"]): (float(o["mult"]), json.loads(o["params"]), o["is_default"])
-        for o in mod._OPTIONS
-    }
     from_seed = {
         (o["model_code"], o["kind"].value, o["code"]):
             (float(o["credits_multiplier"]), o["provider_params"], o["is_default"])
