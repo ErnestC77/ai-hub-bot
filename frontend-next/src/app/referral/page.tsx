@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Placeholder } from "@/components/ui/placeholder";
@@ -10,10 +10,34 @@ import { haptic, openTelegramLink } from "@/lib/telegram";
 
 export default function Referral() {
   const [data, setData] = useState<ReferralOut | null>(null);
+  const [error, setError] = useState(false);
+
+  // setState только в async-колбэках (.then/.catch) — синхронных ресетов
+  // в эффекте нет (react-hooks/set-state-in-effect).
+  const load = useCallback(() => {
+    api
+      .referral()
+      .then(setData)
+      .catch(() => setError(true));
+  }, []);
 
   useEffect(() => {
-    api.referral().then(setData).catch(() => setData(null));
-  }, []);
+    load();
+  }, [load]);
+
+  function retry() {
+    setError(false);
+    setData(null);
+    load();
+  }
+
+  if (error) {
+    return (
+      <Placeholder header="Не удалось загрузить данные" description="Проверьте соединение и попробуйте ещё раз.">
+        <Button onClick={retry}>Повторить</Button>
+      </Placeholder>
+    );
+  }
 
   if (data === null) {
     return (
