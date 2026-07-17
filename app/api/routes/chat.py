@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -17,6 +17,7 @@ from app.services.antifraud_service import (
     TierNotAllowedError,
 )
 from app.services.credit_service import InsufficientBalanceError
+from app.services.notification_service import send_chat_answer
 from app.services.text_generation_service import (
     ConfirmationRequiredError,
     ModelNotFoundError,
@@ -148,6 +149,7 @@ async def list_models(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     body: ChatRequest,
+    request: Request,
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_db),
 ) -> ChatResponse | JSONResponse:
@@ -191,6 +193,13 @@ async def chat(
         raise HTTPException(
             status_code=502, detail="Модель временно недоступна, попробуйте позже"
         ) from exc
+
+    # Юзер закрыл приложение, пока ответ генерировался (2-5с): HTTP-запрос
+    # оборван, ответ не дойдёт, а кредиты уже списаны -> доставляем ответ в бот.
+    # Проверяем ПОСЛЕ генерации: к этому моменту disconnect от закрытого клиента
+    # уже в receive-канале. Never-raise внутри send_chat_answer.
+    if await request.is_disconnected():
+        await send_chat_answer(user.telegram_id, body.prompt, result.answer)
 
     return ChatResponse(
         answer=result.answer,

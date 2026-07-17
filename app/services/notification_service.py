@@ -24,6 +24,26 @@ async def notify_credits_purchase(telegram_id: int, credits: int) -> None:
     await _send(telegram_id, f"✅ Оплата прошла! Начислено {credits} кредитов.")
 
 
+async def send_chat_answer(telegram_id: int, question: str, answer: str) -> None:
+    """Доставляет ответ ИИ в бот, если юзер закрыл приложение, не дождавшись
+    (chat синхронный: ответ был бы потерян вместе с оборванным HTTP-запросом,
+    а кредиты уже списаны). Шлём ТОЛЬКО на разрыве соединения -- при обычном
+    использовании ответ приходит в приложение и дублировать его не нужно.
+
+    Telegram-лимит 4096 символов: длинный ответ обрезаем с явной пометкой, что
+    полный текст остался в приложении.
+    """
+    q = question if len(question) <= 200 else question[:200] + "…"
+    body = answer
+    suffix = ""
+    limit = 3500  # запас под вопрос и подпись в пределах 4096
+    if len(body) > limit:
+        body = body[:limit] + "…"
+        suffix = "\n\n(ответ обрезан — полный текст в приложении)"
+    text = f"💬 Ответ на ваш вопрос:\n{q}\n\n{body}{suffix}"
+    await _send(telegram_id, text)
+
+
 async def send_media_result(
     telegram_id: int, category: ModelCategory, result_url: str, prompt_preview: str
 ) -> None:

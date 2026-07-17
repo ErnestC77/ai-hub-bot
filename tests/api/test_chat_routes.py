@@ -80,6 +80,17 @@ async def client(db_sessionmaker):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def _stub_chat_delivery(monkeypatch):
+    # Под ASGITransport receive после тела отдаёт http.disconnect, поэтому
+    # request.is_disconnected() = True -> роут звал бы реальный бот. Глушим;
+    # disconnect-тест переопределяет заглушку захватом.
+    async def _noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(chat, "send_chat_answer", _noop)
+
+
 def _text_model(code, *, sort_order, tier=ModelTier.economy, is_active=True, is_visible=True,
                 category=ModelCategory.text) -> AiModel:
     return AiModel(
@@ -254,6 +265,61 @@ async def test_chat_success_returns_answer_and_billing(client, monkeypatch):
     assert response.json() == {"answer": "привет", "charged_credits": 5, "balance_after": 95}
     # confirm по умолчанию False и прокидывается в сервис.
     assert mock.await_args.kwargs["confirm"] is False
+
+
+async def test_chat_delivers_to_bot_when_client_disconnected(client, monkeypatch):
+    """Юзер закрыл приложение во время генерации (разрыв соединения) -> ответ
+    уходит в бот."""
+    from starlette.requests import Request
+
+    monkeypatch.setattr(
+        chat, "generate_text",
+        AsyncMock(return_value=TextGenerationResult(answer="ответ", charged_credits=5, balance_after=95)),
+    )
+
+    async def _disconnected(self):
+        return True
+
+    monkeypatch.setattr(Request, "is_disconnected", _disconnected)
+    sent = []
+
+    async def _capture(telegram_id, question, answer):
+        sent.append((telegram_id, question, answer))
+
+    monkeypatch.setattr(chat, "send_chat_answer", _capture)
+
+    response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "вопрос"})
+
+    assert response.status_code == 200
+    assert len(sent) == 1
+    assert sent[0][1] == "вопрос" and sent[0][2] == "ответ"
+
+
+async def test_chat_does_not_deliver_when_client_connected(client, monkeypatch):
+    """Клиент дождался ответа (соединение живо) -> в бот НЕ дублируем."""
+    from starlette.requests import Request
+
+    monkeypatch.setattr(
+        chat, "generate_text",
+        AsyncMock(return_value=TextGenerationResult(answer="ответ", charged_credits=5, balance_after=95)),
+    )
+
+    async def _connected(self):
+        return False
+
+    monkeypatch.setattr(Request, "is_disconnected", _connected)
+    sent = []
+    monkeypatch.setattr(chat, "send_chat_answer",
+                        lambda *a, **k: sent.append(a) or _async_none())
+
+    response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "вопрос"})
+
+    assert response.status_code == 200
+    assert sent == []
+
+
+async def _async_none():
+    return None
 
 
 async def test_chat_passes_confirm_true(client, monkeypatch):
