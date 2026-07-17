@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
+import { useMe } from "@/context/MeContext";
 import { haptic } from "@/lib/telegram";
 import ModelPicker from "@/components/chat/ModelPicker";
 
@@ -25,6 +26,7 @@ interface PendingConfirmation {
 
 function ChatScreen() {
   const router = useRouter();
+  const { applyBalance } = useMe();
   const searchParams = useSearchParams();
   const prefill = searchParams.get("prefill") ?? "";
   // ?model= ставят карточки моделей на Home; резолв приоритетов -- в lib/resolveModel.
@@ -70,6 +72,9 @@ function ChatScreen() {
           balanceAfter: result.balance_after,
         },
       ]);
+      // Глобальный баланс (пилюля на Home, «Баланс» на генерациях) без этого
+      // жил до перезапуска приложения: профиль грузится один раз на старте.
+      applyBalance(result.balance_after);
       haptic("light");
     } catch (err) {
       if (err instanceof ConfirmationRequiredError) {

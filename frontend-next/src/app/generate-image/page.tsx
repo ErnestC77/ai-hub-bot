@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
 import OptionPicker from "@/components/generate/OptionPicker";
+import SizeFormatPicker, { isSizeFormatCombo } from "@/components/generate/SizeFormatPicker";
 import { defaultOptionCodes, estimatedCredits } from "@/lib/optionPricing";
 import { useMe } from "@/context/MeContext";
 import { resolveModel } from "@/lib/resolveModel";
@@ -28,7 +29,7 @@ interface PendingConfirmation {
 
 function GenerateImageScreen() {
   const router = useRouter();
-  const { me } = useMe();
+  const { me, refresh } = useMe();
   // ?model= ставят карточки моделей на Home; резолв приоритетов -- в lib/resolveModel.
   // ?prefill= приходит от фото-трендов (/trends) -- стартовый текст промпта.
   const searchParams = useSearchParams();
@@ -132,6 +133,9 @@ function GenerateImageScreen() {
 
       const { request_id } = await api.generate(modelCode, question, imageUrl, codes, confirm);
       pollCancelledRef.current = false;
+      // Резерв уже списал кредиты -- перечитываем профиль, иначе «Баланс» на
+      // экране (и пилюля на Home) живут до перезапуска приложения.
+      void refresh();
 
       for (let i = 0; i < POLL_ATTEMPTS; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -148,11 +152,13 @@ function GenerateImageScreen() {
         }
         if (status.status === "completed") {
           setResultUrl(status.result_url);
+          void refresh(); // settle мог вернуть часть резерва
           haptic("medium");
           return;
         }
         if (status.status === "failed" || status.status === "refunded") {
           setError(status.error_message ?? "Не удалось сгенерировать изображение");
+          void refresh(); // рефанд вернул кредиты
           return;
         }
         // pending / reserved / processing -- продолжаем поллинг.
@@ -256,15 +262,24 @@ function GenerateImageScreen() {
             ) : null}
           </div>
 
-          {/* У qwen/seedream форматы кадра живут ВНУТРИ оси quality (одно поле
-              image_size у провайдера), поэтому метка -- «Размер и формат». */}
-          <OptionPicker
-            model={model}
-            kind="quality"
-            label="Размер и формат"
-            selected={optionCodes.quality}
-            onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
-          />
+          {/* qwen/seedream: размер и формат -- одно поле image_size у провайдера,
+              в БД полная матрица комбо-кодов; SizeFormatPicker рисует её двумя
+              рядами. Остальные модели -- обычные независимые оси. */}
+          {isSizeFormatCombo(model) ? (
+            <SizeFormatPicker
+              model={model}
+              selected={optionCodes.quality}
+              onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
+            />
+          ) : (
+            <OptionPicker
+              model={model}
+              kind="quality"
+              label="Размер"
+              selected={optionCodes.quality}
+              onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
+            />
+          )}
           <OptionPicker
             model={model}
             kind="aspect_ratio"

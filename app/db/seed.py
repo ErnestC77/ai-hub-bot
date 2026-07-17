@@ -186,6 +186,33 @@ AI_MODELS = [
 # (списание с баланса), а не назначен -- см. спек, раздел «Цены».
 # provider_params сверены со схемами fal: типы значений обязаны совпадать
 # (Kling ждёт duration строкой, Wan -- num_frames числом).
+# Матрица «размер x формат» для моделей, где аспект и размер -- одно поле
+# image_size (qwen_image, seedream). 1K -- именованные пресеты fal; 2K/4K --
+# пиксели с длинной стороной 2048/4096 (выверено по OpenAPI-схемам fal).
+SIZE_FORMAT_PRESETS = {
+    "1k": [
+        ("1_1", "1:1", "square_hd"),
+        ("16_9", "16:9", "landscape_16_9"),
+        ("9_16", "9:16", "portrait_16_9"),
+        ("4_3", "4:3", "landscape_4_3"),
+        ("3_4", "3:4", "portrait_4_3"),
+    ],
+    "2k": [
+        ("1_1", "1:1", {"width": 2048, "height": 2048}),
+        ("16_9", "16:9", {"width": 2048, "height": 1152}),
+        ("9_16", "9:16", {"width": 1152, "height": 2048}),
+        ("4_3", "4:3", {"width": 2048, "height": 1536}),
+        ("3_4", "3:4", {"width": 1536, "height": 2048}),
+    ],
+    "4k": [
+        ("1_1", "1:1", {"width": 4096, "height": 4096}),
+        ("16_9", "16:9", {"width": 4096, "height": 2304}),
+        ("9_16", "9:16", {"width": 2304, "height": 4096}),
+        ("4_3", "4:3", {"width": 4096, "height": 3072}),
+        ("3_4", "3:4", {"width": 3072, "height": 4096}),
+    ],
+}
+
 MODEL_OPTIONS = [
     # --- Wan: две независимые оси качества (resolution + video_quality) ---
     # 480p $0.04/с, 580p $0.06/с, 720p $0.08/с -> 0.5 / 0.75 / 1.0
@@ -246,27 +273,26 @@ MODEL_OPTIONS = [
     dict(model_code="veo_video", kind=ModelOptionKind.quality, code="4k", label="4K",
          provider_params={"resolution": "4k"},
          credits_multiplier=2.0, is_default=False, sort_order=30),
-    # --- qwen_image: image_size пресетом или объектом ---
-    # $0.02/МП. square_hd = 1024^2 = 1.05 МП (дефолт), 2048^2 = 4.19 МП -> 4.0.
-    dict(model_code="qwen_image", kind=ModelOptionKind.quality, code="1k", label="1K",
-         provider_params={"image_size": "square_hd"},
-         credits_multiplier=1.0, is_default=True, sort_order=10),
-    dict(model_code="qwen_image", kind=ModelOptionKind.quality, code="2k", label="2K",
-         provider_params={"image_size": {"width": 2048, "height": 2048}},
-         credits_multiplier=4.0, is_default=False, sort_order=20),
-    # --- seedream v4: разрешение бесплатно ---
-    # Измерено: square_hd, auto_2K и auto_4K списали ровно $0.09 на троих, т.е.
-    # $0.03 за картинку независимо от разрешения (cost_unit=image -- плоский тариф).
-    # Множители 1.0: 2K и 4K достаются пользователю даром.
-    dict(model_code="seedream", kind=ModelOptionKind.quality, code="1k", label="1K",
-         provider_params={"image_size": "square_hd"},
-         credits_multiplier=1.0, is_default=True, sort_order=10),
-    dict(model_code="seedream", kind=ModelOptionKind.quality, code="2k", label="2K",
-         provider_params={"image_size": "auto_2K"},
-         credits_multiplier=1.0, is_default=False, sort_order=20),
-    dict(model_code="seedream", kind=ModelOptionKind.quality, code="4k", label="4K",
-         provider_params={"image_size": "auto_4K"},
-         credits_multiplier=1.0, is_default=False, sort_order=30),
+    # --- qwen_image / seedream: матрица «размер x формат» одной осью quality ---
+    # Аспект и размер у них -- ОДНО поле image_size, поэтому не вторая ось (две
+    # оси в один ключ затирали бы друг друга), а полная матрица комбинаций
+    # <size>__<fmt>; фронт рисует её двумя рядами (SizeFormatPicker).
+    # Цена по размеру, формат бесплатный: qwen $0.02/МП, square_hd 1.05 МП ->
+    # 2048^2 = 4.19 МП -> все 2K x4.0 (не-квадраты дешевле по МП -- маржа выше,
+    # цена та же). Seedream: замерено, разрешение бесплатно -- вся матрица x1.0.
+    # 1K -- пресеты fal, 2K/4K -- пиксели (длинная сторона 2048/4096).
+    *[
+        dict(model_code=mc, kind=ModelOptionKind.quality, code=f"{size}__{fmt}",
+             label=f"{size.upper()} · {fmt_label}", provider_params={"image_size": preset},
+             credits_multiplier=mult, is_default=(size == "1k" and fmt == "1_1"),
+             sort_order=base + 2 * i)
+        for mc, tiers in (
+            ("qwen_image", ((("1k"), 1.0, 10), (("2k"), 4.0, 20))),
+            ("seedream", ((("1k"), 1.0, 10), (("2k"), 1.0, 20), (("4k"), 1.0, 30))),
+        )
+        for size, mult, base in tiers
+        for i, (fmt, fmt_label, preset) in enumerate(SIZE_FORMAT_PRESETS[size])
+    ],
     # --- nano_banana_pro: тот самый селектор 1K/2K/4K из дизайн-макета ---
     # Измерено: 1K $0.15, 2K $0.15, 4K $0.30. 2K БЕСПЛАТЕН -- ровно как 1K;
     # дорожает только 4K, вдвое. Тот же узор, что у Veo (720p = 1080p < 4k x2).
@@ -365,35 +391,6 @@ MODEL_OPTIONS = [
     dict(model_code="nano_banana_pro", kind=ModelOptionKind.aspect_ratio, code="3_4", label="3:4",
          provider_params={"aspect_ratio": "3:4"},
          credits_multiplier=1.0, is_default=False, sort_order=50),
-    # --- qwen_image / seedream: аспект живёт в ТОМ ЖЕ поле image_size, что и
-    # размер, поэтому это НЕ отдельная ось, а расширение оси quality (две оси,
-    # пишущие один ключ, молча затирали бы друг друга при мерже provider_params).
-    # Все пресеты <= square_hd по мегапикселям -> множитель 1.0 честен: цена для
-    # пользователя не меняется, себестоимость только падает.
-    dict(model_code="qwen_image", kind=ModelOptionKind.quality, code="16_9", label="16:9",
-         provider_params={"image_size": "landscape_16_9"},
-         credits_multiplier=1.0, is_default=False, sort_order=12),
-    dict(model_code="qwen_image", kind=ModelOptionKind.quality, code="9_16", label="9:16",
-         provider_params={"image_size": "portrait_16_9"},
-         credits_multiplier=1.0, is_default=False, sort_order=14),
-    dict(model_code="qwen_image", kind=ModelOptionKind.quality, code="4_3", label="4:3",
-         provider_params={"image_size": "landscape_4_3"},
-         credits_multiplier=1.0, is_default=False, sort_order=16),
-    dict(model_code="qwen_image", kind=ModelOptionKind.quality, code="3_4", label="3:4",
-         provider_params={"image_size": "portrait_4_3"},
-         credits_multiplier=1.0, is_default=False, sort_order=18),
-    dict(model_code="seedream", kind=ModelOptionKind.quality, code="16_9", label="16:9",
-         provider_params={"image_size": "landscape_16_9"},
-         credits_multiplier=1.0, is_default=False, sort_order=12),
-    dict(model_code="seedream", kind=ModelOptionKind.quality, code="9_16", label="9:16",
-         provider_params={"image_size": "portrait_16_9"},
-         credits_multiplier=1.0, is_default=False, sort_order=14),
-    dict(model_code="seedream", kind=ModelOptionKind.quality, code="4_3", label="4:3",
-         provider_params={"image_size": "landscape_4_3"},
-         credits_multiplier=1.0, is_default=False, sort_order=16),
-    dict(model_code="seedream", kind=ModelOptionKind.quality, code="3_4", label="3:4",
-         provider_params={"image_size": "portrait_4_3"},
-         credits_multiplier=1.0, is_default=False, sort_order=18),
     # НЕ заведены намеренно:
     #  - kling quality: у провайдера НЕТ ручки размера;
     #  - ovi duration: длительность не управляется вовсе (в схеме нет ни duration,
