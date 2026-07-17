@@ -11,6 +11,16 @@ logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+# Системный промпт: без него модель без языкового контекста угадывает язык по
+# вводу, и на неоднозначном (голые цифры «133», символы) DeepSeek -- китайская
+# модель -- сваливалась в китайский. Приложение русскоязычное, поэтому по
+# умолчанию отвечаем на русском, но следуем языку осмысленного вопроса.
+SYSTEM_PROMPT = (
+    "Ты — полезный ИИ-ассистент в русскоязычном приложении. Отвечай на том же "
+    "языке, на котором задан вопрос. Если язык определить нельзя (только цифры, "
+    "символы или очень короткий ввод) — отвечай на русском языке."
+)
+
 # Явный таймаут < TTL per-user лока (AI_LOCK_TTL_SECONDS=120 в
 # text_generation_service). Дефолт AsyncOpenAI -- 600с: запрос мог пережить лок,
 # тот истекал по TTL, второй запрос брал новый лок, а finally первого удалял
@@ -43,7 +53,10 @@ class OpenRouterProvider(AIProvider):
             response = await client.chat.completions.create(
                 model=model.provider_model_id,
                 max_tokens=max_output_tokens,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
             )
             return AIResult(
                 answer=response.choices[0].message.content or "",
