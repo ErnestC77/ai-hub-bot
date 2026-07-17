@@ -49,6 +49,7 @@ class ModelOptionKind(str, enum.Enum):
     quality = "quality"    # разрешение/размер: resolution, image_size, video_quality
     duration = "duration"  # длина видео: duration, num_frames+frames_per_second
     audio = "audio"        # generate_audio у Veo -- удваивает цену, см. спек
+    aspect_ratio = "aspect_ratio"  # формат кадра: aspect_ratio (у Ovi -- resolution-пары)
 
 
 class RequestStatus(str, enum.Enum):

@@ -16,6 +16,7 @@ const KIND_LABEL: Record<string, string> = {
   quality: "Качество",
   duration: "Длительность",
   audio: "Звук",
+  aspect_ratio: "Формат кадра",
 };
 
 export default function AdminModelOptions() {

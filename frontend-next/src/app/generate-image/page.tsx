@@ -256,12 +256,21 @@ function GenerateImageScreen() {
             ) : null}
           </div>
 
+          {/* У qwen/seedream форматы кадра живут ВНУТРИ оси quality (одно поле
+              image_size у провайдера), поэтому метка -- «Размер и формат». */}
           <OptionPicker
             model={model}
             kind="quality"
-            label="Качество"
+            label="Размер и формат"
             selected={optionCodes.quality}
             onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
+          />
+          <OptionPicker
+            model={model}
+            kind="aspect_ratio"
+            label="Формат кадра"
+            selected={optionCodes.aspect_ratio}
+            onSelect={(code) => setOptionCodes((p) => ({ ...p, aspect_ratio: code }))}
           />
 
           {generating && (
