@@ -16,29 +16,40 @@ interface Props {
 }
 
 const POLL_INTERVAL_MS = 2000;
-const POLL_ATTEMPTS = 15;
+// Stars: openInvoice уже подтвердил оплату, ждём только webhook -> 30 сек.
+const POLL_ATTEMPTS_STARS = 15;
+// ЮKassa: пользователь платит на внешней странице и возвращается сам -> 2 мин.
+const POLL_ATTEMPTS_YOOKASSA = 60;
 
 export default function CreditPurchaseSheet({ onClose }: Props) {
   const [stage, setStage] = useState<Stage>("pick");
   const [packages, setPackages] = useState<CreditPackageOut[] | null>(null);
   const [selected, setSelected] = useState<CreditPackageOut | null>(null);
   const [errorText, setErrorText] = useState("");
-  const { me, refresh } = useMe();
+  const { refresh } = useMe();
 
   useEffect(() => {
     api.creditPackages().then(setPackages).catch(() => setPackages([]));
   }, []);
 
-  async function waitForCredit(initialBalance: number) {
+  // Поллим статус КОНКРЕТНОГО платежа, а не дельту баланса: рост баланса от
+  // реферального бонуса/рефанда во время ожидания давал ложный «успех», а
+  // параллельное списание маскировало настоящий.
+  async function waitForCredit(paymentId: number, attempts: number) {
     setStage("waiting");
-    for (let i = 0; i < POLL_ATTEMPTS; i++) {
+    for (let i = 0; i < attempts; i++) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       try {
-        const fresh = await api.me();
-        if (fresh.credits_balance > initialBalance) {
+        const { status } = await api.paymentStatus(paymentId);
+        if (status === "succeeded") {
           await refresh();
           setStage("success");
           haptic("medium");
+          return;
+        }
+        if (status === "canceled" || status === "failed" || status === "refunded") {
+          setErrorText("Платёж не был завершён. Попробуйте ещё раз.");
+          setStage("error");
           return;
         }
       } catch {
@@ -51,12 +62,11 @@ export default function CreditPurchaseSheet({ onClose }: Props) {
 
   async function payWithStars(pkg: CreditPackageOut) {
     try {
-      const { invoice_link } = await api.createStarsCreditPayment(pkg.code);
+      const { payment_id, invoice_link } = await api.createStarsCreditPayment(pkg.code);
       if (!invoice_link) throw new Error("empty invoice link");
-      const initialBalance = me?.credits_balance ?? 0;
       openInvoice(invoice_link, (status) => {
         if (status === "paid") {
-          void waitForCredit(initialBalance);
+          void waitForCredit(payment_id, POLL_ATTEMPTS_STARS);
         } else if (status === "failed" || status === "cancelled") {
           setStage("choose-method");
         }
@@ -69,10 +79,10 @@ export default function CreditPurchaseSheet({ onClose }: Props) {
 
   async function payWithYookassa(pkg: CreditPackageOut) {
     try {
-      const { confirmation_url } = await api.createYookassaCreditPayment(pkg.code);
+      const { payment_id, confirmation_url } = await api.createYookassaCreditPayment(pkg.code);
       if (!confirmation_url) throw new Error("empty confirmation url");
       openLink(confirmation_url);
-      void waitForCredit(me?.credits_balance ?? 0);
+      void waitForCredit(payment_id, POLL_ATTEMPTS_YOOKASSA);
     } catch (err) {
       setErrorText(err instanceof ApiError ? err.message : "Не удалось создать платёж");
       setStage("error");

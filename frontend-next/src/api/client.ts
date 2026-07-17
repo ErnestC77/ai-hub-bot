@@ -20,6 +20,19 @@ export class ConfirmationRequiredError extends Error {
   }
 }
 
+// 401 = протухший/невалидный Telegram initData: показываем понятный экран
+// вместо пустых/«недоступных» состояний. Редирект через window.location (мы
+// вне React-дерева); guard от повторных срабатываний и от цикла — сама
+// страница /login-failed API не дёргает, плюс не редиректим, если уже на ней.
+let unauthorizedRedirectFired = false;
+
+function redirectOnUnauthorized(status: number) {
+  if (status !== 401 || typeof window === "undefined") return;
+  if (unauthorizedRedirectFired || window.location.pathname === "/login-failed") return;
+  unauthorizedRedirectFired = true;
+  window.location.assign("/login-failed");
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -39,6 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       // обычным ApiError-путём.
       throw new ConfirmationRequiredError(body.estimated_credits);
     }
+    redirectOnUnauthorized(res.status);
     throw new ApiError(res.status, typeof body.detail === "string" ? body.detail : res.statusText);
   }
 
@@ -197,6 +211,7 @@ export const api = {
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      redirectOnUnauthorized(res.status);
       throw new ApiError(res.status, typeof body.detail === "string" ? body.detail : res.statusText);
     }
     return res.json() as Promise<{ url: string }>;
