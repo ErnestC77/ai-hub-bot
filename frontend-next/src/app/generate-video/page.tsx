@@ -12,11 +12,10 @@ import PhotoUploadBox from "@/components/PhotoUploadBox";
 import OptionPicker from "@/components/generate/OptionPicker";
 import { defaultOptionCodes, estimatedCredits } from "@/lib/optionPricing";
 import { haptic } from "@/lib/telegram";
+import { pollGenerationResult, POLL_ATTEMPTS_VIDEO } from "@/lib/pollGeneration";
+import { clearPending, readPending, savePending } from "@/lib/pendingGeneration";
 import { resolveModel } from "@/lib/resolveModel";
 import { useMe } from "@/context/MeContext";
-
-const POLL_INTERVAL_MS = 2000;
-const POLL_ATTEMPTS = Math.max(60, 20 * 15); // generous ceiling; video can take minutes
 
 interface PendingConfirmation {
   prompt: string;
@@ -46,6 +45,40 @@ function GenerateVideoScreen() {
   useEffect(() => () => { pollCancelledRef.current = true; }, []);
   const [error, setError] = useState("");
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+
+  // Восстановление после переоткрытия приложения: незавершённое видео
+  // дослеживаем прямо в приложении (immediate: могло уже завершиться пока
+  // приложение было закрыто). Свежий запуск переписывает pending -- конфликта нет.
+  useEffect(() => {
+    const pending = readPending("video");
+    if (!pending) return;
+    const recoverRef = { current: false };
+    setGenerating(true);
+    setPrompt((prev) => prev || pending.prompt);
+    (async () => {
+      const outcome = await pollGenerationResult(pending.requestId, recoverRef, {
+        immediate: true,
+        attempts: POLL_ATTEMPTS_VIDEO,
+      });
+      if (recoverRef.current || outcome.kind === "cancelled") return;
+      clearPending("video");
+      setGenerating(false);
+      if (outcome.kind === "completed") {
+        setResultUrl(outcome.resultUrl);
+        void refresh();
+        haptic("medium");
+      } else if (outcome.kind === "failed") {
+        setError(outcome.message ?? "Не удалось сгенерировать видео");
+        void refresh();
+      } else {
+        setError("Генерация ещё идёт — результат придёт в чат с ботом.");
+      }
+    })();
+    return () => {
+      recoverRef.current = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Модель приходит асинхронно; отслеживаем последний код, для которого уже
   // выставлены дефолтные опции, чтобы пересчитать их при смене модели.
   const [optionCodesForModel, setOptionCodesForModel] = useState<string | undefined>(undefined);
@@ -112,34 +145,27 @@ function GenerateVideoScreen() {
 
       const { request_id } = await api.generate(modelCode, question, imageUrl, codes, confirm);
       pollCancelledRef.current = false;
-      // Резерв уже списал кредиты -- перечитываем профиль, иначе баланс на
-      // экранах живёт до перезапуска приложения.
+      // Запоминаем незавершённую генерацию: закрыл приложение -> при возврате
+      // восстановится (а бот-доставка сохранит результат в любом случае).
+      // Резерв уже списал кредиты -- перечитываем профиль.
+      savePending("video", request_id, question);
       void refresh();
 
-      for (let i = 0; i < POLL_ATTEMPTS; i++) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        if (pollCancelledRef.current) return;  // экран закрыли -- не трогаем стейт
-        let status;
-        try {
-          status = await api.generationStatus(request_id);
-        } catch {
-          // Сетевой блип: генерация идёт и кредиты УЖЕ списаны. Не падаем в
-          // "failed" (иначе повторный "Создать" -> двойное списание) -- пробуем
-          // следующий тик; устойчивый сбой дойдёт до нейтрального таймаута.
-          continue;
-        }
-        if (status.status === "completed") {
-          setResultUrl(status.result_url);
-          void refresh(); // settle мог вернуть часть резерва
-          haptic("medium");
-          return;
-        }
-        if (status.status === "failed" || status.status === "refunded") {
-          setError(status.error_message ?? "Не удалось сгенерировать видео");
-          void refresh(); // рефанд вернул кредиты
-          return;
-        }
-        // pending / reserved / processing -- продолжаем поллинг.
+      const outcome = await pollGenerationResult(request_id, pollCancelledRef, {
+        attempts: POLL_ATTEMPTS_VIDEO,
+      });
+      if (outcome.kind === "cancelled") return; // экран закрыли -- pending живёт
+      clearPending("video");
+      if (outcome.kind === "completed") {
+        setResultUrl(outcome.resultUrl);
+        void refresh(); // settle мог вернуть часть резерва
+        haptic("medium");
+        return;
+      }
+      if (outcome.kind === "failed") {
+        setError(outcome.message ?? "Не удалось сгенерировать видео");
+        void refresh(); // рефанд вернул кредиты
+        return;
       }
       setError("Генерация занимает дольше обычного, попробуйте позже");
     } catch (err) {

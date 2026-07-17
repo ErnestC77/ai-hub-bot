@@ -35,6 +35,8 @@ test("рисует секцию качества только когда у мо
           tier: "premium",
           min_credits: 345,
           recommended_credits: 345,
+
+          min_charge_credits: 345,
           options: [
             { kind: "quality", code: "1k", label: "1K", credits_multiplier: 1, is_default: true, sort_order: 10 },
             { kind: "quality", code: "2k", label: "2K", credits_multiplier: 1, is_default: false, sort_order: 20 },
@@ -63,6 +65,8 @@ test("смена опции меняет цену в CTA", async ({ page }) => {
           tier: "premium",
           min_credits: 345,
           recommended_credits: 345,
+
+          min_charge_credits: 345,
           options: [
             { kind: "quality", code: "1k", label: "1K", credits_multiplier: 1, is_default: true, sort_order: 10 },
             { kind: "quality", code: "2k", label: "2K", credits_multiplier: 1, is_default: false, sort_order: 20 },
@@ -91,6 +95,8 @@ test("шлёт коды выбранных опций, а не сырые зна
           tier: "premium",
           min_credits: 345,
           recommended_credits: 345,
+
+          min_charge_credits: 345,
           options: [
             { kind: "quality", code: "1k", label: "1K", credits_multiplier: 1, is_default: true, sort_order: 10 },
             { kind: "quality", code: "4k", label: "4K", credits_multiplier: 2, is_default: false, sort_order: 30 },
@@ -147,6 +153,8 @@ test("модель без опций -- ни одной секции", async ({ 
           tier: "standard",
           min_credits: 100,
           recommended_credits: 100,
+
+          min_charge_credits: 100,
           options: [],
           edit_multiplier: null,
         },
@@ -180,6 +188,8 @@ test("edit-capable модель + фото -- CTA показывает цену 
           tier: "premium",
           min_credits: 345,
           recommended_credits: 345,
+
+          min_charge_credits: 345,
           options: [],
           edit_multiplier: 1.5,
         },
@@ -219,6 +229,8 @@ test("модель без edit_multiplier -- фото-бокс не рисует
           tier: "standard",
           min_credits: 100,
           recommended_credits: 100,
+
+          min_charge_credits: 100,
           options: [],
           edit_multiplier: null,
         },
