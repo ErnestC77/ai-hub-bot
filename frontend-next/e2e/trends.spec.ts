@@ -41,7 +41,7 @@ test.describe("mouse drag-to-scroll", () => {
 
   test("carousel scrolls by mouse drag and a drag does not open a card", async ({ page }) => {
     await page.goto("/trends");
-    // Текстовая секция самая длинная (6 карточек) -- гарантированно переполняет.
+    // Текстовая секция самая длинная (14 карточек) -- гарантированно переполняет.
     const row = page.getByTestId("trends-text").locator(":scope > div").last();
     await expect(row).toBeVisible();
     const before = await row.evaluate((el) => (el as HTMLElement).scrollLeft);
