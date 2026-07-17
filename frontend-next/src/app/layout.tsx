@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Onest } from "next/font/google";
 import "./globals.css";
@@ -17,6 +17,17 @@ const onest = Onest({
 
 export const metadata: Metadata = {
   title: "AI Hub",
+};
+
+// maximum-scale=1 обязателен: без него iOS-WebView зумит страницу при фокусе
+// в поле ввода, и правый край (кнопка «Отправить», ✕) уезжает за экран.
+// Для Mini App внутри Telegram запрет пользовательского зума -- норма, это
+// приложение, а не веб-страница.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
