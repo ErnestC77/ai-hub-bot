@@ -26,7 +26,7 @@ interface PendingConfirmation {
 
 function ChatScreen() {
   const router = useRouter();
-  const { applyBalance } = useMe();
+  const { me, applyBalance } = useMe();
   const searchParams = useSearchParams();
   const prefill = searchParams.get("prefill") ?? "";
   // ?model= ставят карточки моделей на Home; резолв приоритетов -- в lib/resolveModel.
@@ -116,6 +116,16 @@ function ChatScreen() {
               {model ? `Чат · ${model.min_credits} 💎 за запрос` : "Чат с нейросетью"}
             </div>
           </div>
+          {/* Живой остаток кредитов: applyBalance после каждого ответа
+              обновляет его прямо во время диалога (та же пилюля, что на Home). */}
+          {me && (
+            <div
+              className="glass flex-none rounded-full px-[10px] py-[5px] text-[11.5px] font-semibold"
+              data-testid="chat-balance"
+            >
+              {me.credits_balance} 💎
+            </div>
+          )}
           <button
             aria-label="Закрыть"
             data-testid="chat-close"
