@@ -10,37 +10,38 @@ import { List } from "@/components/ui/list";
 import { Section } from "@/components/ui/section";
 import { Spinner } from "@/components/ui/spinner";
 import UserTransactionsSheet from "@/components/admin/UserTransactionsSheet";
+import ActionError from "@/components/admin/ActionError";
+import { useActionError } from "@/components/admin/useActionError";
 
 function UserRow({ user, onSaved }: { user: AdminUserOut; onSaved: (u: AdminUserOut) => void }) {
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const { error, run } = useActionError();
 
   async function toggleBlock() {
     setBusy(true);
-    try {
+    await run(async () => {
       const updated = user.is_blocked
         ? await adminApi.unblockUser(user.telegram_id)
         : await adminApi.blockUser(user.telegram_id);
       onSaved(updated);
-    } finally {
-      setBusy(false);
-    }
+    });
+    setBusy(false);
   }
 
   async function applyAdjustment() {
     const value = Number(amount);
     if (!value) return;
     setBusy(true);
-    try {
+    await run(async () => {
       const updated = await adminApi.adjustCredits(user.telegram_id, value, reason || undefined);
       onSaved(updated);
       setAmount("");
       setReason("");
-    } finally {
-      setBusy(false);
-    }
+    });
+    setBusy(false);
   }
 
   return (
@@ -85,6 +86,7 @@ function UserRow({ user, onSaved }: { user: AdminUserOut; onSaved: (u: AdminUser
             Применить
           </Button>
         </div>
+        {error && <span className="text-[12px] text-red-400">{error}</span>}
       </div>
       {historyOpen && (
         <UserTransactionsSheet telegramId={user.telegram_id} onClose={() => setHistoryOpen(false)} />
@@ -96,15 +98,18 @@ function UserRow({ user, onSaved }: { user: AdminUserOut; onSaved: (u: AdminUser
 export default function AdminUsers() {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<AdminUserOut[] | null>(null);
+  const { error, run } = useActionError();
 
   async function search() {
-    setUsers(null);
-    const result = await adminApi.users(query || undefined);
-    setUsers(result);
+    await run(async () => {
+      setUsers(null);
+      setUsers(await adminApi.users(query || undefined));
+    });
   }
 
   return (
     <List>
+      <ActionError error={error} />
       <Section header="Поиск по Telegram ID или username">
         <Cell
           after={
