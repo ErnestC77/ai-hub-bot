@@ -7,6 +7,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 test.beforeEach(async ({ page }) => {
   await mockTelegramWebApp(page, process.env.TEST_BOT_TOKEN ?? "test-token");
+  await page.route("**/api/chat/recent", (route) => route.fulfill({ json: [] }));
 });
 
 test("чат обновляет баланс на Home без перезагрузки", async ({ page }) => {
@@ -20,7 +21,7 @@ test("чат обновляет баланс на Home без перезагру
     }),
   );
   await page.route("**/api/chat", (route) =>
-    route.fulfill({ json: { answer: "Привет!", charged_credits: 3, balance_after: 497 } }),
+    route.fulfill({ json: { answer: "Привет!", charged_credits: 3, balance_after: 497, message_id: "m-test" } }),
   );
 
   await page.goto("/");

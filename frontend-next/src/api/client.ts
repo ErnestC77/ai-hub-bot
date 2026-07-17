@@ -107,6 +107,14 @@ export interface ChatResponse {
   answer: string;
   charged_credits: number;
   balance_after: number;
+  /** id ответа для дедупа восстановления (GET /api/chat/recent). */
+  message_id: string;
+}
+
+export interface RecentAnswer {
+  id: string;
+  prompt: string;
+  answer: string;
 }
 
 export interface GenerationStatus {
@@ -181,6 +189,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ model_code: modelCode, prompt, confirm }),
     }),
+  chatRecent: () => request<RecentAnswer[]>("/api/chat/recent"),
   tools: () => request<ToolOut[]>("/api/tools"),
   generate: (
     modelCode: string,

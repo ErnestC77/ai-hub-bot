@@ -11,6 +11,7 @@ export interface StoredMessage {
   text: string;
   chargedCredits?: number;
   balanceAfter?: number;
+  id?: string;
 }
 
 const KEY = "aihub.chat.history";

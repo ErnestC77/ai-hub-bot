@@ -6,11 +6,12 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 test.beforeEach(async ({ page }) => {
   await mockTelegramWebApp(page, process.env.TEST_BOT_TOKEN ?? "test-token");
+  await page.route("**/api/chat/recent", (route) => route.fulfill({ json: [] }));
 });
 
 test("переписка сохраняется и восстанавливается при переоткрытии", async ({ page }) => {
   await page.route("**/api/chat", (route) =>
-    route.fulfill({ json: { answer: "Отвечаю по существу.", charged_credits: 3, balance_after: 217 } }),
+    route.fulfill({ json: { answer: "Отвечаю по существу.", charged_credits: 3, balance_after: 217, message_id: "m-test" } }),
   );
 
   await page.goto("/chat");
@@ -29,7 +30,7 @@ test("переписка сохраняется и восстанавливае�
 
 test("«новый чат» очищает историю и она не возвращается", async ({ page }) => {
   await page.route("**/api/chat", (route) =>
-    route.fulfill({ json: { answer: "ответ", charged_credits: 3, balance_after: 217 } }),
+    route.fulfill({ json: { answer: "ответ", charged_credits: 3, balance_after: 217, message_id: "m-test" } }),
   );
 
   await page.goto("/chat");

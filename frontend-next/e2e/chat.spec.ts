@@ -4,6 +4,7 @@ import { mockTelegramWebApp } from "./mock-telegram";
 
 test.beforeEach(async ({ page }) => {
   await mockTelegramWebApp(page, process.env.TEST_BOT_TOKEN ?? "test-token");
+  await page.route("**/api/chat/recent", (route) => route.fulfill({ json: [] }));
 });
 
 test("ответ модели рендерится как форматированный текст, без сырой разметки", async ({ page }) => {
@@ -12,7 +13,7 @@ test("ответ модели рендерится как форматирова
       json: {
         answer: "### Заголовок\n\n**Жирный** текст\n\n- пункт один\n- пункт два",
         charged_credits: 3,
-        balance_after: 217,
+        balance_after: 217, message_id: "m-test",
       },
     }),
   );

@@ -82,13 +82,17 @@ async def client(db_sessionmaker):
 
 @pytest.fixture(autouse=True)
 def _stub_chat_delivery(monkeypatch):
-    # Под ASGITransport receive после тела отдаёт http.disconnect, поэтому
-    # request.is_disconnected() = True -> роут звал бы реальный бот. Глушим;
-    # disconnect-тест переопределяет заглушку захватом.
+    # send_chat_answer шлёт в реальный бот, store/get_recent ходят в реальный
+    # Redis -- в юнит-тестах глушим оба; спец-тесты переопределяют захватом.
     async def _noop(*args, **kwargs):
         return None
 
+    async def _no_recent(*args, **kwargs):
+        return []
+
     monkeypatch.setattr(chat, "send_chat_answer", _noop)
+    monkeypatch.setattr(chat, "store_recent_answer", _noop)
+    monkeypatch.setattr(chat, "get_recent_answers", _no_recent)
 
 
 def _text_model(code, *, sort_order, tier=ModelTier.economy, is_active=True, is_visible=True,
@@ -262,9 +266,45 @@ async def test_chat_success_returns_answer_and_billing(client, monkeypatch):
     response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "hi"})
 
     assert response.status_code == 200
-    assert response.json() == {"answer": "привет", "charged_credits": 5, "balance_after": 95}
+    body = response.json()
+    assert body["answer"] == "привет"
+    assert body["charged_credits"] == 5 and body["balance_after"] == 95
+    assert isinstance(body["message_id"], str) and body["message_id"]  # id для дедупа
     # confirm по умолчанию False и прокидывается в сервис.
     assert mock.await_args.kwargs["confirm"] is False
+
+
+async def test_chat_stores_answer_for_recovery(client, monkeypatch):
+    """Ответ сохраняется на сервере сразу -> восстановление без гонки."""
+    monkeypatch.setattr(
+        chat, "generate_text",
+        AsyncMock(return_value=TextGenerationResult(answer="ответ", charged_credits=3, balance_after=97)),
+    )
+    stored = []
+
+    async def _capture(user_id, message_id, prompt, answer):
+        stored.append((user_id, message_id, prompt, answer))
+
+    monkeypatch.setattr(chat, "store_recent_answer", _capture)
+
+    response = await client.post("/api/chat", json={"model_code": "deepseek_v3", "prompt": "вопрос"})
+
+    assert len(stored) == 1
+    _uid, mid, prompt, answer = stored[0]
+    assert prompt == "вопрос" and answer == "ответ"
+    assert mid == response.json()["message_id"]  # тот же id уходит клиенту
+
+
+async def test_chat_recent_returns_stored_answers(client, monkeypatch):
+    async def _recent(user_id):
+        return [{"id": "m1", "prompt": "q", "answer": "a"}]
+
+    monkeypatch.setattr(chat, "get_recent_answers", _recent)
+
+    response = await client.get("/api/chat/recent")
+
+    assert response.status_code == 200
+    assert response.json() == [{"id": "m1", "prompt": "q", "answer": "a"}]
 
 
 async def test_chat_delivers_to_bot_when_client_disconnected(client, monkeypatch):
