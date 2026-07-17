@@ -169,6 +169,16 @@ def _stub_referral_after_commit(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _stub_media_delivery(monkeypatch):
+    # _deliver_media_result_after_commit шлёт в Telegram и открывает свою сессию --
+    # в юнит-тестах no-op; отдельный тест проверяет, что вызов происходит.
+    async def _noop(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(mgs, "_deliver_media_result_after_commit", _noop)
+
+
+@pytest.fixture(autouse=True)
 def fal(monkeypatch):
     fake = FakeFalClient()
     monkeypatch.setattr(mgs, "FalClient", fake)
@@ -574,6 +584,44 @@ async def test_webhook_ok_settles_and_stores_result_url(session, fake_redis, fal
     # actual == reserved -> settle без корректирующей транзакции (штатный путь)
     assert await _tx_types(session) == [CreditTxType.reserve]
     assert fake_redis.deleted == [f"ai_lock:{user.id}"]
+
+
+async def test_webhook_ok_delivers_result_to_bot(session, fake_redis, fal, monkeypatch):
+    """Успешный вебхук доставляет результат в бот (главная защита от потери:
+    работает, даже если Mini App закрыт). Проверяем, что оркестратор вызван
+    ровно раз с (user_id, category, result_url, prompt_preview)."""
+    calls = []
+
+    async def _capture(user_id, category, result_url, prompt_preview):
+        calls.append((user_id, category, result_url, prompt_preview))
+
+    monkeypatch.setattr(mgs, "_deliver_media_result_after_commit", _capture)
+
+    user = await _seed(session, _image_model())
+    request = await start_media_generation(session, user, "img", "a bear")
+
+    await handle_fal_webhook(session, _ok_payload())
+    # повторная доставка (идемпотентность) -- второй раз НЕ шлём
+    await handle_fal_webhook(session, _ok_payload())
+
+    assert calls == [(user.id, ModelCategory.image, "https://cdn.fal.media/out.png", "a bear")]
+
+
+async def test_webhook_error_does_not_deliver(session, fake_redis, fal, monkeypatch):
+    calls = []
+
+    async def _capture(*args):
+        calls.append(args)
+
+    monkeypatch.setattr(mgs, "_deliver_media_result_after_commit", _capture)
+    user = await _seed(session, _image_model())
+    await start_media_generation(session, user, "img", "boom")
+
+    await handle_fal_webhook(
+        session, {"request_id": "fal-req-1", "status": "ERROR", "error": "boom"}
+    )
+
+    assert calls == []
 
 
 # --- Task 3: реферальный бонус по успешному вебхуку ---

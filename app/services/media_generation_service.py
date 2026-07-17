@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.enums import ModelCategory, ModelOptionKind, RequestStatus
 from app.db.models import AIRequest, AiModel, ModelOption, User
+from app.db.session import get_session
 from app.redis_client import redis_client
 from app.services.ai.base import AIError
 from app.services.ai.fal_client import FalClient, extract_result_url
@@ -46,6 +47,7 @@ from app.services.pricing import (
     calculate_video_api_cost_usd,
     calculate_video_credits,
 )
+from app.services.notification_service import send_media_result
 from app.services.referral_service import grant_referral_bonus_after_commit
 
 logger = logging.getLogger(__name__)
@@ -313,6 +315,9 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> bool:
     result_payload = payload.get("payload") or {}
     lock_key = f"ai_lock:{request.user_id}"
     should_grant_bonus = False
+    # Данные для доставки результата в бот -- захватываем ДО commit'а (после
+    # commit атрибуты request истекают, а ленивый refresh в async упадёт).
+    delivery: tuple[int, ModelCategory, str, str] | None = None
 
     if status == "OK":
         result_url = extract_result_url(result_payload)
@@ -348,6 +353,10 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> bool:
                 # Бонус -- только при успешном settle, и в ОТДЕЛЬНОЙ транзакции
                 # ПОСЛЕ commit (см. ниже): иначе deadlock взаимных рефералов (I4).
                 should_grant_bonus = True
+                # Доставка в бот -- только на этой ветке (успех + есть result_url)
+                # и только под claim'ом (rowcount!=0), поэтому шлётся РОВНО раз:
+                # повторный вебхук получает rowcount=0 и сюда не доходит.
+                delivery = (request.user_id, request.category, result_url, request.prompt_preview)
             await session.commit()
         finally:
             await redis_client.delete(lock_key)
@@ -381,7 +390,26 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> bool:
 
     if should_grant_bonus:
         await grant_referral_bonus_after_commit(request.user_id)
+    if delivery is not None:
+        await _deliver_media_result_after_commit(*delivery)
     return True
+
+
+async def _deliver_media_result_after_commit(
+    user_id: int, category: ModelCategory, result_url: str, prompt_preview: str
+) -> None:
+    """Шлёт результат в бот ПОСЛЕ commit'а settle (как и реф-бонус). Своя
+    короткая сессия только за telegram_id; never-raise -- сбой доставки не
+    должен откатывать уже успешное списание."""
+    try:
+        async with get_session() as s:
+            telegram_id = (
+                await s.execute(select(User.telegram_id).where(User.id == user_id))
+            ).scalar_one_or_none()
+        if telegram_id is not None:
+            await send_media_result(telegram_id, category, result_url, prompt_preview)
+    except Exception:  # noqa: BLE001 -- доставка не должна ронять успешную генерацию
+        logger.warning("media result delivery failed for user_id=%s", user_id, exc_info=True)
 
 
 async def refund_stale_reserved_requests(
