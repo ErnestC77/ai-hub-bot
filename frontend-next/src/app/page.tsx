@@ -163,10 +163,10 @@ export default function Home() {
                     <ModelCard
                       key={model.code}
                       title={title}
+                      brand={brand}
                       tag={tag}
                       tagClass={TAG_CLASSES[model.category]}
                       gradient={gradient}
-                      previewUrl={model.preview_url}
                       onClick={() => openModel(model)}
                     />
                   );
