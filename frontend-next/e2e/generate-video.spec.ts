@@ -24,6 +24,8 @@ test("generates a video end to end", async ({ page }) => {
           tier: "standard",
           min_credits: 51,
           recommended_credits: 51,
+
+          min_charge_credits: 51,
           options: [
             { kind: "duration", code: "8s", label: "8 сек", credits_multiplier: 1, is_default: true, sort_order: 10 },
           ],
@@ -87,6 +89,8 @@ test("рисует только те секции, которые есть у м
           tier: "standard",
           min_credits: 3220,
           recommended_credits: 3220,
+
+          min_charge_credits: 3220,
           options: [
             { kind: "duration", code: "5s", label: "5 сек", credits_multiplier: 1, is_default: true, sort_order: 10 },
             { kind: "duration", code: "10s", label: "10 сек", credits_multiplier: 2, is_default: false, sort_order: 20 },
@@ -115,6 +119,8 @@ test("смена опции меняет цену в CTA", async ({ page }) => {
           tier: "standard",
           min_credits: 3220,
           recommended_credits: 3220,
+
+          min_charge_credits: 3220,
           options: [
             { kind: "duration", code: "5s", label: "5 сек", credits_multiplier: 1, is_default: true, sort_order: 10 },
             { kind: "duration", code: "10s", label: "10 сек", credits_multiplier: 2, is_default: false, sort_order: 20 },
@@ -141,6 +147,8 @@ test("шлёт коды выбранных опций, а не сырые зна
           tier: "standard",
           min_credits: 3220,
           recommended_credits: 3220,
+
+          min_charge_credits: 3220,
           options: [
             { kind: "duration", code: "5s", label: "5 сек", credits_multiplier: 1, is_default: true, sort_order: 10 },
             { kind: "duration", code: "10s", label: "10 сек", credits_multiplier: 2, is_default: false, sort_order: 20 },
@@ -196,6 +204,8 @@ test("модель без опций -- ни одной секции", async ({ 
           tier: "economy",
           min_credits: 500,
           recommended_credits: 500,
+
+          min_charge_credits: 500,
           options: [],
         },
       ],
