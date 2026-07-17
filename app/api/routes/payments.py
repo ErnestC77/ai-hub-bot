@@ -6,9 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_user, get_db
-from app.db.enums import PaymentProvider
-from app.db.models import CreditPackage, Payment, User
+from app.db.enums import ModelCategory, PaymentProvider
+from app.db.models import AiModel, CreditPackage, Payment, User
 from app.services.payments import GATEWAYS
+from app.services.pricing import VIDEO_MIN_CREDITS
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,11 @@ class CreditPackageOut(BaseModel):
     credits: int
     price_rub: float
     price_stars: int
+    # «Примерно на сколько хватит»: по самой дешёвой активной фото/видео-модели
+    # каталога (оптимистичный потолок -> на фронте формулируем «до N»). 0, если
+    # моделей такой категории нет.
+    approx_photos: int
+    approx_videos: int
 
 
 class CreateCreditPaymentRequest(BaseModel):
@@ -47,6 +53,24 @@ class PaymentHistoryItem(BaseModel):
     created_at: str
 
 
+async def _cheapest_media_costs(session: AsyncSession) -> tuple[int, int]:
+    """Мин. стоимость одной генерации в кредитах для фото и видео по каталогу.
+    Фото: пол = min_credits модели; видео: пол = max(min_credits, VIDEO_MIN_CREDITS).
+    0, если моделей категории нет."""
+    rows = (
+        await session.execute(
+            select(AiModel.category, AiModel.min_credits).where(
+                AiModel.is_active.is_(True),
+                AiModel.is_visible.is_(True),
+                AiModel.category.in_((ModelCategory.image, ModelCategory.video)),
+            )
+        )
+    ).all()
+    photos = [m for c, m in rows if c == ModelCategory.image]
+    videos = [max(m, VIDEO_MIN_CREDITS) for c, m in rows if c == ModelCategory.video]
+    return (min(photos) if photos else 0), (min(videos) if videos else 0)
+
+
 @router.get("/credits/packages", response_model=list[CreditPackageOut])
 async def get_credit_packages(session: AsyncSession = Depends(get_db)) -> list[CreditPackageOut]:
     packages = (
@@ -56,10 +80,13 @@ async def get_credit_packages(session: AsyncSession = Depends(get_db)) -> list[C
             .order_by(CreditPackage.price_rub)
         )
     ).scalars().all()
+    photo_cost, video_cost = await _cheapest_media_costs(session)
     return [
         CreditPackageOut(
             code=p.code, title=p.title, credits=p.credits,
             price_rub=float(p.price_rub), price_stars=p.price_stars,
+            approx_photos=(p.credits // photo_cost) if photo_cost else 0,
+            approx_videos=(p.credits // video_cost) if video_cost else 0,
         )
         for p in packages
     ]

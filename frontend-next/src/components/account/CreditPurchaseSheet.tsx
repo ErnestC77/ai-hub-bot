@@ -110,10 +110,16 @@ export default function CreditPurchaseSheet({ onClose }: Props) {
               className="glass press-scale flex w-full items-center gap-3 rounded-[18px] p-[15px] text-left"
             >
               <div className="flex-1">
-                <div className="text-[14.5px] font-semibold">{pkg.name}</div>
+                <div className="text-[14.5px] font-semibold">{pkg.title}</div>
                 <div className="mt-0.5 text-[11px] text-foreground-dim">
                   💎 {pkg.credits} кредитов · ⭐ {pkg.price_stars}
                 </div>
+                {(pkg.approx_photos > 0 || pkg.approx_videos > 0) && (
+                  <div className="mt-1 text-[10.5px] text-foreground-muted">
+                    ≈ до {pkg.approx_photos} фото
+                    {pkg.approx_videos > 0 && ` · ${pkg.approx_videos} видео`}
+                  </div>
+                )}
               </div>
               <span className="rounded-full bg-[image:var(--brand-gradient)] px-[15px] py-2 text-[12.5px] font-bold text-white shadow-glow">
                 {pkg.price_rub}₽
@@ -130,7 +136,7 @@ export default function CreditPurchaseSheet({ onClose }: Props) {
       {stage === "choose-method" && selected && (
         <div className="flex flex-col gap-3 px-4 pb-6 pt-2">
           <div className="px-1 text-[10px] uppercase tracking-[0.08em] text-foreground-dim">
-            Оплата: {selected.name}
+            Оплата: {selected.title}
           </div>
           <button
             type="button"
