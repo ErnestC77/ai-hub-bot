@@ -20,6 +20,9 @@ export function useDragScroll(ref: RefObject<HTMLElement | null>) {
       if (e.pointerType !== "mouse" || e.button !== 0) return; // тач/перо -> нативный скролл
       const el = ref.current;
       if (!el) return;
+      // Захват указателя: drag продолжается, даже когда мышь уходит за границы
+      // контейнера (иначе pointerleave обрывал перетаскивание на краю).
+      e.currentTarget.setPointerCapture?.(e.pointerId);
       state.current = { down: true, startX: e.clientX, startScroll: el.scrollLeft, moved: false };
     },
     [ref],

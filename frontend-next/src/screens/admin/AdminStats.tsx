@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { adminApi, type AdminStatsOut } from "@/api/client";
+import { Button } from "@/components/ui/button";
 import { Cell } from "@/components/ui/cell";
 import { List } from "@/components/ui/list";
 import { Placeholder } from "@/components/ui/placeholder";
@@ -11,10 +12,34 @@ import { Spinner } from "@/components/ui/spinner";
 
 export default function AdminStats() {
   const [stats, setStats] = useState<AdminStatsOut | null>(null);
+  const [error, setError] = useState(false);
+
+  // setState только в async-колбэках (.then/.catch) — синхронных ресетов
+  // в эффекте нет (react-hooks/set-state-in-effect).
+  const load = useCallback(() => {
+    adminApi
+      .stats()
+      .then(setStats)
+      .catch(() => setError(true));
+  }, []);
 
   useEffect(() => {
-    adminApi.stats().then(setStats).catch(() => setStats(null));
-  }, []);
+    load();
+  }, [load]);
+
+  function retry() {
+    setError(false);
+    setStats(null);
+    load();
+  }
+
+  if (error) {
+    return (
+      <Placeholder header="Не удалось загрузить статистику" description="Проверьте соединение и попробуйте ещё раз.">
+        <Button onClick={retry}>Повторить</Button>
+      </Placeholder>
+    );
+  }
 
   if (stats === null) {
     return (
