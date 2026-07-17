@@ -188,6 +188,7 @@ async def real_service(db_sessionmaker, monkeypatch):
             display_name="IMG", provider_model_id="fal-ai/flux/dev",
             tier=ModelTier.standard, cost_unit=CostUnit.image,
             min_credits=0, recommended_credits=100,
+            free_tier_allowed=True,  # юзер без покупок -> иначе гейт free-тарифа даст 403
         ))
         await s.commit()
     return fal

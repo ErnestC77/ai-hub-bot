@@ -27,8 +27,14 @@ SETTINGS_ROWS = [
          description="Rate limit запросов на модель (глобально)"),
     dict(key="duplicate_cooldown_seconds", value="5", type="int",
          description="Окно блокировки повторного идентичного запроса"),
-    dict(key="free_tier_credit_cap", value="100", type="int",
+    # Потолок обязан вмещать welcome_bonus_credits, иначе подарок недодаётся:
+    # при cap < подарка остаток баланса виден, но не тратится (страж --
+    # test_free_tier_cap_fits_welcome_bonus).
+    dict(key="free_tier_credit_cap", value="220", type="int",
          description="Максимум бесплатных кредитов для непокупавших пользователей"),
+    # --- welcome bonus ---
+    dict(key="welcome_bonus_credits", value="220", type="int",
+         description="Кредиты новому пользователю при первом входе (0 = выключено)"),
     # --- referral bonus (фаза 6) ---
     dict(key="referral_bonus_referrer_credits", value="20", type="int",
          description="Бонус пригласившему за друга, сделавшего первый запрос"),
@@ -120,7 +126,8 @@ AI_MODELS = [
     dict(**_MEDIA, category=ModelCategory.image, code="qwen_image", display_name="Qwen Image",
          tier=ModelTier.economy, cost_unit=CostUnit.megapixel,
          provider_model_id="fal-ai/qwen-image",
-         min_credits=29, recommended_credits=29, fixed_cost_usd=0.0221, sort_order=130),
+         min_credits=29, recommended_credits=29, fixed_cost_usd=0.0221, sort_order=130,
+         free_tier_allowed=True),  # единственная фото-модель бесплатного тарифа
     # v3 депрецирован fal; 2K/4K (image_size=auto_2K/auto_4K) есть только у v4.
     dict(**_MEDIA, category=ModelCategory.image, code="seedream", display_name="Seedream",
          tier=ModelTier.standard, cost_unit=CostUnit.image,
