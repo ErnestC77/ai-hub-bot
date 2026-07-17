@@ -188,8 +188,9 @@ function ChatScreen() {
           <div className="min-w-0 flex-1">
             <Textarea
               data-testid="chat-input"
-              rows={1}
+              rows={3}
               placeholder="Сообщение…"
+              className="max-h-[160px] min-h-[76px] resize-none"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
             />

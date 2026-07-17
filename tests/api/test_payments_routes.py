@@ -112,6 +112,8 @@ async def test_packages_returns_active_only_from_db(client):
     assert [p["code"] for p in body] == ["start", "basic"]  # inactive скрыт, сортировка по цене
     assert body[0] == {
         "code": "start", "title": "START", "credits": 1000, "price_rub": 149.0, "price_stars": 75,
+        # медиа-моделей в тестовой БД нет -> оценки 0
+        "approx_photos": 0, "approx_videos": 0,
     }
 
 

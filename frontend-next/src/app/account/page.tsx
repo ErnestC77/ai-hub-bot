@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Placeholder } from "@/components/ui/placeholder";
-import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type ReferralOut } from "@/api/client";
 import { useMe } from "@/context/MeContext";
+import { openTelegramLink } from "@/lib/telegram";
 import CreditPurchaseSheet from "@/components/account/CreditPurchaseSheet";
 
 const CAPS_LABEL = "px-1 pb-2 text-[10px] uppercase tracking-[0.08em] text-foreground-dim";
+const SUPPORT_USERNAME = process.env.NEXT_PUBLIC_SUPPORT_USERNAME as string | undefined;
 
 export default function MyAccount() {
   const { me, loading } = useMe();
@@ -37,8 +38,6 @@ export default function MyAccount() {
 
   // Антифрод-гейт фазы 5: video и ultra-модели недоступны до первой покупки.
   const isTrial = me.total_credits_purchased === 0;
-  const spentPct =
-    me.total_credits_purchased > 0 ? Math.min(100, (me.total_credits_spent / me.total_credits_purchased) * 100) : 0;
 
   return (
     <div className="fade-in p-4">
@@ -46,7 +45,7 @@ export default function MyAccount() {
         @{me.username ?? me.first_name ?? me.telegram_id}
       </h2>
 
-      {/* Карточка кредитов (в макете — «Текущий тариф», планов нет: показываем кредиты) */}
+      {/* Карточка баланса кредитов (планов/тарифов нет -- без прогресса-меры). */}
       <div className="glass relative mb-3.5 overflow-hidden rounded-[20px] p-[17px]">
         <div className="absolute inset-x-0 top-0 h-[3px] bg-[image:var(--brand-gradient)]" />
         <div className="text-[10px] uppercase tracking-[0.1em] text-foreground-muted">Баланс</div>
@@ -58,16 +57,10 @@ export default function MyAccount() {
           <span className="text-foreground-muted">Куплено всего</span>
           <span data-testid="account-purchased">{me.total_credits_purchased}</span>
         </div>
-        <div className="mb-1.5 flex justify-between text-xs">
+        <div className="flex justify-between text-xs">
           <span className="text-foreground-muted">Потрачено всего</span>
           <span data-testid="account-spent">{me.total_credits_spent}</span>
         </div>
-
-        <div className="mb-1.5 mt-2.5 flex justify-between text-xs">
-          <span className="text-foreground-muted">Израсходовано</span>
-          <span>{Math.round(spentPct)}%</span>
-        </div>
-        <Progress value={spentPct} />
 
         {me.default_model_code && (
           <div className="mt-3 flex flex-wrap gap-1.5 text-[10.5px]">
@@ -142,10 +135,23 @@ export default function MyAccount() {
           </button>
           <button
             type="button"
+            data-testid="account-support"
+            onClick={() =>
+              SUPPORT_USERNAME
+                ? openTelegramLink(`https://t.me/${SUPPORT_USERNAME}`)
+                : router.push("/settings")
+            }
+            className="press-scale flex w-full items-center justify-between border-b border-white/[0.07] px-[15px] py-[13px] text-left text-[13px]"
+          >
+            <span>💬 Написать в поддержку</span>
+            <span className="text-foreground-dim">›</span>
+          </button>
+          <button
+            type="button"
             onClick={() => router.push("/settings")}
             className="press-scale flex w-full items-center justify-between border-b border-white/[0.07] px-[15px] py-[13px] text-left text-[13px] last:border-b-0"
           >
-            <span>⚙️ Настройки и поддержка</span>
+            <span>⚙️ Настройки</span>
             <span className="text-foreground-dim">›</span>
           </button>
           {me.is_admin && (

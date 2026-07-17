@@ -146,10 +146,13 @@ export interface BannerOut {
 
 export interface CreditPackageOut {
   code: string;
-  name: string;
+  title: string;
   credits: number;
   price_rub: number;
   price_stars: number;
+  /** «Примерно на сколько хватит» -- до N фото / M видео по самой дешёвой модели. */
+  approx_photos: number;
+  approx_videos: number;
 }
 
 export const api = {
