@@ -188,6 +188,9 @@ def _image_model(code="img", *, cost_unit=CostUnit.image, recommended=100,
         display_name=code, provider_model_id=f"fal-ai/{code}", tier=ModelTier.standard,
         cost_unit=cost_unit, min_credits=min_credits, recommended_credits=recommended,
         fixed_cost_usd=fixed_cost_usd, provider_model_id_edit=provider_model_id_edit,
+        # Тесты гоняют непокупавших юзеров: без флага бесплатного тарифа гейт
+        # check_tier_allowed отвергнет фото раньше проверяемой здесь логики.
+        free_tier_allowed=True,
     )
 
 

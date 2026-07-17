@@ -97,13 +97,17 @@ def _user(*, purchased=0, spent=0) -> User:
     )
 
 
-def _model(*, category=ModelCategory.text, tier=ModelTier.economy) -> AiModel:
+def _model(*, category=ModelCategory.text, tier=ModelTier.economy, free_tier=False) -> AiModel:
     cost_unit = CostUnit.tokens if category == ModelCategory.text else CostUnit.image
     provider = ModelProvider.openrouter if category == ModelCategory.text else ModelProvider.fal
     return AiModel(
         provider=provider, category=category, code="m", display_name="m",
         provider_model_id="x/m", tier=tier, cost_unit=cost_unit,
         min_credits=0, recommended_credits=1,
+        # Задаём явно: у transient-объекта незаданный столбец равен None, а не
+        # False (default применяется только на flush) -- без этого «модель не
+        # бесплатного тарифа» и «модель, о которой мы не спросили» неразличимы.
+        free_tier_allowed=free_tier,
     )
 
 
@@ -236,8 +240,24 @@ async def test_tier_blocks_video_and_ultra_for_non_payers():
 
 async def test_tier_allows_everything_else(fake_redis):
     await check_tier_allowed(_user(purchased=0), _model())  # text economy
-    await check_tier_allowed(_user(purchased=0), _model(category=ModelCategory.image))
     await check_tier_allowed(_user(purchased=1), _model(category=ModelCategory.video))
+
+
+async def test_tier_blocks_paid_image_models_for_non_payers():
+    # Welcome-кредиты рассчитаны на 5 генераций дешёвой модели; без этого гейта
+    # их можно спустить на 3-4 дорогих, удвоив себестоимость новичка.
+    with pytest.raises(TierNotAllowedError):
+        await check_tier_allowed(_user(purchased=0), _model(category=ModelCategory.image))
+
+
+async def test_tier_allows_free_tier_image_for_non_payers():
+    await check_tier_allowed(
+        _user(purchased=0), _model(category=ModelCategory.image, free_tier=True)
+    )
+
+
+async def test_tier_allows_any_image_after_purchase():
+    await check_tier_allowed(_user(purchased=1), _model(category=ModelCategory.image))
     await check_tier_allowed(_user(purchased=1), _model(tier=ModelTier.ultra))
 
 

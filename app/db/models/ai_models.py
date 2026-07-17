@@ -33,6 +33,10 @@ class AiModel(Base, TimestampMixin):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Доступна ли модель до первой покупки пакета (бесплатный тариф). Флаг ставит
+    # админ: правило «самая дешёвая по min_credits» вычислялось бы само и при
+    # переоценке каталога молча дарило бы бесплатный тариф другой модели.
+    free_tier_allowed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     # Код резервной модели той же категории (без FK: существование fallback-модели

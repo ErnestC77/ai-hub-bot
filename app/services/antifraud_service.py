@@ -148,6 +148,13 @@ async def check_tier_allowed(user: User, model: AiModel) -> None:
             f"model {model.code} requires a purchase "
             f"(category={model.category.value}, tier={model.tier.value})"
         )
+    # Фото на welcome-кредиты -- только на моделях бесплатного тарифа. Иначе
+    # подаренных 220 хватает на 3-4 генерации дорогой модели вместо обещанных
+    # 5 дешёвых, и себестоимость новичка растёт вдвое.
+    if model.category == ModelCategory.image and not model.free_tier_allowed:
+        raise TierNotAllowedError(
+            f"image model {model.code} requires a purchase (free tier is limited)"
+        )
 
 
 async def check_free_tier_cap(

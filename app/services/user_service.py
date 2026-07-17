@@ -3,7 +3,31 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.db.enums import CreditTxType
 from app.db.models import User
+from app.services.credit_service import grant_credits
+from app.services.settings_service import get_setting
+
+
+async def _grant_welcome_bonus(session: AsyncSession, user_id: int) -> None:
+    """Приветственные кредиты новичку. Тихий no-op при welcome_bonus_credits=0.
+
+    Начисляем ТОЛЬКО на ветке реального создания строки, поэтому повторные
+    входы (и проигравший гонку первого входа) бонус не получают -- второй
+    подарок тому же telegram_id невозможен без второй строки в users.
+
+    tx_type=welcome_bonus, а не purchase: иначе grant_credits поднял бы
+    total_credits_purchased, и подарок открыл бы видео/ultra и снял free-cap
+    (см. antifraud_service.check_tier_allowed).
+    """
+    amount = await get_setting(session, "welcome_bonus_credits", cast=int, default=0)
+    if amount <= 0:
+        return
+    await grant_credits(
+        session, user_id, amount,
+        reason="welcome bonus", tx_type=CreditTxType.welcome_bonus,
+    )
+    await session.commit()
 
 
 async def get_or_create_user(
@@ -28,6 +52,7 @@ async def get_or_create_user(
         session.add(user)
         try:
             await session.commit()
+            await _grant_welcome_bonus(session, user.id)
             return user
         except IntegrityError:
             # Гонка первого входа: webapp открылась и /start пришёл одновременно ->
