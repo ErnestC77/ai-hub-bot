@@ -20,9 +20,10 @@ export function useDragScroll(ref: RefObject<HTMLElement | null>) {
       if (e.pointerType !== "mouse" || e.button !== 0) return; // тач/перо -> нативный скролл
       const el = ref.current;
       if (!el) return;
-      // Захват указателя: drag продолжается, даже когда мышь уходит за границы
-      // контейнера (иначе pointerleave обрывал перетаскивание на краю).
-      e.currentTarget.setPointerCapture?.(e.pointerId);
+      // ВАЖНО: захват указателя здесь НЕ делаем. setPointerCapture на pointerdown
+      // уводит последующий pointerup контейнеру, и браузер не диспатчит click по
+      // дочерней карточке -> клики по всей карусели умирали. Захват берём в
+      // onPointerMove, только когда drag реально начался (см. ниже).
       state.current = { down: true, startX: e.clientX, startScroll: el.scrollLeft, moved: false };
     },
     [ref],
@@ -34,7 +35,13 @@ export function useDragScroll(ref: RefObject<HTMLElement | null>) {
       const s = state.current;
       if (!el || !s.down) return;
       const dx = e.clientX - s.startX;
-      if (Math.abs(dx) > 4) s.moved = true;
+      if (Math.abs(dx) > 4 && !s.moved) {
+        s.moved = true;
+        // Захват берём ТОЛЬКО когда drag действительно начался: тогда он
+        // продолжается за границей контейнера, а простой клик (без движения)
+        // сюда не попадает и click по карточке диспатчится штатно.
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      }
       el.scrollLeft = s.startScroll - dx;
     },
     [ref],
