@@ -17,6 +17,9 @@ async def fal_webhook(request: Request, secret: str = "") -> dict:
 
     payload = await request.json()
     async with get_session() as session:
-        await handle_fal_webhook(session, payload)
+        found = await handle_fal_webhook(session, payload)
 
+    if not found:
+        # request_id ещё не закоммичен (гонка) -> 404 -> fal доставит повторно.
+        raise HTTPException(status_code=404, detail="request not found")
     return {"ok": True}

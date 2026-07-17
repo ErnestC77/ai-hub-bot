@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy import func, select, update
@@ -6,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.enums import CreditTxType
 from app.db.models import Referral, User
+from app.db.session import get_session
 from app.services.credit_service import grant_credits
 from app.services.settings_service import get_setting
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -99,3 +103,23 @@ async def maybe_grant_referral_bonus(session: AsyncSession, referred_user_id: in
             reason="referral bonus (referred)", tx_type=CreditTxType.referral_bonus,
             metadata={"referral_id": referral.id, "role": "referred"},
         )
+
+
+async def grant_referral_bonus_after_commit(referred_user_id: int) -> None:
+    """Начисление бонуса в ОТДЕЛЬНОЙ транзакции ПОСЛЕ коммита основной операции.
+
+    Устраняет deadlock взаимных рефералов (аудит I4): раньше бонус шёл в той же
+    транзакции, что settle -- settle держит строку текущего юзера, а grant для
+    пригласившего лочит чужую строку, и пара A↔B, генерируя одновременно, давала
+    PG deadlock (40P01). Здесь settle уже закоммичен и блокировок не держит ->
+    пересечения нет.
+
+    Списание к этому моменту уже состоялось, бонус -- не критичный путь: ошибку
+    глушим (лог), идемпотентный claim позволит повторить позже. Своя транзакция
+    атомарна: claim+начисление либо оба, либо ни одного."""
+    try:
+        async with get_session() as session:
+            await maybe_grant_referral_bonus(session, referred_user_id)
+            await session.commit()
+    except Exception:  # noqa: BLE001 -- бонус не должен ронять уже успешную генерацию
+        logger.exception("referral bonus grant failed for referred_user_id=%s", referred_user_id)

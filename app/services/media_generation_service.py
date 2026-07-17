@@ -46,7 +46,7 @@ from app.services.pricing import (
     calculate_video_api_cost_usd,
     calculate_video_credits,
 )
-from app.services.referral_service import maybe_grant_referral_bonus
+from app.services.referral_service import grant_referral_bonus_after_commit
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +282,7 @@ async def get_generation(session: AsyncSession, user: User, request_id: int) -> 
     return request
 
 
-async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
+async def handle_fal_webhook(session: AsyncSession, payload: dict) -> bool:
     """Обрабатывает доставку fal-вебхука: {"request_id", "status": "OK"|"ERROR",
     "payload": {...}}.
 
@@ -295,7 +295,8 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
     """
     fal_request_id = payload.get("request_id")
     if not fal_request_id:
-        return
+        logger.warning("fal webhook without request_id: %r", payload)
+        return True  # мусорный payload -- ретрай не поможет, отвечаем 200
 
     request = (
         await session.execute(
@@ -303,11 +304,15 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
         )
     ).scalar_one_or_none()
     if request is None:
-        return  # неизвестный request_id -- не наш запрос
+        # provider_response_id коммитится ПОСЛЕ submit -- вебхук мог опередить
+        # commit (гонка). Возвращаем False -> роут отдаёт 404 -> fal ретраит,
+        # к моменту ретрая commit уже виден. (Backend-аудит I1.)
+        return False
 
     status = payload.get("status")
     result_payload = payload.get("payload") or {}
     lock_key = f"ai_lock:{request.user_id}"
+    should_grant_bonus = False
 
     if status == "OK":
         result_url = extract_result_url(result_payload)
@@ -317,15 +322,17 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
             .values(result_url=result_url)
         )
         if claimed.rowcount == 0:
-            return  # повторная доставка -- идемпотентный no-op
+            return True  # повторная доставка -- идемпотентный no-op
         try:
             if result_url is None:
-                # Формы успешного ответа fal подтверждены живыми вызовами 2026-07-15:
-                # image -> {"images":[{"url":...}]}, video -> {"video":{"url":...}}
-                # (обе уже разбирает fal_client.extract_result_url).
-                # Сюда попадаем, когда воркер вернул не результат, а отказ:
-                # {"detail":"Path /v2.2 not found"} или {"detail":[{...pydantic...}]}.
-                # Кредиты за недоставленный результат не списываем.
+                # extract_result_url покрывает известные формы (images[]/video{}/...).
+                # None при status=OK -- либо неизвестная форма ответа, либо воркер
+                # вернул отказ ({"detail":...}). Логируем ПОЛНЫЙ payload на error,
+                # чтобы поймать непокрытую форму и дополнить парсер (аудит I2).
+                logger.error(
+                    "fal webhook OK but no result_url extracted, model=%s payload=%r",
+                    request.model_code, result_payload,
+                )
                 request.error_message = "fal webhook: could not extract result url"
                 await refund_request(
                     session, request,
@@ -338,9 +345,9 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
                 # actual == estimated == reserved: settle_request штатно вернёт
                 # None (без корректирующей транзакции) -- см. спеку фазы 3.
                 await settle_request(session, request, request.estimated_credits)
-                # Реферальный бонус -- только в OK-ветке (запрос реально успешен),
-                # после settle, в той же транзакции, до commit.
-                await maybe_grant_referral_bonus(session, request.user_id)
+                # Бонус -- только при успешном settle, и в ОТДЕЛЬНОЙ транзакции
+                # ПОСЛЕ commit (см. ниже): иначе deadlock взаимных рефералов (I4).
+                should_grant_bonus = True
             await session.commit()
         finally:
             await redis_client.delete(lock_key)
@@ -358,7 +365,7 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
             .values(error_message=error_message)
         )
         if claimed.rowcount == 0:
-            return  # повторная доставка -- идемпотентный no-op
+            return True  # повторная доставка -- идемпотентный no-op
         try:
             await refund_request(
                 session, request, reason=f"fal error: {error_message}", final_status=RequestStatus.failed
@@ -371,6 +378,10 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> None:
         logger.warning(
             "fal webhook: unknown status %r for request_id=%s", status, fal_request_id
         )
+
+    if should_grant_bonus:
+        await grant_referral_bonus_after_commit(request.user_id)
+    return True
 
 
 async def refund_stale_reserved_requests(
