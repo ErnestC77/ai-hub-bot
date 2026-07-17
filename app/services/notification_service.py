@@ -4,6 +4,7 @@ from app.bot.instance import bot
 from app.bot.keyboards import webapp_open_kb
 from app.config import settings
 from app.db.enums import ModelCategory
+from app.services.text_format import markdown_to_plain
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,9 @@ async def send_chat_answer(telegram_id: int, question: str, answer: str) -> None
     полный текст остался в приложении.
     """
     q = question if len(question) <= 200 else question[:200] + "…"
-    body = answer
+    # Ответ модели -- markdown; в бот шлём обычным текстом, поэтому снимаем
+    # разметку, иначе ### и ** торчат сырыми (в Mini App их рендерит react-markdown).
+    body = markdown_to_plain(answer)
     suffix = ""
     limit = 3500  # запас под вопрос и подпись в пределах 4096
     if len(body) > limit:

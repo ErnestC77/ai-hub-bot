@@ -71,6 +71,21 @@ async def test_media_failure_falls_back_to_link(monkeypatch):
     assert "https://cdn/out.png" in text
 
 
+async def test_chat_answer_markdown_stripped(monkeypatch):
+    """Ответ в бот -- без сырого markdown (### и ** рендерятся только в Mini App)."""
+    bot = FakeBot()
+    monkeypatch.setattr(ns, "bot", bot)
+
+    await ns.send_chat_answer(42, "что умеешь?", "### 1. **Пункт**\n- один\n- два")
+
+    assert len(bot.messages) == 1
+    _chat_id, text = bot.messages[0]
+    assert "#" not in text
+    assert "*" not in text
+    assert "1. Пункт" in text
+    assert "• один" in text
+
+
 async def test_total_failure_is_swallowed(monkeypatch):
     """Юзер заблокировал бота: и медиа, и текст падают -> тихо, без исключения
     наружу (доставка не должна ронять уже успешную генерацию)."""
