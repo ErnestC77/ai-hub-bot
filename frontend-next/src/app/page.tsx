@@ -7,6 +7,7 @@ import { Placeholder } from "@/components/ui/placeholder";
 import { Spinner } from "@/components/ui/spinner";
 import { api, type BannerOut, type ModelOut } from "@/api/client";
 import HeroCarousel from "@/components/HeroCarousel";
+import ActionThumb from "@/components/ActionThumb";
 import ImageStack from "@/components/ImageStack";
 import ModelCard from "@/components/ModelCard";
 import DragScroll from "@/components/DragScroll";
@@ -162,10 +163,10 @@ export default function Home() {
                     <ModelCard
                       key={model.code}
                       title={title}
+                      brand={brand}
                       tag={tag}
                       tagClass={TAG_CLASSES[model.category]}
                       gradient={gradient}
-                      previewUrl={model.preview_url}
                       onClick={() => openModel(model)}
                     />
                   );
@@ -181,9 +182,11 @@ export default function Home() {
           onClick={() => router.push("/chat")}
           className="press-scale glass flex w-full items-center gap-3 rounded-[22px] p-[15px] text-left"
         >
-          <div className="flex h-12 w-11 flex-none items-center justify-center rounded-[12px] bg-[image:var(--brand-gradient)] text-[20px] shadow-[0_8px_20px_rgba(139,92,255,0.45)]">
-            💬
-          </div>
+          <ActionThumb
+            src="/actions/text.jpg"
+            gradient="var(--brand-gradient)"
+            className="h-12 w-11 flex-none rounded-[12px] shadow-[0_8px_20px_rgba(139,92,255,0.45)]"
+          />
           <div className="min-w-0 flex-1">
             <div className="text-[14.5px] font-semibold">Спросить нейросеть</div>
             <div className="mt-0.5 text-[11.5px] text-foreground-muted">
@@ -200,7 +203,7 @@ export default function Home() {
           onClick={() => router.push("/generate-image")}
           className="press-scale glass flex w-full items-center gap-3 rounded-[22px] p-[15px] text-left"
         >
-          <ImageStack />
+          <ImageStack images={["/actions/image.jpg"]} />
           <div className="min-w-0 flex-1">
             <div className="text-[14.5px] font-semibold">Сгенерировать фото</div>
             <div className="mt-0.5 text-[11.5px] text-foreground-muted">
@@ -220,9 +223,12 @@ export default function Home() {
           onClick={() => router.push("/generate-video")}
           className="press-scale glass flex w-full items-center gap-3 rounded-[22px] p-[15px] text-left"
         >
-          <div className="flex h-12 w-14 flex-none items-center justify-center rounded-[11px] border-2 border-[#140c26] bg-[image:linear-gradient(160deg,#35e0e6,#3b2b8f)]">
-            <span className="ml-[3px] inline-block border-y-[7px] border-l-[11px] border-y-transparent border-l-white/95" />
-          </div>
+          <ActionThumb
+            src="/actions/video.mp4"
+            kind="video"
+            gradient="linear-gradient(160deg,#35e0e6,#3b2b8f)"
+            className="h-12 w-14 flex-none rounded-[11px] border-2 border-[#140c26]"
+          />
           <div className="min-w-0 flex-1">
             <div className="text-[14.5px] font-semibold">Сгенерировать видео</div>
             <div className="mt-0.5 text-[11.5px] text-foreground-muted">
