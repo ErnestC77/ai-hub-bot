@@ -57,8 +57,12 @@ CREDIT_PACKAGES = [
 # них реальную себестоимость x маржу 30% (min_credits -- защитный пол).
 _TEXT = dict(provider=ModelProvider.openrouter, category=ModelCategory.text, cost_unit=CostUnit.tokens,
              fixed_cost_usd=0, max_context_tokens=128000, is_active=True, is_visible=True)
+# fixed_cost_usd задаётся ПОМОДЕЛЬНО (себестоимость провайдера для cost-телеметрии,
+# аудит pricing I3) = recommended_credits / 1314 (обратный расчёт из цены, чтобы
+# провайдерская стоимость была консистентна с прайсингом). Для video (cost_unit=
+# second) это цена за 5с; телеметрия видео пока считает по дефолтной длительности.
 _MEDIA = dict(provider=ModelProvider.fal, input_price_usd_per_1m_tokens=0, output_price_usd_per_1m_tokens=0,
-              fixed_cost_usd=0, max_context_tokens=4000, is_active=True, is_visible=True)
+              max_context_tokens=4000, is_active=True, is_visible=True)
 
 AI_MODELS = [
     # --- TEXT (OpenRouter), 12 моделей. Цены $/1M in/out с живого каталога 2026-07-16 ---
@@ -116,24 +120,24 @@ AI_MODELS = [
     dict(**_MEDIA, category=ModelCategory.image, code="qwen_image", display_name="Qwen Image",
          tier=ModelTier.economy, cost_unit=CostUnit.megapixel,
          provider_model_id="fal-ai/qwen-image",
-         min_credits=29, recommended_credits=29, sort_order=130),
+         min_credits=29, recommended_credits=29, fixed_cost_usd=0.0221, sort_order=130),
     # v3 депрецирован fal; 2K/4K (image_size=auto_2K/auto_4K) есть только у v4.
     dict(**_MEDIA, category=ModelCategory.image, code="seedream", display_name="Seedream",
          tier=ModelTier.standard, cost_unit=CostUnit.image,
          provider_model_id="fal-ai/bytedance/seedream/v4/text-to-image",
-         min_credits=43, recommended_credits=43, sort_order=140),
+         min_credits=43, recommended_credits=43, fixed_cost_usd=0.0327, sort_order=140),
     # Голый fal-ai/flux-pro/kontext -- это image-to-image, у него image_url обязателен
     # (required: ["prompt","image_url"]). Для text-to-image нужен отдельный маршрут.
     dict(**_MEDIA, category=ModelCategory.image, code="flux_kontext_pro", display_name="Flux Kontext Pro",
          tier=ModelTier.premium, cost_unit=CostUnit.image,
          provider_model_id="fal-ai/flux-pro/kontext/text-to-image",
          provider_model_id_edit="fal-ai/flux-pro/kontext",
-         min_credits=58, recommended_credits=58, sort_order=150),
+         min_credits=58, recommended_credits=58, fixed_cost_usd=0.0441, sort_order=150),
     dict(**_MEDIA, category=ModelCategory.image, code="nano_banana", display_name="Nano Banana",
          tier=ModelTier.premium, cost_unit=CostUnit.image,
          provider_model_id="fal-ai/nano-banana",
          provider_model_id_edit="fal-ai/nano-banana/edit",
-         min_credits=58, recommended_credits=58, sort_order=160),
+         min_credits=58, recommended_credits=58, fixed_cost_usd=0.0441, sort_order=160),
     # Gemini 3 Pro Image. Единственная модель каталога с настоящим селектором
     # 1K/2K/4K (resolution в схеме) -- тем самым, что рисовал дизайн-макет.
     # Измерено 2026-07-15: 1K=$0.15, 2K=$0.15 (бесплатно!), 4K=$0.30.
@@ -142,12 +146,12 @@ AI_MODELS = [
          display_name="Nano Banana Pro", tier=ModelTier.pro, cost_unit=CostUnit.image,
          provider_model_id="fal-ai/nano-banana-pro",
          provider_model_id_edit="fal-ai/nano-banana-pro/edit",
-         min_credits=198, recommended_credits=198, sort_order=165),
+         min_credits=198, recommended_credits=198, fixed_cost_usd=0.1507, sort_order=165),
     # --- VIDEO (fal.ai), 4 модели (recommended_credits -- цена за дефолтную комбинацию модели) ---
     dict(**_MEDIA, category=ModelCategory.video, code="ovi_video", display_name="Ovi Video",
          tier=ModelTier.economy, cost_unit=CostUnit.video,
          provider_model_id="fal-ai/ovi",
-         min_credits=286, recommended_credits=286, sort_order=170),
+         min_credits=286, recommended_credits=286, fixed_cost_usd=0.2177, sort_order=170),
     # Приложение -- fal-ai/wan, а v2.2-a14b/text-to-video -- маршрут внутри него.
     # Заявленный ранее fal-ai/wan/v2.2 очередь принимает, но воркер отдаёт
     # {"detail":"Path /v2.2 not found"} -- уже после резервирования кредитов.
@@ -155,20 +159,20 @@ AI_MODELS = [
          tier=ModelTier.standard, cost_unit=CostUnit.second,
          provider_model_id="fal-ai/wan/v2.2-a14b/text-to-video",
          # $0.08/с * 5.0625с (81 кадр / 16 fps) = $0.405 * 1314 -> 533; пол = 480p ($0.2025 -> 267)
-         min_credits=267, recommended_credits=533, sort_order=180),
+         min_credits=267, recommended_credits=533, fixed_cost_usd=0.4056, sort_order=180),
     # Аналогично: приложение fal-ai/kling-video, маршрут v2/master/text-to-video.
     dict(**_MEDIA, category=ModelCategory.video, code="kling_video", display_name="Kling Video",
          tier=ModelTier.premium, cost_unit=CostUnit.second,
          provider_model_id="fal-ai/kling-video/v2/master/text-to-video",
          # $1.40 за 5с (измерено списанием) * 1314 -> 1840 (было 3220 при факторе 2300).
-         min_credits=1840, recommended_credits=1840, sort_order=190),
+         min_credits=1840, recommended_credits=1840, fixed_cost_usd=1.4003, sort_order=190),
     # veo3 депрецирован; resolution=4k есть только у veo3.1.
     dict(**_MEDIA, category=ModelCategory.video, code="veo_video", display_name="Veo Video",
          tier=ModelTier.ultra, cost_unit=CostUnit.second,
          provider_model_id="fal-ai/veo3.1",
          # дефолт 8с со звуком: $0.40/с * 8 = $3.20 * 1314 -> 4206.
          # пол: 4с без звука $0.20/с * 4 = $0.80 -> 1052.
-         min_credits=1052, recommended_credits=4206, sort_order=200),
+         min_credits=1052, recommended_credits=4206, fixed_cost_usd=2.0006, sort_order=200),
 ]
 
 # Опции моделей. Каждый множитель ВЫВЕДЕН из замера живого fal 2026-07-15

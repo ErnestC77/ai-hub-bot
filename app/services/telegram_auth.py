@@ -4,7 +4,7 @@ import json
 import time
 from urllib.parse import parse_qsl
 
-MAX_INIT_DATA_AGE_SECONDS = 24 * 60 * 60
+MAX_INIT_DATA_AGE_SECONDS = 60 * 60  # 1ч (было 24ч): меньше окно replay утёкшего initData
 
 
 class InvalidInitDataError(Exception):
