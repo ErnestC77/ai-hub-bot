@@ -28,9 +28,13 @@ test("чат обновляет баланс на Home без перезагру
 
   // SPA-переход (не goto -- иначе новый mount перечитал бы мок и спрятал баг).
   await page.getByTestId("action-chat").click();
+  await expect(page.getByTestId("chat-balance")).toContainText("500");
   await page.getByTestId("chat-input").fill("привет");
   await page.getByTestId("chat-send").click();
   await expect(page.getByTestId("chat-bubble").last()).toContainText("Баланс: 497");
+
+  // Пилюля в шапке чата обновляется сразу, не выходя из диалога.
+  await expect(page.getByTestId("chat-balance")).toContainText("497");
 
   await page.getByTestId("chat-close").click();
   await expect(page.getByTestId("home-credits")).toContainText("497");
