@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 from contextlib import asynccontextmanager
 
 from aiogram.types import MenuButtonWebApp, Update, WebAppInfo
@@ -85,7 +86,8 @@ app.include_router(fal_webhook.router)
 
 @app.post("/webhook/{secret}")
 async def telegram_webhook(secret: str, request: Request) -> dict:
-    if secret != settings.webhook_secret:
+    # Пустой секрет -> fail-closed; сравнение constant-time.
+    if not settings.webhook_secret or not hmac.compare_digest(secret, settings.webhook_secret):
         raise HTTPException(status_code=404)
     update = Update.model_validate(await request.json())
     await dp.feed_update(bot, update)
