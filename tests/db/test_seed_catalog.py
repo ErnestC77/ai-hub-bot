@@ -277,7 +277,10 @@ def test_option_multipliers_follow_measured_provider_costs():
     assert by[("veo_video", ModelOptionKind.audio, "off")]["credits_multiplier"] == 0.5
     assert by[("veo_video", ModelOptionKind.duration, "4s")]["credits_multiplier"] == 0.5
     assert by[("wan_video", ModelOptionKind.quality, "480p")]["credits_multiplier"] == 0.5
-    assert by[("qwen_image", ModelOptionKind.quality, "2k")]["credits_multiplier"] == 4.0
+    # 2K-комбо наследуют замер квадрата: не-квадраты дешевле по МП (маржа выше),
+    # цена для пользователя та же.
+    assert by[("qwen_image", ModelOptionKind.quality, "2k__1_1")]["credits_multiplier"] == 4.0
+    assert by[("qwen_image", ModelOptionKind.quality, "2k__16_9")]["credits_multiplier"] == 4.0
 
 
 def test_exactly_one_default_per_model_and_kind():
@@ -311,8 +314,11 @@ def test_every_media_model_offers_frame_format():
     with_aspect_axis = {o["model_code"] for o in MODEL_OPTIONS
                         if o["kind"] == ModelOptionKind.aspect_ratio}
     format_codes = {"16_9", "9_16", "4_3", "3_4"}
-    with_quality_formats = {o["model_code"] for o in MODEL_OPTIONS
-                            if o["kind"] == ModelOptionKind.quality and o["code"] in format_codes}
+    # Матрица «размер x формат»: формат -- суффикс комбо-кода <size>__<fmt>.
+    with_quality_formats = {
+        o["model_code"] for o in MODEL_OPTIONS
+        if o["kind"] == ModelOptionKind.quality and o["code"].split("__")[-1] in format_codes
+    }
     missing = media_codes - (with_aspect_axis | with_quality_formats)
     assert not missing, f"медиа-модели без формата кадра: {missing}"
 
@@ -360,11 +366,12 @@ def test_nano_banana_pro_resolution_multipliers_match_measurements():
 def test_seedream_resolution_is_free():
     """Измерено: square_hd + auto_2K + auto_4K = ровно $0.09 на троих, т.е. $0.03
     за картинку независимо от разрешения (cost_unit=image -- плоский тариф).
-    Множители 1.0: 2K, 4K и форматные пресеты достаются пользователю даром
-    (форматы живут в этой же оси: аспект и размер -- одно поле image_size)."""
+    Вся матрица «размер x формат» x1.0: 2K/4K и любые форматы -- даром."""
     by = {o["code"]: o for o in MODEL_OPTIONS
           if o["model_code"] == "seedream" and o["kind"] == ModelOptionKind.quality}
-    assert set(by) == {"1k", "2k", "4k", "16_9", "9_16", "4_3", "3_4"}
+    expected = {f"{size}__{fmt}" for size in ("1k", "2k", "4k")
+                for fmt in ("1_1", "16_9", "9_16", "4_3", "3_4")}
+    assert set(by) == expected
     assert all(o["credits_multiplier"] == 1.0 for o in by.values())
 
 
@@ -391,11 +398,12 @@ async def test_apply_seed_inserts_options_and_is_idempotent(session):
 
 
 def test_option_migration_matches_seed_constants():
-    """Опционные миграции (bb51258925d4 -- исходный сид, e8f9a0b1c2d3 -- формат
-    кадра) в сумме должны вставлять РОВНО те же строки, что MODEL_OPTIONS: сид
-    и миграции -- два пути к одной таблице, расхождение = разные каталоги на
-    чистой и мигрированной БД. Импортируем модули миграций (а не читаем файлы
-    как текст) -- подстрока не отличает `_OPTIONS` от случайного совпадения."""
+    """Цепочка опционных миграций (bb51258925d4 сид -> e8f9a0b1c2d3 формат
+    кадра -> f9a0b1c2d3e4 матрица «размер x формат», которая ЗАМЕНЯЕТ часть
+    прежних кодов через _REPLACED) в сумме должна давать РОВНО те же строки,
+    что MODEL_OPTIONS: сид и миграции -- два пути к одной таблице, расхождение
+    = разные каталоги на чистой и мигрированной БД. Импортируем модули миграций
+    (а не читаем файлы как текст)."""
     import importlib.util, json
     from pathlib import Path
 
@@ -403,10 +411,16 @@ def test_option_migration_matches_seed_constants():
     for path in (
         Path("alembic/versions/bb51258925d4_seed_model_options.py"),
         Path("alembic/versions/e8f9a0b1c2d3_aspect_ratio_options.py"),
+        Path("alembic/versions/f9a0b1c2d3e4_size_format_matrix.py"),
     ):
         spec_ = importlib.util.spec_from_file_location(path.stem, path)
         mod = importlib.util.module_from_spec(spec_)
         spec_.loader.exec_module(mod)
+        # Миграция-замена сначала удаляет прежние коды -- повторяем это над
+        # аккумулятором, как сделал бы Postgres.
+        for (model_code, kind), codes in getattr(mod, "_REPLACED", {}).items():
+            for code in codes:
+                from_migration.pop((model_code, kind, code), None)
         for o in mod._OPTIONS:
             key = (o["model_code"], o["kind"], o["code"])
             assert key not in from_migration, f"дубль между миграциями: {key}"
