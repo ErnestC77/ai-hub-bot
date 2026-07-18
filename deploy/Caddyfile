@@ -11,6 +11,16 @@
 {$DOMAIN} {
 	encode zstd gzip
 
+	# --- Кеш статических медиа: браузер/Telegram WebView не перезапрашивают
+	# картинки и видео каждый раз. 30 дней для контент-ассетов (баннеры/тренды/
+	# карточки/логотипы -- редко меняются, при смене баннера из админки идёт
+	# новый файл). Загрузки /uploads -- по uuid-имени, значит immutable на год. ---
+	@uploads path /uploads/*
+	header @uploads Cache-Control "public, max-age=31536000, immutable"
+
+	@media path /banners/* /trends/* /actions/* /models/* /structural/*
+	header @media Cache-Control "public, max-age=2592000, stale-while-revalidate=86400"
+
 	# --- API и серверные пути -> backend ---
 	# /uploads/* обязателен: backend отдаёт загруженные фото статикой (StaticFiles),
 	# и generate-по-фото ссылается на {BACKEND_PUBLIC_URL}/uploads/... -- без этого
