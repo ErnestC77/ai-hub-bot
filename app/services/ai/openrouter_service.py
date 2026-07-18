@@ -6,7 +6,7 @@ from app.db.models import AiModel
 from app.services.ai.base import AIError, AIProvider, AIResult
 from app.services.keys.api_key_manager import get_key_manager
 from app.services.keys.enums import KeyPurpose, Provider
-from app.services.keys.exceptions import ApiKeyNotConfiguredError
+from app.services.keys.exceptions import ApiKeyNotConfiguredError, DevKeyUsedInProductionError
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +38,16 @@ _clients: dict[str, AsyncOpenAI] = {}
 
 def _fal_text_key() -> str:
     """Ключ fal для текста: FAL_TEXT_KEY, а при его отсутствии -- FAL_IMAGE_KEY
-    (тот же fal-аккаунт). Отдельный ключ нужен лишь для раздельного учёта трат."""
+    (тот же fal-аккаунт). Отдельный ключ нужен лишь для раздельного учёта трат.
+
+    Фолбэк ловит ОБЕ ошибки: TEXT-ключ не задан вовсе (ApiKeyNotConfiguredError)
+    ИЛИ для него настроен только *_DEV_KEY в prod (DevKeyUsedInProductionError --
+    на Render задан FAL_DEV_KEY, из-за чего 502 до этого фикса). Оба случая
+    означают «валидного text-ключа нет» -> откатываемся на FAL_IMAGE_KEY."""
     km = get_key_manager()
     try:
         return km.get_key(Provider.FAL, KeyPurpose.TEXT)
-    except ApiKeyNotConfiguredError:
+    except (ApiKeyNotConfiguredError, DevKeyUsedInProductionError):
         return km.get_key(Provider.FAL, KeyPurpose.IMAGE)
 
 

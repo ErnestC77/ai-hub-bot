@@ -93,3 +93,34 @@ async def test_generate_wraps_timeout_as_aierror():
     respx.post(COMPLETIONS_URL).mock(side_effect=httpx.TimeoutException("timed out"))
     with pytest.raises(AIError):
         await OpenRouterProvider().generate(_text_model(), "hi", 1000)
+
+
+def _km_text_raises(exc_factory):
+    """key manager, где TEXT-цель бросает заданную ошибку, а IMAGE отдаёт ключ."""
+    from app.services.keys.enums import KeyPurpose, Provider
+
+    class _KM:
+        def get_key(self, provider, purpose):
+            if purpose == KeyPurpose.TEXT:
+                raise exc_factory()
+            assert purpose == KeyPurpose.IMAGE
+            return "fal-image-key"
+
+    return _KM()
+
+
+def test_text_key_falls_back_to_image_when_not_configured(monkeypatch):
+    from app.services.keys.exceptions import ApiKeyNotConfiguredError
+
+    monkeypatch.setattr(openrouter_service, "get_key_manager",
+                        lambda: _km_text_raises(lambda: ApiKeyNotConfiguredError("no text key")))
+    assert openrouter_service._fal_text_key() == "fal-image-key"
+
+
+def test_text_key_falls_back_to_image_when_only_dev_key(monkeypatch):
+    # Ровно прод-случай Render: FAL_DEV_KEY есть, FAL_TEXT_KEY нет -> раньше 502.
+    from app.services.keys.exceptions import DevKeyUsedInProductionError
+
+    monkeypatch.setattr(openrouter_service, "get_key_manager",
+                        lambda: _km_text_raises(lambda: DevKeyUsedInProductionError("only dev")))
+    assert openrouter_service._fal_text_key() == "fal-image-key"
