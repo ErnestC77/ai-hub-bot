@@ -9,8 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
-import OptionPicker from "@/components/generate/OptionPicker";
-import SizeFormatPicker, { isSizeFormatCombo } from "@/components/generate/SizeFormatPicker";
+import OutputOptions from "@/components/generate/OutputOptions";
 import { defaultOptionCodes, estimatedCredits } from "@/lib/optionPricing";
 import { useMe } from "@/context/MeContext";
 import { pollGenerationResult } from "@/lib/pollGeneration";
@@ -285,30 +284,10 @@ function GenerateImageScreen() {
             ) : null}
           </div>
 
-          {/* qwen/seedream: размер и формат -- одно поле image_size у провайдера,
-              в БД полная матрица комбо-кодов; SizeFormatPicker рисует её двумя
-              рядами. Остальные модели -- обычные независимые оси. */}
-          {isSizeFormatCombo(model) ? (
-            <SizeFormatPicker
-              model={model}
-              selected={optionCodes.quality}
-              onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
-            />
-          ) : (
-            <OptionPicker
-              model={model}
-              kind="quality"
-              label="Размер"
-              selected={optionCodes.quality}
-              onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
-            />
-          )}
-          <OptionPicker
+          <OutputOptions
             model={model}
-            kind="aspect_ratio"
-            label="Формат кадра"
-            selected={optionCodes.aspect_ratio}
-            onSelect={(code) => setOptionCodes((p) => ({ ...p, aspect_ratio: code }))}
+            value={optionCodes}
+            onChange={(kind, code) => setOptionCodes((p) => ({ ...p, [kind]: code }))}
           />
 
           {generating && (

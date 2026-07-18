@@ -58,26 +58,11 @@ export default function SizeFormatPicker({ model, selected, onSelect }: Props) {
     if (picked) onSelect(picked.code);
   }
 
+  // Порядок и заголовки едины со всеми моделями (см. OutputOptions):
+  // «Формат кадра» сверху, «Разрешение» снизу. Так qwen/seedream (комбо) и
+  // flux/видео (независимые оси) выглядят одинаково.
   return (
     <>
-      <div data-testid="option-size">
-        <div className="mb-2 px-1 text-[10px] font-semibold tracking-[.08em] text-foreground-dim uppercase">
-          Размер
-        </div>
-        <SegmentedControl>
-          {sizes.map((size) => (
-            <SegmentedControl.Item
-              key={size}
-              selected={selSize === size}
-              onClick={() => pick(size, selFmt)}
-            >
-              <span className="whitespace-nowrap" data-testid={`option-size-${size}`}>
-                {sizeLabel(size)}
-              </span>
-            </SegmentedControl.Item>
-          ))}
-        </SegmentedControl>
-      </div>
       <div data-testid="option-format">
         <div className="mb-2 px-1 text-[10px] font-semibold tracking-[.08em] text-foreground-dim uppercase">
           Формат кадра
@@ -99,6 +84,24 @@ export default function SizeFormatPicker({ model, selected, onSelect }: Props) {
             </SegmentedControl>
           </div>
         </div>
+      </div>
+      <div data-testid="option-size">
+        <div className="mb-2 px-1 text-[10px] font-semibold tracking-[.08em] text-foreground-dim uppercase">
+          Разрешение
+        </div>
+        <SegmentedControl>
+          {sizes.map((size) => (
+            <SegmentedControl.Item
+              key={size}
+              selected={selSize === size}
+              onClick={() => pick(size, selFmt)}
+            >
+              <span className="whitespace-nowrap" data-testid={`option-size-${size}`}>
+                {sizeLabel(size)}
+              </span>
+            </SegmentedControl.Item>
+          ))}
+        </SegmentedControl>
       </div>
     </>
   );

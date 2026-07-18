@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
-import OptionPicker from "@/components/generate/OptionPicker";
+import OutputOptions from "@/components/generate/OutputOptions";
 import { defaultOptionCodes, estimatedCredits } from "@/lib/optionPricing";
 import { haptic } from "@/lib/telegram";
 import { pollGenerationResult, POLL_ATTEMPTS_VIDEO } from "@/lib/pollGeneration";
@@ -258,33 +258,10 @@ function GenerateVideoScreen() {
             ) : null}
           </div>
 
-          <OptionPicker
+          <OutputOptions
             model={model}
-            kind="quality"
-            label="Качество"
-            selected={optionCodes.quality}
-            onSelect={(code) => setOptionCodes((p) => ({ ...p, quality: code }))}
-          />
-          <OptionPicker
-            model={model}
-            kind="aspect_ratio"
-            label="Формат кадра"
-            selected={optionCodes.aspect_ratio}
-            onSelect={(code) => setOptionCodes((p) => ({ ...p, aspect_ratio: code }))}
-          />
-          <OptionPicker
-            model={model}
-            kind="duration"
-            label="Длительность"
-            selected={optionCodes.duration}
-            onSelect={(code) => setOptionCodes((p) => ({ ...p, duration: code }))}
-          />
-          <OptionPicker
-            model={model}
-            kind="audio"
-            label="Звук"
-            selected={optionCodes.audio}
-            onSelect={(code) => setOptionCodes((p) => ({ ...p, audio: code }))}
+            value={optionCodes}
+            onChange={(kind, code) => setOptionCodes((p) => ({ ...p, [kind]: code }))}
           />
 
           {pendingConfirmation && (
