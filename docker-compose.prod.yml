@@ -1,0 +1,103 @@
+# Прод-стек для собственного сервера (Selectel/Hetzner): backend + worker +
+# postgres + redis + frontend + Caddy (авто-HTTPS + reverse-proxy).
+#
+# Наружу торчит ТОЛЬКО Caddy (80/443). Backend/frontend/postgres/redis доступны
+# лишь внутри compose-сети. Единый домен: Caddy отдаёт фронт и проксирует /api,
+# /webhooks, /health на backend -> фронт и API same-origin, CORS не нужен.
+#
+# Запуск:  cp .env.prod.example .env  (заполнить)  &&  docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  backend:
+    build: .
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file: [.env]
+    # Telegram API заблокирован по DNS у РФ-хостеров (Selectel подменяет
+    # api.telegram.org на заглушку), но сам IP Bot API живой -> прописываем
+    # напрямую, минуя резолвинг. Тот же приём, что в других РФ-проектах.
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
+    volumes:
+      # Загруженные фото (StaticFiles /uploads) должны пережить рестарт контейнера.
+      - uploads_data:/srv/uploads
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: python -m app.worker
+    env_file: [.env]
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
+    depends_on:
+      backend:
+        # entrypoint гоняет alembic на старте каждого контейнера; ждём backend,
+        # чтобы миграции накатил ОДИН процесс (иначе гонка на чистой БД).
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend-next
+      args:
+        # Пусто -> фронт бьёт на API относительным путём (same-origin через Caddy).
+        NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_SUPPORT_USERNAME: ${SUPPORT_USERNAME:-}
+    restart: unless-stopped
+    expose: ["3000"]
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_bot}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_bot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_bot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN обязателен (напр. 139-100-x-x.sslip.io или ваш домен)}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend: {condition: service_healthy}
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:

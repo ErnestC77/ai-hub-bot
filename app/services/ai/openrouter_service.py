@@ -6,10 +6,16 @@ from app.db.models import AiModel
 from app.services.ai.base import AIError, AIProvider, AIResult
 from app.services.keys.api_key_manager import get_key_manager
 from app.services.keys.enums import KeyPurpose, Provider
+from app.services.keys.exceptions import ApiKeyNotConfiguredError
 
 logger = logging.getLogger(__name__)
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# Текст идёт через fal LLM router (OpenAI-совместимый, синхронный), а НЕ через
+# прямой openrouter.ai: fal проксирует те же модели OpenRouter со своих не-РФ
+# серверов, поэтому доступен из РФ (прямой OpenRouter Cloudflare режет по гео).
+# provider_model_id остаются в openrouter-формате (deepseek/deepseek-chat,
+# anthropic/claude-opus-4.8, ...) -- router понимает их as-is.
+FAL_ROUTER_BASE_URL = "https://fal.run/openrouter/router/openai/v1"
 
 # Системный промпт: без него модель без языкового контекста угадывает язык по
 # вводу, и на неоднозначном (голые цифры «133», символы) DeepSeek -- китайская
@@ -30,20 +36,35 @@ OPENROUTER_TIMEOUT_SECONDS = 110.0
 _clients: dict[str, AsyncOpenAI] = {}
 
 
+def _fal_text_key() -> str:
+    """Ключ fal для текста: FAL_TEXT_KEY, а при его отсутствии -- FAL_IMAGE_KEY
+    (тот же fal-аккаунт). Отдельный ключ нужен лишь для раздельного учёта трат."""
+    km = get_key_manager()
+    try:
+        return km.get_key(Provider.FAL, KeyPurpose.TEXT)
+    except ApiKeyNotConfiguredError:
+        return km.get_key(Provider.FAL, KeyPurpose.IMAGE)
+
+
 def _get_client() -> AsyncOpenAI:
-    api_key = get_key_manager().get_key(Provider.OPENROUTER, KeyPurpose.TEXT)
-    client = _clients.get(api_key)
+    key = _fal_text_key()
+    client = _clients.get(key)
     if client is None:
         client = AsyncOpenAI(
-            api_key=api_key, base_url=OPENROUTER_BASE_URL, timeout=OPENROUTER_TIMEOUT_SECONDS
+            # api_key обязателен конструктору, но fal ждёт схему "Key <...>", а не
+            # "Bearer", поэтому реальную авторизацию задаём через default_headers.
+            api_key=key,
+            base_url=FAL_ROUTER_BASE_URL,
+            timeout=OPENROUTER_TIMEOUT_SECONDS,
+            default_headers={"Authorization": f"Key {key}"},
         )
-        _clients[api_key] = client
+        _clients[key] = client
     return client
 
 
 class OpenRouterProvider(AIProvider):
-    """OpenRouter даёт OpenAI-совместимый chat-completions API (тот же паттерн,
-    что был у DeepSeekProvider). Единственный текстовый провайдер с фазы 2."""
+    """Текстовый провайдер: OpenAI-совместимый chat-completions через fal LLM
+    router (fal.run/openrouter/router). Единственный текстовый провайдер."""
 
     async def generate(
         self, model: AiModel, prompt: str, max_output_tokens: int, extra: dict | None = None
@@ -65,5 +86,5 @@ class OpenRouterProvider(AIProvider):
             )
         except Exception as exc:
             # Реальная причина -- только в лог; пользователю уходит нейтральный текст.
-            logger.exception("OpenRouter request failed for model %s", model.code)
-            raise AIError("OpenRouter API error") from exc
+            logger.exception("fal LLM router request failed for model %s", model.code)
+            raise AIError("fal LLM router error") from exc

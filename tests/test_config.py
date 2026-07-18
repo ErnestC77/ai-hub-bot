@@ -41,14 +41,16 @@ def test_prod_web_fails_fast_on_missing_secrets():
     with pytest.raises(RuntimeError) as exc:
         s.require_prod_web_secrets()
     msg = str(exc.value)
-    for key in ("OPENROUTER_API_KEY", "FAL_IMAGE_KEY", "FAL_VIDEO_KEY",
+    for key in ("FAL_IMAGE_KEY", "FAL_VIDEO_KEY",
                 "FAL_WEBHOOK_SECRET", "BACKEND_PUBLIC_URL", "FRONTEND_URL"):
         assert key in msg
+    # текст теперь через fal (FAL_IMAGE_KEY-фолбэк) -> OpenRouter-ключ не требуется
+    assert "OPENROUTER_API_KEY" not in msg
 
 
 def test_prod_web_requires_https_backend_url(monkeypatch):
     for k, v in {
-        "OPENROUTER_API_KEY": "k", "FAL_IMAGE_KEY": "k", "FAL_VIDEO_KEY": "k",
+        "FAL_IMAGE_KEY": "k", "FAL_VIDEO_KEY": "k",
         "FAL_WEBHOOK_SECRET": "s", "FRONTEND_URL": "https://front",
         "YOOKASSA_SHOP_ID": "1", "YOOKASSA_SECRET_KEY": "k",
         "BACKEND_PUBLIC_URL": "ai-hub-bot.onrender.com",  # без https://
@@ -65,7 +67,7 @@ def test_prod_web_passes_without_yookassa(monkeypatch):
     # yookassa опционален (Stars-only валиден) -- ядро задано, старт разрешён.
     monkeypatch.setenv("BOT_MODE", "polling")  # без webhook -> WEBHOOK_SECRET не обязателен
     for k, v in {
-        "OPENROUTER_API_KEY": "k", "FAL_IMAGE_KEY": "k", "FAL_VIDEO_KEY": "k",
+        "FAL_IMAGE_KEY": "k", "FAL_VIDEO_KEY": "k",
         "FAL_WEBHOOK_SECRET": "s", "BACKEND_PUBLIC_URL": "https://back",
         "FRONTEND_URL": "https://front",
     }.items():

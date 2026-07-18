@@ -12,3 +12,7 @@ uploads/
 *.stackdump
 .claude/
 .worktrees/
+
+# шаблоны без секретов трекаем
+!.env.prod.example
+!*.example

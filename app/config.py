@@ -14,14 +14,17 @@ class _ProviderSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
-# Приложение использует ТОЛЬКО fal (медиа) + OpenRouter (текст). Прежние ~11
-# провайдер-классов (OpenAI/Anthropic/Gemini/DeepSeek/Perplexity/ElevenLabs/
-# Runway/Stability/Replicate/Luma/PiApi) удалены как мёртвый код: ApiKeyManager
-# устроен «новый провайдер = новый Settings-класс + запись в PROVIDER_KEYS», так
-# что задел не нужно держать в коде.
+# Приложение использует ТОЛЬКО fal: медиа (image/video) + текст через fal LLM
+# router (fal.run/openrouter/router — те же модели OpenRouter, но проксируются
+# с не-РФ серверов fal, поэтому доступны из РФ, в отличие от прямого OpenRouter,
+# который Cloudflare режет по гео). Прежние провайдер-классы удалены как мёртвый
+# код: новый провайдер = новый Settings-класс + запись в ApiKeyManager.
 class FalSettings(_ProviderSettings):
     image_key: SecretStr | None = Field(default=None, alias="FAL_IMAGE_KEY")
     video_key: SecretStr | None = Field(default=None, alias="FAL_VIDEO_KEY")
+    # Текст через fal LLM router. Отдельный ключ -- чтобы траты на текст считались
+    # отдельно; если не задан, провайдер откатывается на image_key (тот же fal-аккаунт).
+    text_key: SecretStr | None = Field(default=None, alias="FAL_TEXT_KEY")
     dev_key: SecretStr | None = Field(default=None, alias="FAL_DEV_KEY")
 
 
@@ -90,8 +93,9 @@ class Settings(BaseSettings):
             return bool(s and s.get_secret_value())
 
         missing: list[str] = []
-        if not secret_set(self.openrouter.api_key):
-            missing.append("OPENROUTER_API_KEY")
+        # Текст теперь через fal router: отдельный ключ не обязателен -- при его
+        # отсутствии используется FAL_IMAGE_KEY (тот же fal-аккаунт), который
+        # требуется ниже. OPENROUTER_API_KEY больше не нужен.
         if not secret_set(self.fal.image_key):
             missing.append("FAL_IMAGE_KEY")
         if not secret_set(self.fal.video_key):

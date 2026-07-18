@@ -18,6 +18,8 @@ _PURPOSE_ATTR: dict[Provider, dict[KeyPurpose, str]] = {
     Provider.FAL: {
         KeyPurpose.IMAGE: "image_key",
         KeyPurpose.VIDEO: "video_key",
+        # Текст через fal LLM router; отдельный ключ, фолбэк на image_key ниже.
+        KeyPurpose.TEXT: "text_key",
     },
     Provider.OPENROUTER: {
         KeyPurpose.TEXT: "api_key",
