@@ -1,0 +1,27 @@
+# Caddy: авто-HTTPS (Let's Encrypt) + reverse-proxy на едином домене.
+# DOMAIN и ACME_EMAIL приходят из окружения (docker-compose.prod.yml).
+#
+# Пути backend'а идут на backend:8000, всё остальное -- на фронт (Next.js).
+# Single-origin: фронт бьёт /api относительно, отдельного CORS не требуется.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# --- API и серверные пути -> backend ---
+	# /uploads/* обязателен: backend отдаёт загруженные фото статикой (StaticFiles),
+	# и generate-по-фото ссылается на {BACKEND_PUBLIC_URL}/uploads/... -- без этого
+	# правила они ушли бы на фронт и вернули 404.
+	@backend path /api/* /uploads/* /webhooks/* /webhook/* /health /payment/* /docs* /redoc* /openapi.json /actuator/*
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	# --- всё остальное -> фронт (Next.js) ---
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
