@@ -14,12 +14,12 @@ from app.services.ai import openrouter_service
 from app.services.ai.base import AIError
 from app.services.ai.openrouter_service import OpenRouterProvider
 
-COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
+COMPLETIONS_URL = "https://fal.run/openrouter/router/openai/v1/chat/completions"
 
 
 class _FakeKeyManager:
     def get_key(self, provider, purpose):
-        return "sk-or-test"
+        return "fal-key-test"
 
 
 @pytest.fixture(autouse=True)
@@ -68,7 +68,8 @@ async def test_generate_success_returns_answer_and_usage():
     assert result.output_tokens == 34
 
     request = route.calls.last.request
-    assert request.headers["authorization"] == "Bearer sk-or-test"
+    # fal-схема авторизации: "Key <...>", а не "Bearer".
+    assert request.headers["authorization"] == "Key fal-key-test"
     body = json.loads(request.content)
     assert body["model"] == "deepseek/deepseek-chat"  # provider_model_id, НЕ model.code
     assert body["max_tokens"] == 1000
