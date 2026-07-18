@@ -232,6 +232,7 @@ export default function Home() {
           <ActionThumb
             src="/actions/video.mp4"
             kind="video"
+            poster="/actions/video-poster.webp"
             gradient="linear-gradient(160deg,#35e0e6,#3b2b8f)"
             className="h-12 w-14 flex-none rounded-[11px] border-2 border-[#140c26]"
           />

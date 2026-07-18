@@ -65,6 +65,7 @@ export default function TrendCard({ slug, title, description, badge, previewUrl,
           ref={videoRef}
           data-testid="trend-video"
           src={previewUrl}
+          poster={`/trends/posters/${slug}.webp`}
           loop
           muted
           playsInline

@@ -14,9 +14,11 @@ interface Props {
   className: string;
   /** CSS-градиент под медиа и фолбэк при ошибке загрузки. */
   gradient: string;
+  /** Постер-кадр для видео: виден мгновенно, пока тело видео догружается. */
+  poster?: string;
 }
 
-export default function ActionThumb({ src, kind = "image", className, gradient }: Props) {
+export default function ActionThumb({ src, kind = "image", className, gradient, poster }: Props) {
   const [failed, setFailed] = useState(false);
 
   return (
@@ -25,6 +27,7 @@ export default function ActionThumb({ src, kind = "image", className, gradient }
         (kind === "video" ? (
           <video
             src={src}
+            poster={poster}
             autoPlay
             loop
             muted

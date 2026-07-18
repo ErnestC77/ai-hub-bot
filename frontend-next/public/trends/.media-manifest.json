@@ -1,0 +1,187 @@
+{
+  "trends/ai-avatar.mp4": {
+    "done": true,
+    "origSize": 543744,
+    "optSize": 36925
+  },
+  "trends/animate-photo.mp4": {
+    "done": true,
+    "origSize": 1254400,
+    "optSize": 81445
+  },
+  "trends/anime-clip.mp4": {
+    "done": true,
+    "origSize": 1103872,
+    "optSize": 106178
+  },
+  "trends/anime-portrait.mp4": {
+    "done": true,
+    "origSize": 1204224,
+    "optSize": 94383
+  },
+  "trends/book-cover.mp4": {
+    "done": true,
+    "origSize": 495616,
+    "optSize": 32197
+  },
+  "trends/brainstorm.mp4": {
+    "done": true,
+    "origSize": 856064,
+    "optSize": 74717
+  },
+  "trends/business-email.mp4": {
+    "done": true,
+    "origSize": 382976,
+    "optSize": 16824
+  },
+  "trends/car-showcase.mp4": {
+    "done": true,
+    "origSize": 602112,
+    "optSize": 49597
+  },
+  "trends/cartoon-3d.mp4": {
+    "done": true,
+    "origSize": 707584,
+    "optSize": 61555
+  },
+  "trends/content-plan.mp4": {
+    "done": true,
+    "origSize": 505856,
+    "optSize": 35189
+  },
+  "trends/drone-flight.mp4": {
+    "done": true,
+    "origSize": 1533952,
+    "optSize": 50916
+  },
+  "trends/explain-simple.mp4": {
+    "done": true,
+    "origSize": 1037312,
+    "optSize": 84699
+  },
+  "trends/food-photo.mp4": {
+    "done": true,
+    "origSize": 991232,
+    "optSize": 68621
+  },
+  "trends/interior-design.mp4": {
+    "done": true,
+    "origSize": 689152,
+    "optSize": 28674
+  },
+  "trends/logo-animation.mp4": {
+    "done": true,
+    "origSize": 741376,
+    "optSize": 76429
+  },
+  "trends/logo-concept.mp4": {
+    "done": true,
+    "origSize": 261120,
+    "optSize": 8085
+  },
+  "trends/nature-loop.mp4": {
+    "done": true,
+    "origSize": 2380800,
+    "optSize": 73344
+  },
+  "trends/pet-clip.mp4": {
+    "done": true,
+    "origSize": 599040,
+    "optSize": 43022
+  },
+  "trends/product-description.mp4": {
+    "done": true,
+    "origSize": 506880,
+    "optSize": 26300
+  },
+  "trends/product-photo.mp4": {
+    "done": true,
+    "origSize": 353280,
+    "optSize": 16547
+  },
+  "trends/product-video.mp4": {
+    "done": true,
+    "origSize": 759808,
+    "optSize": 59337
+  },
+  "trends/reply-client.mp4": {
+    "done": true,
+    "origSize": 326656,
+    "optSize": 32377
+  },
+  "trends/restyle-photo.mp4": {
+    "done": true,
+    "origSize": 1506304,
+    "optSize": 186606
+  },
+  "trends/resume.mp4": {
+    "done": true,
+    "origSize": 660480,
+    "optSize": 38258
+  },
+  "trends/rewrite-tone.mp4": {
+    "done": true,
+    "origSize": 409600,
+    "optSize": 39420
+  },
+  "trends/sales-script.mp4": {
+    "done": true,
+    "origSize": 443392,
+    "optSize": 34073
+  },
+  "trends/short-clip.mp4": {
+    "done": true,
+    "origSize": 1946624,
+    "optSize": 236420
+  },
+  "trends/summarize.mp4": {
+    "done": true,
+    "origSize": 517120,
+    "optSize": 44222
+  },
+  "trends/talking-avatar.mp4": {
+    "done": true,
+    "origSize": 387072,
+    "optSize": 19700
+  },
+  "trends/tattoo-sketch.mp4": {
+    "done": true,
+    "origSize": 800768,
+    "optSize": 30687
+  },
+  "trends/time-lapse.mp4": {
+    "done": true,
+    "origSize": 506880,
+    "optSize": 34953
+  },
+  "trends/translate.mp4": {
+    "done": true,
+    "origSize": 875520,
+    "optSize": 51330
+  },
+  "trends/video-script.mp4": {
+    "done": true,
+    "origSize": 2084864,
+    "optSize": 240044
+  },
+  "trends/write-code.mp4": {
+    "done": true,
+    "origSize": 1354752,
+    "optSize": 120798
+  },
+  "trends/write-post.mp4": {
+    "done": true,
+    "origSize": 565248,
+    "optSize": 31127
+  },
+  "trends/yt-thumbnail.mp4": {
+    "done": true,
+    "origSize": 1437696,
+    "optSize": 147350
+  },
+  "actions/video.mp4": {
+    "done": true,
+    "origSize": 1093632,
+    "optSize": 221951
+  }
+}

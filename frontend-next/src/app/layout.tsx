@@ -4,6 +4,7 @@ import { Onest } from "next/font/google";
 import "./globals.css";
 import { MeProvider } from "@/context/MeContext";
 import { Shell } from "@/components/shell";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 // Дизайн-хэндофф требует Sora, но у Sora нет кириллического subset'а
 // (`subsets?: Array<'latin' | 'latin-ext'>`), а интерфейс русскоязычный -- вся
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             beforeInteractive blocks hydration until this script has executed, matching the
             old app's blocking <script> tag in index.html's <head>. */}
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        <ServiceWorkerRegister />
         <MeProvider>
           <Shell>{children}</Shell>
         </MeProvider>

@@ -32,6 +32,15 @@
 		}
 	}
 
+	# Service Worker обязан всегда проверяться на обновление, иначе браузер
+	# держит старую версию SW и новые правила кеша не подхватываются.
+	@sw path /sw.js
+	handle @sw {
+		reverse_proxy frontend:3000 {
+			header_down Cache-Control "no-cache"
+		}
+	}
+
 	# --- API и серверные пути -> backend ---
 	@backend path /api/* /webhooks/* /webhook/* /health /payment/* /docs* /redoc* /openapi.json /actuator/*
 	handle @backend {
