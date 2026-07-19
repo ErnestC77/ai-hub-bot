@@ -77,7 +77,8 @@ async def test_poll_activates_succeeded_payment_and_notifies(db_sessionmaker, mo
         assert user.credits_balance == 1000
         payment = await s.get(Payment, 1)
         assert payment.status == PaymentStatus.succeeded
-    notify.assert_awaited_once_with(111, 1000)
+    # bonus=0: в тестовой БД нет настройки процента -> бонуса первой покупки нет.
+    notify.assert_awaited_once_with(111, 1000, bonus=0)
 
 
 async def test_poll_marks_canceled_payment(db_sessionmaker, monkeypatch):

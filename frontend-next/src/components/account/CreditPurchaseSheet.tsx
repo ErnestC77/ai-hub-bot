@@ -120,7 +120,17 @@ export default function CreditPurchaseSheet({ onClose }: Props) {
               className="glass press-scale flex w-full items-center gap-3 rounded-[18px] p-[15px] text-left"
             >
               <div className="flex-1">
-                <div className="text-[14.5px] font-semibold">{pkg.title}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[14.5px] font-semibold">{pkg.title}</span>
+                  {pkg.first_purchase_bonus > 0 && (
+                    <span
+                      data-testid="first-purchase-bonus"
+                      className="rounded-full bg-[image:var(--brand-gradient)] px-2 py-0.5 text-[9.5px] font-bold text-white"
+                    >
+                      +{pkg.first_purchase_bonus} 🎁
+                    </span>
+                  )}
+                </div>
                 <div className="mt-0.5 text-[11px] text-foreground-dim">
                   💎 {pkg.credits} кредитов · ⭐ {pkg.price_stars}
                 </div>

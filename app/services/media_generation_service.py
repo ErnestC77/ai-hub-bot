@@ -47,7 +47,7 @@ from app.services.pricing import (
     calculate_video_api_cost_usd,
     calculate_video_credits,
 )
-from app.services.notification_service import send_media_result
+from app.services.notification_service import maybe_notify_credits_exhausted, send_media_result
 from app.services.referral_service import grant_referral_bonus_after_commit
 
 logger = logging.getLogger(__name__)
@@ -392,6 +392,9 @@ async def handle_fal_webhook(session: AsyncSession, payload: dict) -> bool:
         await grant_referral_bonus_after_commit(request.user_id)
     if delivery is not None:
         await _deliver_media_result_after_commit(*delivery)
+        # После успешной генерации баланс мог упасть ниже цены следующей --
+        # мягкий пуш про пополнение (троттлинг внутри, never-raise).
+        await maybe_notify_credits_exhausted(request.user_id)
     return True
 
 

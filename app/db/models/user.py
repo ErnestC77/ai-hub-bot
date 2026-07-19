@@ -13,6 +13,9 @@ class User(Base, TimestampMixin):
     first_name: Mapped[str | None] = mapped_column(String(128))
     language_code: Mapped[str | None] = mapped_column(String(8))
     default_model_code: Mapped[str | None] = mapped_column(String(64))
+    # Источник привлечения: метка из deep-link (?start=ads_X), "referral" для
+    # реф-ссылок, NULL -- органика. Пишется один раз при создании юзера.
+    acquisition_source: Mapped[str | None] = mapped_column(String(64), index=True)
 
     # Хранимый баланс -- единственный источник истины для balance >= amount.
     # Обновляется ТОЛЬКО функциями app/services/credit_service.py под SELECT ... FOR UPDATE.

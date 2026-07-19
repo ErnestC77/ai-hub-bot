@@ -21,8 +21,55 @@ async def _send(telegram_id: int, text: str) -> None:
         logger.warning("failed to send notification to %s", telegram_id, exc_info=True)
 
 
-async def notify_credits_purchase(telegram_id: int, credits: int) -> None:
-    await _send(telegram_id, f"✅ Оплата прошла! Начислено {credits} кредитов.")
+# Ниже этого остатка юзер не может сделать ни одной фото-генерации (самая
+# дешёвая ~43 кредита) -- момент, когда мягко напоминаем про пакеты.
+EXHAUSTED_THRESHOLD = 50
+_EXHAUSTED_NOTIFY_TTL = 7 * 24 * 3600  # не чаще раза в неделю
+
+
+async def maybe_notify_credits_exhausted(user_id: int) -> None:
+    """Пуш «кредиты на исходе» после генерации, опустившей баланс ниже порога.
+
+    Вызывается ПОСЛЕ commit успешной генерации (как реф-бонус/доставка):
+    своя короткая сессия, never-raise. Троттлинг -- Redis SET NX на 7 дней,
+    чтобы не спамить при каждой дешёвой чат-генерации у нулевого баланса.
+    Новичкам (без покупок) упоминаем бонус первой покупки, если он включён."""
+    from app.db.models import User  # локально: избегаем цикла импорта с credit_service
+    from app.db.session import get_session
+    from app.redis_client import redis_client
+    from app.services.settings_service import get_setting
+
+    try:
+        async with get_session() as session:
+            user = await session.get(User, user_id)
+            if user is None or user.credits_balance >= EXHAUSTED_THRESHOLD:
+                return
+            # SET NX: True только первому за окно TTL; дальше молчим.
+            if not await redis_client.set(
+                f"credits_exhausted_notified:{user_id}", "1",
+                nx=True, ex=_EXHAUSTED_NOTIFY_TTL,
+            ):
+                return
+            text = (
+                f"💎 Кредиты на исходе — осталось {user.credits_balance}.\n"
+                "Пополните баланс, чтобы продолжить генерации."
+            )
+            if user.total_credits_purchased == 0:
+                percent = await get_setting(
+                    session, "first_purchase_bonus_percent", cast=int, default=0
+                )
+                if percent > 0:
+                    text += f"\n🎁 На первую покупку — +{percent}% кредитов бонусом!"
+            await _send(user.telegram_id, text)
+    except Exception:  # noqa: BLE001
+        logger.warning("failed to notify exhausted credits for user_id=%s", user_id, exc_info=True)
+
+
+async def notify_credits_purchase(telegram_id: int, credits: int, bonus: int = 0) -> None:
+    text = f"✅ Оплата прошла! Начислено {credits} кредитов."
+    if bonus > 0:
+        text += f"\n🎁 +{bonus} кредитов бонусом за первую покупку!"
+    await _send(telegram_id, text)
 
 
 async def send_chat_answer(telegram_id: int, question: str, answer: str) -> None:

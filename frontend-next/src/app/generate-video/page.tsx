@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
+import OutOfCreditsOffer from "@/components/generate/OutOfCreditsOffer";
 import OutputOptions from "@/components/generate/OutputOptions";
+import ShareResultButton from "@/components/generate/ShareResultButton";
 import { defaultOptionCodes, estimatedCredits } from "@/lib/optionPricing";
 import { haptic } from "@/lib/telegram";
 import { pollGenerationResult, POLL_ATTEMPTS_VIDEO } from "@/lib/pollGeneration";
@@ -44,6 +46,8 @@ function GenerateVideoScreen() {
   const pollCancelledRef = useRef(false);
   useEffect(() => () => { pollCancelledRef.current = true; }, []);
   const [error, setError] = useState("");
+  // true, когда error вызвана 402 (нет кредитов) -- рисуем оффер покупки.
+  const [outOfCredits, setOutOfCredits] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
 
   // Восстановление после переоткрытия приложения: незавершённое видео
@@ -136,6 +140,7 @@ function GenerateVideoScreen() {
 
     setGenerating(true);
     setError("");
+    setOutOfCredits(false);
     setResultUrl(null);
     try {
       if (!confirm && photos.length > 0) {
@@ -180,6 +185,8 @@ function GenerateVideoScreen() {
         });
       } else {
         setError(err instanceof ApiError ? err.message : "Не удалось сгенерировать видео");
+        // 402 = кончились кредиты/фри-лимит: вместо голого текста -- оффер покупки.
+        setOutOfCredits(err instanceof ApiError && err.status === 402);
       }
     } finally {
       setGenerating(false);
@@ -293,15 +300,22 @@ function GenerateVideoScreen() {
             🎬 Создать{model ? ` · ${cost} 💎` : ""}
           </Button>
 
-          {error && (
-            <div data-testid="generate-error" className="text-center text-[13px] text-red-400">
-              {error}
-            </div>
-          )}
+          {error &&
+            (outOfCredits ? (
+              <OutOfCreditsOffer message={error} />
+            ) : (
+              <div data-testid="generate-error" className="text-center text-[13px] text-red-400">
+                {error}
+              </div>
+            ))}
 
           {resultUrl && (
             <div data-testid="generate-result" className="glass rounded-[18px] p-3">
               <video controls src={resultUrl} className="block w-full rounded-[14px]" />
+              {/* Момент вау -- лучшая точка шаринга реф-ссылки. */}
+              <div className="mt-2.5">
+                <ShareResultButton />
+              </div>
             </div>
           )}
         </div>

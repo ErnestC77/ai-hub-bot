@@ -3,11 +3,12 @@
  * при повторном открытии /chat восстанавливаем -- можно продолжить переписку.
  *
  * Храним последние MAX_MESSAGES, чтобы запись не росла бесконечно. Ошибки чата
- * (role="error") не сохраняем: восстанавливать «что-то пошло не так» смысла нет.
+ * (role="error") и оффер покупки (role="out-of-credits") не сохраняем:
+ * восстанавливать «что-то пошло не так» или устаревший оффер смысла нет.
  */
 
 export interface StoredMessage {
-  role: "user" | "assistant" | "error";
+  role: "user" | "assistant" | "error" | "out-of-credits";
   text: string;
   chargedCredits?: number;
   balanceAfter?: number;
@@ -20,7 +21,9 @@ const MAX_MESSAGES = 50;
 export function saveChatHistory(messages: StoredMessage[]): void {
   if (typeof window === "undefined") return;
   try {
-    const persistable = messages.filter((m) => m.role !== "error").slice(-MAX_MESSAGES);
+    const persistable = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .slice(-MAX_MESSAGES);
     if (persistable.length === 0) {
       window.localStorage.removeItem(KEY);
       return;

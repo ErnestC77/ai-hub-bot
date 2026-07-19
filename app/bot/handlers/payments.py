@@ -41,4 +41,7 @@ async def handle_successful_payment(message: Message) -> None:
     if result is None:
         await message.answer("Оплата получена, но уже была обработана ранее.")
     elif result.credits_granted:
-        await message.answer(f"✅ Оплата прошла! Начислено {result.credits_granted} кредитов.")
+        text = f"✅ Оплата прошла! Начислено {result.credits_granted} кредитов."
+        if result.bonus_credits > 0:
+            text += f"\n🎁 +{result.bonus_credits} кредитов бонусом за первую покупку!"
+        await message.answer(text)

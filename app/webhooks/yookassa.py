@@ -55,7 +55,9 @@ async def yookassa_webhook(request: Request) -> dict:
             if result and result.credits_granted:
                 user = await session.get(User, payment.user_id)
                 if user:
-                    await notify_credits_purchase(user.telegram_id, result.credits_granted)
+                    await notify_credits_purchase(
+                        user.telegram_id, result.credits_granted, bonus=result.bonus_credits
+                    )
         elif real_status == PaymentStatus.canceled:
             payment.status = PaymentStatus.canceled
             await session.commit()

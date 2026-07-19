@@ -11,11 +11,13 @@ import AdminModels from "@/screens/admin/AdminModels";
 import AdminPackages from "@/screens/admin/AdminPackages";
 import AdminPayments from "@/screens/admin/AdminPayments";
 import AdminSettings from "@/screens/admin/AdminSettings";
+import AdminSources from "@/screens/admin/AdminSources";
 import AdminStats from "@/screens/admin/AdminStats";
 import AdminUsers from "@/screens/admin/AdminUsers";
 
 const TABS = [
   { key: "stats", label: "Статистика" },
+  { key: "sources", label: "Источники" },
   { key: "users", label: "Пользователи" },
   { key: "payments", label: "Платежи" },
   { key: "models", label: "Модели" },
@@ -49,6 +51,7 @@ export default function AdminPanel() {
       </div>
 
       {tab === "stats" && <AdminStats />}
+      {tab === "sources" && <AdminSources />}
       {tab === "users" && <AdminUsers />}
       {tab === "payments" && <AdminPayments />}
       {tab === "models" && <AdminModels />}

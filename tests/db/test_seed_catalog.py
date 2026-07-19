@@ -35,11 +35,14 @@ def test_settings_rows_with_spec_values():
         "rate_limit_per_model_per_minute": "60",
         "duplicate_cooldown_seconds": "5",
         "free_tier_credit_cap": "220",  # поднят под welcome-бонус (должен вмещать подарок)
-        # referral bonus (фаза 6)
-        "referral_bonus_referrer_credits": "20",
-        "referral_bonus_referred_credits": "20",
+        # referral bonus (фаза 6; 20 -> 50 вместе с миграцией c8d9e0f1a2b3)
+        "referral_bonus_referrer_credits": "50",
+        "referral_bonus_referred_credits": "50",
         # welcome bonus
         "welcome_bonus_credits": "220",
+        # first purchase bonus (+30% с капом 1500 против отрицательной маржи BUSINESS)
+        "first_purchase_bonus_percent": "30",
+        "first_purchase_bonus_cap": "1500",
     }
     assert all(row["type"] == "int" for row in SETTINGS_ROWS
                if row["key"] in {"daily_spend_limit_credits", "rate_limit_per_user_per_minute",
@@ -169,7 +172,7 @@ async def test_apply_seed_inserts_and_is_idempotent(session):
     settings_count = (await session.execute(select(func.count()).select_from(Setting))).scalar_one()
     assert models == 21
     assert packages == 5
-    assert settings_count == 13  # +welcome_bonus_credits
+    assert settings_count == 15  # +welcome_bonus_credits +first_purchase_bonus_{percent,cap}
 
 
 def test_fallback_pairs_from_phase2_spec():
@@ -439,7 +442,7 @@ def test_referral_bonus_settings_seeded():
     assert "referral_bonus_referrer_credits" in keys
     assert "referral_bonus_referred_credits" in keys
     by_key = {r["key"]: r for r in SETTINGS_ROWS}
-    assert by_key["referral_bonus_referrer_credits"]["value"] == "20"
+    assert by_key["referral_bonus_referrer_credits"]["value"] == "50"
     assert by_key["referral_bonus_referrer_credits"]["type"] == "int"
 
 

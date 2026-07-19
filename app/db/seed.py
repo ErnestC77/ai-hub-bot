@@ -35,11 +35,19 @@ SETTINGS_ROWS = [
     # --- welcome bonus ---
     dict(key="welcome_bonus_credits", value="220", type="int",
          description="Кредиты новому пользователю при первом входе (0 = выключено)"),
-    # --- referral bonus (фаза 6) ---
-    dict(key="referral_bonus_referrer_credits", value="20", type="int",
+    # --- referral bonus (фаза 6; 20 -> 50 в V c8d9e0f1a2b3: 20 = полфото,
+    # стимул слабый; 50 = ~1 фото + чаты, себестоимость ~3.5 ₽ за обе стороны) ---
+    dict(key="referral_bonus_referrer_credits", value="50", type="int",
          description="Бонус пригласившему за друга, сделавшего первый запрос"),
-    dict(key="referral_bonus_referred_credits", value="20", type="int",
+    dict(key="referral_bonus_referred_credits", value="50", type="int",
          description="Бонус приглашённому после его первого запроса"),
+    # --- first purchase bonus ---
+    # Кап обязателен: без него +30% на BUSINESS (70k кредитов) уводит пакет в
+    # минус по марже; с капом START получает +300, крупные -- символические +1500.
+    dict(key="first_purchase_bonus_percent", value="30", type="int",
+         description="Бонус-кредиты на первую покупку, % от пакета (0 = выключено)"),
+    dict(key="first_purchase_bonus_cap", value="1500", type="int",
+         description="Потолок бонуса первой покупки в кредитах (защита маржи крупных пакетов)"),
 ]
 
 CREDIT_PACKAGES = [

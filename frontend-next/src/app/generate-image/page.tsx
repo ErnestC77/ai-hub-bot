@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ApiError, ConfirmationRequiredError, api, type ModelOut } from "@/api/client";
 import PhotoUploadBox from "@/components/PhotoUploadBox";
+import OutOfCreditsOffer from "@/components/generate/OutOfCreditsOffer";
 import OutputOptions from "@/components/generate/OutputOptions";
+import ShareResultButton from "@/components/generate/ShareResultButton";
 import { defaultOptionCodes, estimatedCredits } from "@/lib/optionPricing";
 import { useMe } from "@/context/MeContext";
 import { pollGenerationResult } from "@/lib/pollGeneration";
@@ -45,6 +47,8 @@ function GenerateImageScreen() {
   const pollCancelledRef = useRef(false);
   useEffect(() => () => { pollCancelledRef.current = true; }, []);
   const [error, setError] = useState("");
+  // true, когда error вызвана 402 (нет кредитов) -- рисуем оффер покупки.
+  const [outOfCredits, setOutOfCredits] = useState(false);
 
   // Восстановление после переоткрытия приложения: если осталась незавершённая
   // генерация -- дослеживаем её результат прямо в приложении (immediate: он,
@@ -152,6 +156,7 @@ function GenerateImageScreen() {
 
     setGenerating(true);
     setError("");
+    setOutOfCredits(false);
     setResultUrl(null);
 
     try {
@@ -198,6 +203,8 @@ function GenerateImageScreen() {
         });
       } else {
         setError(err instanceof ApiError ? err.message : "Не удалось сгенерировать изображение");
+        // 402 = кончились кредиты/фри-лимит: вместо голого текста -- оффер покупки.
+        setOutOfCredits(err instanceof ApiError && err.status === 402);
       }
     } finally {
       setGenerating(false);
@@ -296,11 +303,14 @@ function GenerateImageScreen() {
             </div>
           )}
 
-          {error && (
-            <div data-testid="generate-error" className="text-center text-[13px] text-red-400">
-              {error}
-            </div>
-          )}
+          {error &&
+            (outOfCredits ? (
+              <OutOfCreditsOffer message={error} />
+            ) : (
+              <div data-testid="generate-error" className="text-center text-[13px] text-red-400">
+                {error}
+              </div>
+            ))}
 
           {pendingConfirmation && (
             <div data-testid="generate-confirm" className="glass relative overflow-hidden rounded-[16px] p-[14px]">
@@ -322,6 +332,10 @@ function GenerateImageScreen() {
           {resultUrl && (
             <div data-testid="generate-result" className="glass rounded-[18px] p-3">
               <img src={resultUrl} alt="" className="block w-full rounded-[14px]" />
+              {/* Момент вау -- лучшая точка шаринга реф-ссылки. */}
+              <div className="mt-2.5">
+                <ShareResultButton />
+              </div>
             </div>
           )}
         </div>

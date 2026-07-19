@@ -11,10 +11,12 @@ import { useMe } from "@/context/MeContext";
 import { haptic } from "@/lib/telegram";
 import ChatMarkdown from "@/components/chat/ChatMarkdown";
 import ModelPicker from "@/components/chat/ModelPicker";
+import OutOfCreditsOffer from "@/components/generate/OutOfCreditsOffer";
 import { clearChatHistory, readChatHistory, saveChatHistory } from "@/lib/chatHistory";
 
 interface ChatMessage {
-  role: "user" | "assistant" | "error";
+  // out-of-credits -- ошибка 402: вместо текстового бабла рисуем оффер покупки.
+  role: "user" | "assistant" | "error" | "out-of-credits";
   text: string;
   chargedCredits?: number;
   balanceAfter?: number;
@@ -127,7 +129,8 @@ function ChatScreen() {
         setPendingConfirmation({ prompt: question, modelCode, estimatedCredits: err.estimatedCredits });
       } else {
         const text = err instanceof ApiError ? err.message : "Что-то пошло не так, попробуйте ещё раз.";
-        setMessages((prev) => [...prev, { role: "error", text }]);
+        const outOfCredits = err instanceof ApiError && err.status === 402;
+        setMessages((prev) => [...prev, { role: outOfCredits ? "out-of-credits" : "error", text }]);
       }
     } finally {
       setSending(false);
@@ -207,7 +210,12 @@ function ChatScreen() {
           >
             Привет! О чём поговорим?
           </div>
-          {messages.map((m, i) => (
+          {messages.map((m, i) =>
+            m.role === "out-of-credits" ? (
+              <div key={i} className="w-full max-w-[84%] self-start" data-testid="chat-bubble">
+                <OutOfCreditsOffer message={m.text} />
+              </div>
+            ) : (
             <div
               key={i}
               className={`max-w-[84%] ${m.role === "user" ? "self-end" : "self-start"}`}
@@ -232,7 +240,8 @@ function ChatScreen() {
                 </div>
               )}
             </div>
-          ))}
+            ),
+          )}
           {sending && (
             <div className="glass flex max-w-[84%] items-center self-start rounded-[16px] rounded-bl-[5px] px-[13px] py-2.5">
               <Spinner size="s" />

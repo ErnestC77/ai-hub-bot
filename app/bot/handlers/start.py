@@ -27,6 +27,9 @@ async def cmd_start(message: Message, command: CommandObject) -> None:
             username=message.from_user.username,
             first_name=message.from_user.first_name,
             language_code=message.from_user.language_code,
+            # Рекламная метка из deep-link (t.me/bot?start=ads_X); ref_* сервис
+            # нормализует в "referral". Применяется только при создании юзера.
+            source=command.args,
         )
 
         if is_new and command.args and command.args.startswith("ref_"):

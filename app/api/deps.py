@@ -30,6 +30,9 @@ async def current_user(
         username=tg_user.get("username"),
         first_name=tg_user.get("first_name"),
         language_code=tg_user.get("language_code"),
+        # t.me/bot/app?startapp=ads_X кладёт метку в initData.start_param --
+        # покрывает вход в Mini App напрямую, минуя /start бота.
+        source=data.get("start_param"),
     )
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="user is blocked")

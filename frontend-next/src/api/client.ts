@@ -173,6 +173,8 @@ export interface CreditPackageOut {
   /** «Примерно на сколько хватит» -- до N фото / M видео по самой дешёвой модели. */
   approx_photos: number;
   approx_videos: number;
+  /** Бонус-кредиты первой покупки для этого пакета; 0 -- уже покупал или выключено. */
+  first_purchase_bonus: number;
 }
 
 export const api = {
@@ -370,8 +372,16 @@ export interface AdminSettingOut {
   description: string | null;
 }
 
+export interface AdminSourceStatsOut {
+  source: string | null; // null = органика (без метки)
+  users_count: number;
+  payers_count: number;
+  revenue_rub: number;
+}
+
 export const adminApi = {
   stats: () => request<AdminStatsOut>("/api/admin/stats"),
+  sources: () => request<AdminSourceStatsOut[]>("/api/admin/sources"),
   users: (query?: string) =>
     request<AdminUserOut[]>(`/api/admin/users${query ? `?query=${encodeURIComponent(query)}` : ""}`),
   blockUser: (telegramId: number) =>

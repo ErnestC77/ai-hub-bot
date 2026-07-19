@@ -114,7 +114,25 @@ async def test_packages_returns_active_only_from_db(client):
         "code": "start", "title": "START", "credits": 1000, "price_rub": 149.0, "price_stars": 75,
         # медиа-моделей в тестовой БД нет -> оценки 0
         "approx_photos": 0, "approx_videos": 0,
+        # настройки бонуса в тестовой БД нет -> percent=0 -> бонус 0
+        "first_purchase_bonus": 0,
     }
+
+
+async def test_packages_show_first_purchase_bonus_for_new_buyer(client, db_sessionmaker):
+    from app.db.models import Setting
+
+    async with db_sessionmaker() as s:
+        s.add(Setting(key="first_purchase_bonus_percent", value="30", type="int", description="t"))
+        s.add(Setting(key="first_purchase_bonus_cap", value="1500", type="int", description="t"))
+        await s.commit()
+
+    response = await client.get("/api/credits/packages")
+
+    assert response.status_code == 200
+    by_code = {p["code"]: p for p in response.json()}
+    assert by_code["start"]["first_purchase_bonus"] == 300  # 30% от 1000
+    assert by_code["basic"]["first_purchase_bonus"] == 1500  # 30% от 5000, кап режет
 
 
 # --- POST /api/payments/credits/{provider}/create ---

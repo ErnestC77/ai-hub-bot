@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +9,23 @@ from app.db.enums import CreditTxType
 from app.db.models import User
 from app.services.credit_service import grant_credits
 from app.services.settings_service import get_setting
+
+_SOURCE_RE = re.compile(r"[^a-zA-Z0-9_\-]")
+
+
+def normalize_source(raw: str | None) -> str | None:
+    """Deep-link параметр -> метка источника для users.acquisition_source.
+
+    `ref_*` схлопывается в "referral" (сами рефералы трекает таблица referrals,
+    в отчёте по источникам нужен только канал). Прочее -- рекламная метка
+    (ads_kanal1 и т.п.): чистим до [a-zA-Z0-9_-], режем до 64 (ширина колонки).
+    Пусто после чистки -> None (органика)."""
+    if not raw:
+        return None
+    if raw.startswith("ref_"):
+        return "referral"
+    cleaned = _SOURCE_RE.sub("", raw)[:64]
+    return cleaned or None
 
 
 async def _grant_welcome_bonus(session: AsyncSession, user_id: int) -> None:
@@ -36,6 +55,7 @@ async def get_or_create_user(
     username: str | None = None,
     first_name: str | None = None,
     language_code: str | None = None,
+    source: str | None = None,
 ) -> User:
     user = (
         await session.execute(select(User).where(User.telegram_id == telegram_id))
@@ -47,6 +67,9 @@ async def get_or_create_user(
             username=username,
             first_name=first_name,
             language_code=language_code,
+            # Источник фиксируется ТОЛЬКО при создании: у существующего юзера
+            # ниже не перезаписывается -- атрибуция по первому касанию.
+            acquisition_source=normalize_source(source),
             is_admin=telegram_id in settings.admin_id_list,
         )
         session.add(user)

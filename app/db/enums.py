@@ -70,3 +70,4 @@ class CreditTxType(str, enum.Enum):
     admin_adjustment = "admin_adjustment"
     referral_bonus = "referral_bonus"
     welcome_bonus = "welcome_bonus"
+    first_purchase_bonus = "first_purchase_bonus"

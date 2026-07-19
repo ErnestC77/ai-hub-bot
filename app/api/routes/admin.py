@@ -2,7 +2,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,6 +89,50 @@ async def stats(session: AsyncSession = Depends(get_db)) -> StatsOut:
         month_revenue_rub=monthly.revenue_rub,
         month_credits_purchases_count=monthly.credits_purchases_count,
     )
+
+
+# --- sources (воронка по рекламным меткам) -------------------------------
+
+class SourceStatsOut(BaseModel):
+    source: str | None  # None = органика (пришли без метки)
+    users_count: int
+    payers_count: int
+    revenue_rub: float
+
+
+@router.get("/sources", response_model=list[SourceStatsOut])
+async def sources(session: AsyncSession = Depends(get_db)) -> list[SourceStatsOut]:
+    """Воронка привлечения: стартов / платящих / выручка по acquisition_source.
+
+    Выручка -- только succeeded-платежи в RUB (Stars идут в XTR и в рублёвую
+    сумму не смешиваются; Stars-покупатели всё равно видны в payers_count через
+    total_credits_purchased)."""
+    paid = (
+        select(Payment.user_id, func.sum(Payment.amount).label("amount_rub"))
+        .where(Payment.status == PaymentStatus.succeeded, Payment.currency == "RUB")
+        .group_by(Payment.user_id)
+        .subquery()
+    )
+    rows = (
+        await session.execute(
+            select(
+                User.acquisition_source,
+                func.count(User.id),
+                func.count(User.id).filter(User.total_credits_purchased > 0),
+                func.coalesce(func.sum(paid.c.amount_rub), 0),
+            )
+            .join(paid, paid.c.user_id == User.id, isouter=True)
+            .group_by(User.acquisition_source)
+            .order_by(func.count(User.id).desc())
+        )
+    ).all()
+    return [
+        SourceStatsOut(
+            source=source, users_count=users_count,
+            payers_count=payers_count, revenue_rub=float(revenue),
+        )
+        for source, users_count, payers_count, revenue in rows
+    ]
 
 
 # --- users ---------------------------------------------------------------

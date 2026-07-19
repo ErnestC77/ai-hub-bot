@@ -32,6 +32,7 @@ from app.services.credit_service import (
     settle_request,
 )
 from app.services.pricing import calculate_api_cost_usd, calculate_text_credits
+from app.services.notification_service import maybe_notify_credits_exhausted
 from app.services.referral_service import grant_referral_bonus_after_commit
 from app.services.settings_service import load_pricing_settings
 
@@ -214,6 +215,9 @@ async def generate_text(
         # трогает основную операцию. balance_after -- без бонуса приглашённому
         # (появится при следующем refresh; бонус идёт в основном пригласившему).
         await grant_referral_bonus_after_commit(request.user_id)
+        # Баланс после списания мог опуститься ниже цены генерации -- мягкий
+        # пуш про пополнение (троттлинг и never-raise внутри).
+        await maybe_notify_credits_exhausted(request.user_id)
 
         return TextGenerationResult(
             answer=result.answer, charged_credits=charged, balance_after=balance_after

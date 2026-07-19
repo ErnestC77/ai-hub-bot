@@ -10,6 +10,7 @@ from app.db.enums import ModelCategory, PaymentProvider
 from app.db.models import AiModel, CreditPackage, Payment, User
 from app.services.payments import GATEWAYS
 from app.services.pricing import VIDEO_MIN_CREDITS
+from app.services.settings_service import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,10 @@ class CreditPackageOut(BaseModel):
     # моделей такой категории нет.
     approx_photos: int
     approx_videos: int
+    # Бонус первой покупки для ЭТОГО юзера и пакета: 0, если уже покупал или
+    # бонус выключен. Считается как min(credits * percent/100, cap) -- та же
+    # формула, что начислит activation.py после оплаты.
+    first_purchase_bonus: int
 
 
 class CreateCreditPaymentRequest(BaseModel):
@@ -72,7 +77,9 @@ async def _cheapest_media_costs(session: AsyncSession) -> tuple[int, int]:
 
 
 @router.get("/credits/packages", response_model=list[CreditPackageOut])
-async def get_credit_packages(session: AsyncSession = Depends(get_db)) -> list[CreditPackageOut]:
+async def get_credit_packages(
+    session: AsyncSession = Depends(get_db), user: User = Depends(current_user)
+) -> list[CreditPackageOut]:
     packages = (
         await session.execute(
             select(CreditPackage)
@@ -81,12 +88,27 @@ async def get_credit_packages(session: AsyncSession = Depends(get_db)) -> list[C
         )
     ).scalars().all()
     photo_cost, video_cost = await _cheapest_media_costs(session)
+
+    bonus_percent = 0
+    bonus_cap = 0
+    if user.total_credits_purchased == 0:
+        bonus_percent = await get_setting(
+            session, "first_purchase_bonus_percent", cast=int, default=0
+        )
+        bonus_cap = await get_setting(session, "first_purchase_bonus_cap", cast=int, default=1500)
+
+    def bonus_for(credits: int) -> int:
+        if bonus_percent <= 0:
+            return 0
+        return min(credits * bonus_percent // 100, bonus_cap)
+
     return [
         CreditPackageOut(
             code=p.code, title=p.title, credits=p.credits,
             price_rub=float(p.price_rub), price_stars=p.price_stars,
             approx_photos=(p.credits // photo_cost) if photo_cost else 0,
             approx_videos=(p.credits // video_cost) if video_cost else 0,
+            first_purchase_bonus=bonus_for(p.credits),
         )
         for p in packages
     ]
